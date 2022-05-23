@@ -1,0 +1,7 @@
+resolver: lts-19.3
+
+ghc-options:
+  "$everything": -haddock
+
+packages:
+- .
