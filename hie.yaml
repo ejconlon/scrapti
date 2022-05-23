@@ -1,0 +1,13 @@
+cradle:
+  stack:
+    - path: "./src"
+      component: "scrapti:lib"
+
+    - path: "./exe/Main.hs"
+      component: "scrapti:exe:scrapti-exe"
+
+    - path: "./exe/Paths_scrapti.hs"
+      component: "scrapti:exe:scrapti-exe"
+
+    - path: "./test"
+      component: "scrapti:test:scrapti-test"
