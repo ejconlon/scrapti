@@ -22,6 +22,9 @@ dependencies:
 - resourcet
 - sdl2-mixer
 - vector
+- mtl
+- transformers
+- containers
 
 default-extensions:
 - BangPatterns

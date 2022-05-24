@@ -1,22 +1,38 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Scrapti.Wav where
+module Scrapti.Wav
+  ( Sample (sampleGet, samplePut, sampleBits, sampleBytes)
+  , Sampled (..)
+  , getSampled
+  , WavFormat (..)
+  , WavData (..)
+  , WavHeader (..)
+  , WavUnparsed (..)
+  , WavChunk (..)
+  , Wav (..)
+  , decodeWavHeader
+  , decodeWavChunk
+  , decodeWavTrailers
+  , decodeWav
+  , encodeWav
+  ) where
 
 import Control.Monad (unless)
 import Data.ByteString (ByteString)
-import qualified Data.ByteString as BS
 import Data.Int (Int16, Int32, Int64, Int8)
 import Data.Proxy (Proxy)
 import qualified Data.Vector.Unboxed as VU
-import Data.Word (Word16, Word32, Word8)
-import Scrapti.Binary (ByteOffset, DecodeResult, DecodeSuccess (..), Get, Put, decode, getByteString, getExpect,
-                       getInt16le, getInt32le, getInt64le, getInt8, getVec, getWord16le, getWord32le, putInt16le,
-                       putInt32le, putInt64le, putInt8, skip)
+import Data.Word (Word16, Word32)
+import Scrapti.Binary (DecodeState (decStateInput), DecodeT, Get, Put, decodeGet, getByteString, getExpect, getInt16le,
+                       getInt32le, getInt64le, getInt8, getVec, getWord16le, getWord32le, guardEnd, putByteString,
+                       putInt16le, putInt32le, putInt64le, putInt8, putVec, putWord16le, putWord32le, runPut)
 
--- import Data.Store (Get, Put, Store (..), decodeIOPortionWith, decodeIO, decodeIOWith)
+import Control.Monad.State.Strict (gets)
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
-import qualified Data.Vector.Unboxed as UV
-import GHC.IO (unsafePerformIO)
+import Data.Foldable (for_)
+import Data.Semigroup (Sum (..))
+import Data.Sequence (Seq (..))
 
 class VU.Unbox a => Sample a where
   sampleGet :: Get a
@@ -77,19 +93,48 @@ data WavHeader = WavHeader
   , wavHeaderFormat :: !WavFormat
   } deriving stock (Eq, Show)
 
-data Wav a = Wav
-  { wavFormat :: !WavFormat
-  , wavData :: !(WavData a)
+data WavUnparsed = WavUnparsed
+  { wavUnparsedLabel :: !ByteString
+  , wavUnparsedContents :: !ByteString
   } deriving stock (Eq, Show)
 
-decodeWavHeader :: BSL.ByteString -> DecodeResult WavHeader
-decodeWavHeader bs = fmap (\(DecodeSuccess off (toSkip, header)) -> DecodeSuccess (off + fromIntegral toSkip) header) (decode bs getWavHeader)
+data Wav a = Wav
+  { wavFormat :: !WavFormat
+  , wavMiddle :: !(Seq WavUnparsed)
+  , wavData :: !(WavData a)
+  , wavTrailer :: !(Seq WavUnparsed)
+  } deriving stock (Eq, Show)
 
-decodeContinuedWavData :: VU.Unbox a => BSL.ByteString -> ByteOffset -> Word16 -> Get a -> DecodeResult (WavData a)
-decodeContinuedWavData bs offset bps getter = decode (BSL.drop offset bs) (getContinuedWavData bps getter)
+data WavChunk a =
+    WavChunkUnparsed !WavUnparsed
+  | WavChunkData !(WavData a)
+  deriving stock (Eq, Show)
 
-decodeWav :: BSL.ByteString -> DecodeResult (Sampled Wav)
-decodeWav bs = decode bs getWav
+decodeWavHeader :: Monad m => DecodeT m WavHeader
+decodeWavHeader = decodeGet getWavHeader
+
+decodeWavChunk :: Monad m => VU.Unbox a => Word16 -> Get a -> DecodeT m (WavChunk a)
+decodeWavChunk bps getter = decodeGet (getWavChunk bps getter)
+
+decodeWavTrailers :: Monad m => DecodeT m (Seq WavUnparsed)
+decodeWavTrailers = go Empty where
+  go !acc = do
+    bs <- gets decStateInput
+    if BSL.null bs
+      then pure acc
+      else do
+        unp <- decodeGet (getLabel >>= getWavUnparsed)
+        go (acc :|> unp)
+
+decodeWav :: Monad m => DecodeT m (Sampled Wav)
+decodeWav = do
+  Sampled (Wav fmt mid dat tra) <- decodeGet getWav
+  moreTra <- decodeWavTrailers
+  guardEnd
+  pure $! Sampled (Wav fmt mid dat (tra <> moreTra))
+
+encodeWav :: Sampled Wav -> BSL.ByteString
+encodeWav = runPut . putWav
 
 labelRiff, labelWave, labelFmt, labelData :: ByteString
 labelRiff = "RIFF"
@@ -106,21 +151,24 @@ expectLabel = getExpect "label" getLabel
 expectCode :: Word16 -> Get ()
 expectCode = getExpect "compression code" getWord16le
 
-getWavHeader :: Get (Int, WavHeader)
+expectChunkSize :: Word32 -> Get ()
+expectChunkSize = getExpect "chunk size" getWord32le
+
+getWavHeader :: Get WavHeader
 getWavHeader = do
   expectLabel labelRiff
   fileSize <- getWord32le
   expectLabel labelWave
   expectLabel labelFmt
-  (toSkip, format) <- getWavFormat
-  pure (toSkip, WavHeader fileSize format)
+  format <- getWavFormat
+  pure $! WavHeader fileSize format
 
 isSupportedBPS :: Word16 -> Bool
 isSupportedBPS w = mod w 8 == 0 && w <= 64
 
-getWavFormat :: Get (Int, WavFormat)
+getWavFormat :: Get WavFormat
 getWavFormat = do
-  chunkSize <- getWord32le
+  _ <- expectChunkSize 16
   _ <- expectCode 1
   numChannels <- getWord16le
   sampleRate <- getWord32le
@@ -130,131 +178,78 @@ getWavFormat = do
   unless (bpsAvg == sampleRate * fromIntegral bpsSlice) (fail "bad average bps")
   unless (isSupportedBPS bps) (fail "bad bps")
   unless (bpsSlice == div bps 8 * numChannels) (fail "bad bps slice")
-  let toSkip = fromIntegral chunkSize - 16
-  pure (toSkip, WavFormat numChannels sampleRate bps)
+  pure $! WavFormat numChannels sampleRate bps
 
-getContinuedWavData :: VU.Unbox a => Word16 -> Get a -> Get (WavData a)
-getContinuedWavData bps geter = go where
+getWavChunk :: VU.Unbox a => Word16 -> Get a -> Get (WavChunk a)
+getWavChunk bps getter = go where
   go = do
     lab <- getLabel
     if lab == labelData
-      then getWavData bps geter
-      else getUnknownData *> go
+      then fmap WavChunkData (getWavData bps getter)
+      else fmap WavChunkUnparsed (getWavUnparsed lab)
 
 getWavData :: VU.Unbox a => Word16 -> Get a -> Get (WavData a)
-getWavData bitsPer geter = do
+getWavData bitsPer getter = do
   let bytesPer = div bitsPer 8
   chunkSize <- getWord32le
   unless (mod chunkSize (fromIntegral bytesPer) == 0) (fail "bad data chunk size")
   let samples = fromIntegral (div chunkSize (fromIntegral bytesPer))
-  vec <- getVec samples geter
+  vec <- getVec samples getter
+  unless (VU.length vec == samples) (fail "bad samples")
   pure (WavData vec)
 
-getUnknownData :: Get ()
-getUnknownData = do
+getWavUnparsed :: ByteString -> Get WavUnparsed
+getWavUnparsed lab = do
   chunkSize <- getWord32le
-  skip (fromIntegral chunkSize)
+  contents <- getByteString (fromIntegral chunkSize)
+  pure $! WavUnparsed lab contents
 
 getWav :: Get (Sampled Wav)
-getWav = do
-  (toSkip, WavHeader _ fmt) <- getWavHeader
-  skip toSkip
-  let bps = wfBitsPerSample fmt
-  case getSampled bps of
-    Nothing -> fail "bad bps"
-    Just (Sampled geter) -> do
-      dat <- getContinuedWavData bps geter
-      pure (Sampled (Wav fmt dat))
+getWav = res where
+  res = do
+    WavHeader _ fmt <- getWavHeader
+    let bps = wfBitsPerSample fmt
+    case getSampled bps of
+      Nothing -> fail "bad bps"
+      Just (Sampled getter) -> loop fmt bps getter Empty
+  loop fmt bps getter !unps = do
+    chunk <- getWavChunk bps getter
+    case chunk of
+      WavChunkData dat -> pure $! Sampled (Wav fmt unps dat Empty)
+      WavChunkUnparsed unp -> loop fmt bps getter (unps :|> unp)
 
--- -- All numerical values are stored in little endian format
--- --
--- parseWav :: (MArray IOUArray a IO, IArray UArray a, Audible a, AudibleInWav a) => Parser (Audio a)
--- parseWav = do
---   _ <- string "RIFF"
--- --  n <- remaining
--- --  expect (\w -> fromIntegral w ==  n - 4) GetWord32le
---   _ <- GetWord32le -- chunkSize
---   _ <- string "WAVE"
---   _ <- many parseUnknownChunk
---   (sampleRate1,channelNumber1,bitsPerSample1) <- parseFmt
---   _ <- many parseUnknownChunk
---   sampleData1 <- parseData channelNumber1 bitsPerSample1
---   return $! (Audio sampleRate1 channelNumber1 sampleData1)
-
--- buildWav :: (IArray UArray a, Audible a, AudibleInWav a) => Audio a -> Builder
--- buildWav a = mconcat [
---     PutString "RIFF"
---   , PutWord32le $ fromIntegral chunkSize
---   , PutString "WAVE"
---   , buildFmt a
---   , buildData a]
---   where
---   sd = sampleData a
---   chunkSize =
---       4  -- "WAVE"
---     + 24 -- fmt chunk
---     + 8  -- data chunk header
---     + (fromIntegral $ sampleNumber sd) * (bytesPerSample $ sampleType sd)
---        -- sample data
-
--- parseFmt :: Parser (Int,Int,Int)
--- parseFmt = do
---   _ <- string "fmt "
---   chunkSize <- GetWord32le >>= return . fromIntegral
---   _ <- word16le 1 -- compression code
---   channelNumber1 <- GetWord16le >>= return . fromIntegral
---   sampleRate1 <- GetWord32le >>= return . fromIntegral
---   avgBytesPerSec <- GetWord32le >>= return . fromIntegral
---   bytesPerSampleSlice <- GetWord16le >>= return . fromIntegral
---   when (avgBytesPerSec /= sampleRate1 * bytesPerSampleSlice) $
---     fail "avgBytesPerSec /= sampleRate * bytesPerSampleSlise"
---   bitsPerSample1 <- expect (\w -> (mod w 8 == 0) && w <= 64) GetWord16le >>= return . fromIntegral
---   when (bytesPerSampleSlice /= (div bitsPerSample1 8) * channelNumber1) $
---     fail "bytesPerSampleSlice /= (div bitsPerSample 8) * channelNumber"
---   skip (chunkSize - 16) -- skip extra fromat bytes
---   return $! (sampleRate1,channelNumber1,bitsPerSample1)
-
--- buildFmt :: (IArray UArray a, Audible a, AudibleInWav a) => Audio a -> Builder
--- buildFmt a = mconcat [
---     PutString   $ "fmt "
---   , PutWord32le $ 16 -- chunk size
---   , PutWord16le $ 1  -- compression code
---   , PutWord16le $ fromIntegral $ channelNumber a
---   , PutWord32le $ fromIntegral $ sampleRate a
---   , PutWord32le $ fromIntegral $ avgBytesPerSec
---   , PutWord16le $ fromIntegral $ bytesPerSampleSlice
---   , PutWord16le $ fromIntegral $ bitsPS
---   ]
---   where
---   sd = sampleData a
---   bitsPS = bitsPerSample $ sampleType sd
---   bytesPS = bytesPerSample $ sampleType sd
---   bytesPerSampleSlice = bytesPS * channelNumber a
---   avgBytesPerSec = sampleRate a * bytesPerSampleSlice
-
--- parseData :: (MArray IOUArray a IO, IArray UArray a, Audible a, AudibleInWav a)
---   => Int -> Int -> Parser (SampleData a)
--- parseData cn bitsPS = do
---   _ <- string "data"
---   let bytesPS = div bitsPS 8
---   chunkSize <- expect (\w -> mod (fromIntegral w) bytesPS == 0) GetWord32le
---                >>= return . fromIntegral
---   let sn = fromIntegral $ div chunkSize bytesPS
---   when (mod sn (fromIntegral cn) /= 0) $ fail "mod sampelNumber channelNumber /= 0)"
---   parseSampleData sn (parserSelector bitsPS)
-
--- buildData :: (IArray UArray a, Audible a, AudibleInWav a) => Audio a -> Builder
--- buildData a = mconcat [
---     PutString "data"
---   , PutWord32le $ fromIntegral $ chunkSize
---   , buildSampleData buildSample sd]
---   where
---   sd = sampleData a
---   chunkSize = (fromIntegral $ sampleNumber sd) * (bytesPerSample $ sampleType sd)
-
--- parseUnknownChunk :: Parser ()
--- parseUnknownChunk = do
---   _ <- expect (\s -> s /= "data" && s /= "fmt ") (GetString 4)
---   chunkSize <- GetWord32le
---   skip(fromIntegral chunkSize)
---   return ()
+putWav :: Sampled Wav -> Put
+putWav (Sampled (Wav (WavFormat nchan sr bps) mid (WavData vec) tra)) = res where
+  putFmt = do
+    putWord32le fmtChunkSize
+    putWord16le 1
+    putWord16le nchan
+    putWord32le sr
+    putWord32le bpsAvg
+    putWord16le bpsSlice
+    putWord16le bps
+  putUnp (WavUnparsed lab con)= do
+    putByteString lab
+    putWord32le (fromIntegral (BS.length con))
+    putByteString con
+  res = do
+    putByteString labelRiff
+    putWord32le fileSize
+    putByteString labelWave
+    putByteString labelFmt
+    putFmt
+    for_ mid putUnp
+    putByteString labelData
+    putWord32le dataChunkSize
+    putVec samplePut vec
+    for_ tra putUnp
+  unpSize unps = getSum (foldMap (\(WavUnparsed _ con) -> Sum (8 + fromIntegral (BS.length con))) unps)
+  midSize = unpSize mid
+  traSize = unpSize tra
+  framingSize = 20
+  fmtChunkSize = 16
+  bytesPer = fromIntegral (div bps 8)
+  dataChunkSize = bytesPer * fromIntegral (VU.length vec)
+  fileSize = framingSize + fmtChunkSize + midSize + dataChunkSize + traSize
+  bpsAvg = sr * fromIntegral bpsSlice
+  bpsSlice = div bps 8 * nchan

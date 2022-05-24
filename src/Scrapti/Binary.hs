@@ -2,10 +2,15 @@ module Scrapti.Binary
   ( Get
   , Put
   , ByteOffset
-  , DecodeError (..)
-  , DecodeSuccess (..)
-  , DecodeResult
-  , decode
+  , DecodeState (..)
+  , DecodeT (..)
+  , runDecodeT
+  , DecodeM
+  , runDecodeM
+  , decodeIO
+  , decodeGet
+  , guardEnd
+  , runPut
   , getExpect
   , getWord16le
   , getWord32le
@@ -26,36 +31,65 @@ module Scrapti.Binary
   , putVec
   ) where
 
-import Control.Exception (Exception)
 import Control.Monad (unless)
+import Control.Monad.Except (ExceptT, MonadError (..), runExceptT)
+import Control.Monad.Identity (Identity (..))
+import Control.Monad.IO.Class (MonadIO)
+import Control.Monad.State.Strict (MonadState (..), StateT (..), gets)
+import Control.Monad.Trans (MonadTrans (..))
 import Data.Binary.Get (ByteOffset, Get, getByteString, getInt16le, getInt32le, getInt64le, getInt8, getWord16le,
                         getWord32le, runGetOrFail, skip)
-import Data.Binary.Put (Put, putByteString, putInt16le, putInt32le, putInt64le, putInt8, putWord16le, putWord32le)
+import Data.Binary.Put (Put, putByteString, putInt16le, putInt32le, putInt64le, putInt8, putWord16le, putWord32le,
+                        runPut)
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Vector.Unboxed as VU
 
-data DecodeError = DecodeError
-  { deOffset :: !ByteOffset
-  , deReason :: !String
+data DecodeState = DecodeState
+  { decStateInput :: !BSL.ByteString
+  , decStateOffset :: !ByteOffset
   } deriving stock (Eq, Show)
 
-instance Exception DecodeError
+newtype DecodeT m a = DecodeT { unDecodeT :: ExceptT String (StateT DecodeState m) a }
+  deriving newtype (Functor, Applicative, Monad, MonadState DecodeState, MonadIO)
 
-data DecodeSuccess a = DecodeSuccess
-  { dsOffset :: !ByteOffset
-  , dsValue :: !a
-  } deriving stock (Eq, Show, Functor, Foldable, Traversable)
+instance Monad m => MonadFail (DecodeT m) where
+  fail = DecodeT . throwError
 
-type DecodeResult a = Either DecodeError (DecodeSuccess a)
+instance MonadTrans DecodeT where
+  lift = DecodeT . lift . lift
 
-decode :: BSL.ByteString -> Get a -> DecodeResult a
-decode bs getter = case runGetOrFail getter bs of
-  Left (_, off, reason) -> Left (DecodeError off reason)
-  Right (_, off, value) -> Right (DecodeSuccess off value)
+runDecodeT :: DecodeT m a -> DecodeState -> m (Either String a, DecodeState)
+runDecodeT dm = runStateT (runExceptT (unDecodeT dm))
+
+type DecodeM = DecodeT Identity
+
+runDecodeM :: DecodeM a -> DecodeState -> (Either String a, DecodeState)
+runDecodeM dm = runIdentity . runDecodeT dm
+
+decodeIO :: BSL.ByteString -> DecodeT IO a -> IO a
+decodeIO bs act = do
+  (ea, _) <- runDecodeT act (DecodeState bs 0)
+  either fail pure ea
+
+guardEnd :: Monad m => DecodeT m ()
+guardEnd = do
+  bs <- gets decStateInput
+  unless (BSL.null bs) (fail "not end of input")
+
+decodeGet :: Monad m => Get a -> DecodeT m a
+decodeGet getter = do
+  DecodeState bs off <- get
+  case runGetOrFail getter bs of
+    Left (bs', off', reason) -> do
+      put (DecodeState bs' (off + off'))
+      fail reason
+    Right (bs', off', value) -> do
+      put (DecodeState bs' (off + off'))
+      pure value
 
 getExpect :: (Eq a, Show a) => String -> Get a -> a -> Get ()
-getExpect typ get expec = do
-  actual <- get
+getExpect typ getter expec = do
+  actual <- getter
   unless (expec == actual)
     (fail ("Expected " ++ " " ++ typ ++  " " ++ show expec ++ " but found " ++ show actual))
 
