@@ -9,7 +9,7 @@ import qualified Data.Sequence as Seq
 import qualified Data.Vector.Unboxed as VU
 import Data.Word (Word32)
 import Scrapti.Binary (ByteOffset, DecodeState (..), Get, decodeGet, decodeIO, getByteString, guardEnd, skip)
-import Scrapti.Wav (Sampled (..), Wav (..), WavChunk (..), WavData (..), WavFormat (..), WavHeader (..), decodeWav,
+import Scrapti.Wav (Sampled (..), Wav (..), WavChunk (..), WavData (..), WavFormat (..), WavHeader (..), decodeAnyWav,
                     decodeWavChunk, decodeWavHeader, sampleGet)
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase, (@?=))
@@ -59,7 +59,7 @@ testWhole :: TestTree
 testWhole = testCase "whole" $ do
   bs <- BSL.readFile "testdata/drums.wav"
   decodeIO bs $ do
-    Sampled (Wav fmt mid (WavData vec) tra) <- decodeWav
+    Sampled (Wav fmt mid (WavData vec) tra) <- decodeAnyWav
     liftIO (fmt @?= drumFmt)
     liftIO (Seq.length mid @?= 0)
     liftIO (VU.length vec @?= drumDataLen)

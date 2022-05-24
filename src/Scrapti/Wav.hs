@@ -13,8 +13,10 @@ module Scrapti.Wav
   , decodeWavHeader
   , decodeWavChunk
   , decodeWavTrailers
-  , decodeWav
-  , encodeWav
+  , decodeAnyWav
+  , decodeSpecificWav
+  , encodeAnyWav
+  -- , encodeSpecificWav
   ) where
 
 import Control.Monad (unless)
@@ -98,6 +100,11 @@ data WavUnparsed = WavUnparsed
   , wavUnparsedContents :: !ByteString
   } deriving stock (Eq, Show)
 
+data WavBody a = WavBody
+  { wbMiddle :: !(Seq WavUnparsed)
+  , wbData :: !(WavData a)
+  } deriving stock (Eq, Show)
+
 data Wav a = Wav
   { wavFormat :: !WavFormat
   , wavMiddle :: !(Seq WavUnparsed)
@@ -126,15 +133,30 @@ decodeWavTrailers = go Empty where
         unp <- decodeGet (getLabel >>= getWavUnparsed)
         go (acc :|> unp)
 
-decodeWav :: Monad m => DecodeT m (Sampled Wav)
-decodeWav = do
-  Sampled (Wav fmt mid dat tra) <- decodeGet getWav
-  moreTra <- decodeWavTrailers
-  guardEnd
-  pure $! Sampled (Wav fmt mid dat (tra <> moreTra))
+decodeAnyWav :: Monad m => DecodeT m (Sampled Wav)
+decodeAnyWav = do
+  WavHeader _ fmt <- decodeWavHeader
+  case getSampled (wfBitsPerSample fmt) of
+    Nothing -> fail "bad bps"
+    Just (Sampled getter) -> fmap Sampled (decodeRestOfWav fmt getter)
 
-encodeWav :: Sampled Wav -> BSL.ByteString
-encodeWav = runPut . putWav
+decodeSpecificWav :: (Monad m, Sample a) => Proxy a -> DecodeT m (Wav a)
+decodeSpecificWav _ = do
+  WavHeader _ fmt <- decodeWavHeader
+  decodeRestOfWav fmt sampleGet
+
+decodeRestOfWav :: (Monad m, Sample a) => WavFormat -> Get a -> DecodeT m (Wav a)
+decodeRestOfWav fmt getter = do
+  WavBody mid dat <- decodeGet (getWavBody (wfBitsPerSample fmt) getter)
+  tra <- decodeWavTrailers
+  guardEnd
+  pure $! Wav fmt mid dat tra
+
+encodeAnyWav :: Sampled Wav -> BSL.ByteString
+encodeAnyWav (Sampled wav) = encodeSpecificWav wav
+
+encodeSpecificWav :: Sample a => Wav a -> BSL.ByteString
+encodeSpecificWav = runPut . putSpecificWav
 
 labelRiff, labelWave, labelFmt, labelData :: ByteString
 labelRiff = "RIFF"
@@ -204,22 +226,16 @@ getWavUnparsed lab = do
   contents <- getByteString (fromIntegral chunkSize)
   pure $! WavUnparsed lab contents
 
-getWav :: Get (Sampled Wav)
-getWav = res where
-  res = do
-    WavHeader _ fmt <- getWavHeader
-    let bps = wfBitsPerSample fmt
-    case getSampled bps of
-      Nothing -> fail "bad bps"
-      Just (Sampled getter) -> loop fmt bps getter Empty
-  loop fmt bps getter !unps = do
+getWavBody :: VU.Unbox a => Word16 -> Get a -> Get (WavBody a)
+getWavBody bps getter = go Empty where
+  go !unps = do
     chunk <- getWavChunk bps getter
     case chunk of
-      WavChunkData dat -> pure $! Sampled (Wav fmt unps dat Empty)
-      WavChunkUnparsed unp -> loop fmt bps getter (unps :|> unp)
+      WavChunkData dat -> pure $! WavBody unps dat
+      WavChunkUnparsed unp -> go (unps :|> unp)
 
-putWav :: Sampled Wav -> Put
-putWav (Sampled (Wav (WavFormat nchan sr bps) mid (WavData vec) tra)) = res where
+putSpecificWav :: Sample a => Wav a -> Put
+putSpecificWav (Wav (WavFormat nchan sr bps) mid (WavData vec) tra) = res where
   putFmt = do
     putWord32le fmtChunkSize
     putWord16le 1

@@ -26,6 +26,7 @@ library
   exposed-modules:
       Scrapti
       Scrapti.Binary
+      Scrapti.Pti
       Scrapti.Wav
   other-modules:
       Paths_scrapti
