@@ -12,6 +12,7 @@ module Scrapti.Binary
   , guardEnd
   , runPut
   , getExpect
+  , getWord8
   , getWord16le
   , getWord32le
   , getInt8
@@ -21,6 +22,7 @@ module Scrapti.Binary
   , getByteString
   , getVec
   , skip
+  , putWord8
   , putWord16le
   , putWord32le
   , putInt8
@@ -38,9 +40,9 @@ import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.State.Strict (MonadState (..), StateT (..), gets)
 import Control.Monad.Trans (MonadTrans (..))
 import Data.Binary.Get (ByteOffset, Get, getByteString, getInt16le, getInt32le, getInt64le, getInt8, getWord16le,
-                        getWord32le, runGetOrFail, skip)
+                        getWord32le, getWord8, runGetOrFail, skip)
 import Data.Binary.Put (Put, putByteString, putInt16le, putInt32le, putInt64le, putInt8, putWord16le, putWord32le,
-                        runPut)
+                        putWord8, runPut)
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Vector.Unboxed as VU
 

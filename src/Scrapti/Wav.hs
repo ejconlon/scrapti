@@ -16,7 +16,7 @@ module Scrapti.Wav
   , decodeAnyWav
   , decodeSpecificWav
   , encodeAnyWav
-  -- , encodeSpecificWav
+  , encodeSpecificWav
   ) where
 
 import Control.Monad (unless)
@@ -27,7 +27,7 @@ import qualified Data.Vector.Unboxed as VU
 import Data.Word (Word16, Word32)
 import Scrapti.Binary (DecodeState (decStateInput), DecodeT, Get, Put, decodeGet, getByteString, getExpect, getInt16le,
                        getInt32le, getInt64le, getInt8, getVec, getWord16le, getWord32le, guardEnd, putByteString,
-                       putInt16le, putInt32le, putInt64le, putInt8, putVec, putWord16le, putWord32le, runPut)
+                       putInt16le, putInt32le, putInt64le, putInt8, putVec, putWord16le, putWord32le, runPut, skip)
 
 import Control.Monad.State.Strict (gets)
 import qualified Data.ByteString as BS
@@ -173,9 +173,6 @@ expectLabel = getExpect "label" getLabel
 expectCode :: Word16 -> Get ()
 expectCode = getExpect "compression code" getWord16le
 
-expectChunkSize :: Word32 -> Get ()
-expectChunkSize = getExpect "chunk size" getWord32le
-
 getWavHeader :: Get WavHeader
 getWavHeader = do
   expectLabel labelRiff
@@ -188,9 +185,13 @@ getWavHeader = do
 isSupportedBPS :: Word16 -> Bool
 isSupportedBPS w = mod w 8 == 0 && w <= 64
 
+isSupportedFmtChunkSize :: Word32 -> Bool
+isSupportedFmtChunkSize x = x == 16 || x == 18 || x == 40
+
 getWavFormat :: Get WavFormat
 getWavFormat = do
-  _ <- expectChunkSize 16
+  chunkSize <- getWord32le
+  unless (isSupportedFmtChunkSize chunkSize) (fail "bad fmt chunk size")
   _ <- expectCode 1
   numChannels <- getWord16le
   sampleRate <- getWord32le
@@ -200,6 +201,7 @@ getWavFormat = do
   unless (bpsAvg == sampleRate * fromIntegral bpsSlice) (fail "bad average bps")
   unless (isSupportedBPS bps) (fail "bad bps")
   unless (bpsSlice == div bps 8 * numChannels) (fail "bad bps slice")
+  skip (fromIntegral (chunkSize - 16))
   pure $! WavFormat numChannels sampleRate bps
 
 getWavChunk :: VU.Unbox a => Word16 -> Get a -> Get (WavChunk a)

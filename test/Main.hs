@@ -1,16 +1,14 @@
 module Main (main) where
 
-import Control.Exception (throwIO)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.State.Strict (gets)
 import qualified Data.ByteString.Lazy as BSL
 import Data.Int (Int16)
 import qualified Data.Sequence as Seq
 import qualified Data.Vector.Unboxed as VU
-import Data.Word (Word32)
-import Scrapti.Binary (ByteOffset, DecodeState (..), Get, decodeGet, decodeIO, getByteString, guardEnd, skip)
+import Scrapti.Binary (DecodeState (..), Get, decodeGet, decodeIO, skip)
 import Scrapti.Wav (Sampled (..), Wav (..), WavChunk (..), WavData (..), WavFormat (..), WavHeader (..), decodeAnyWav,
-                    decodeWavChunk, decodeWavHeader, sampleGet)
+                    decodeWavChunk, decodeWavHeader, encodeAnyWav, sampleGet)
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase, (@?=))
 
@@ -69,5 +67,12 @@ testWhole = testCase "whole" $ do
     endOff <- gets decStateOffset
     liftIO (endOff @?= fromIntegral (drumFileSize + 8))
 
+testWrite :: TestTree
+testWrite = testCase "write" $ do
+  bs <- BSL.readFile "testdata/drums.wav"
+  swav <- decodeIO bs decodeAnyWav
+  let bs' = encodeAnyWav swav
+  bs' @?= bs
+
 main :: IO ()
-main = defaultMain (testGroup "Scrapti" [testHeader, testData, testWhole])
+main = defaultMain (testGroup "Scrapti" [testHeader, testData, testWhole, testWrite])
