@@ -166,7 +166,7 @@ getWavData bitsPer getter = do
   let !samples = fromIntegral (div chunkSize (fromIntegral bytesPer))
   vec <- getVec samples getter
   unless (VU.length vec == samples) (fail "bad samples")
-  pure (WavData vec)
+  pure $! WavData vec
 
 getWavUnparsed :: ByteString -> Get WavUnparsed
 getWavUnparsed lab = do
