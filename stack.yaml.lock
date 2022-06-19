@@ -13,7 +13,7 @@ packages:
     hackage: sdl2-mixer-1.2.0.0
 snapshots:
 - completed:
-    size: 618506
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/19/8.yaml
-    sha256: f1c4aca9b9b81afbb9db55571acb0690cdc01ac97a178234de281f9dc075e95e
-  original: lts-19.8
+    size: 619152
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/19/11.yaml
+    sha256: 692668712aa3a6638401ce921cd043f5f9a8b018af9ba13ae350871196b047d6
+  original: lts-19.11

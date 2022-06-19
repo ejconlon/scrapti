@@ -15,7 +15,6 @@ description: Please see the README on GitHub at <https://github.com/ejconlon/scr
 
 dependencies:
 - base >= 4.12 && < 5
-# - store
 - binary
 - bytestring
 - sdl2
@@ -25,6 +24,7 @@ dependencies:
 - mtl
 - transformers
 - containers
+- yaml
 
 default-extensions:
 - BangPatterns

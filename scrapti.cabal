@@ -68,6 +68,7 @@ library
     , sdl2-mixer
     , transformers
     , vector
+    , yaml
   default-language: Haskell2010
 
 executable scrapti-exe
@@ -113,6 +114,7 @@ executable scrapti-exe
     , sdl2-mixer
     , transformers
     , vector
+    , yaml
   default-language: Haskell2010
 
 test-suite scrapti-test
@@ -161,4 +163,5 @@ test-suite scrapti-test
     , tasty-hunit
     , transformers
     , vector
+    , yaml
   default-language: Haskell2010
