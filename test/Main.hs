@@ -7,8 +7,9 @@ import Data.Int (Int16)
 import qualified Data.Sequence as Seq
 import qualified Data.Vector.Unboxed as VU
 import Scrapti.Binary (DecodeState (..), Get, decodeGet, decodeIO, skip)
-import Scrapti.Wav (Sampled (..), Wav (..), WavChunk (..), WavData (..), WavFormat (..), WavHeader (..), decodeAnyWav,
-                    decodeWavChunk, decodeWavHeader, encodeAnyWav, sampleGet)
+import Scrapti.Sample (Sampled (..), sampleGet)
+import Scrapti.Wav (Wav (..), WavChunk (..), WavData (..), WavFormat (..), WavHeader (..), decodeAnyWav, decodeWavChunk,
+                    decodeWavHeader, encodeAnyWav)
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase, (@?=))
 
@@ -45,7 +46,7 @@ testData :: TestTree
 testData = testCase "data" $ do
   bs <- BSL.readFile "testdata/drums.wav"
   decodeIO bs $ do
-    decodeGet (skip (fromIntegral dataOffset))
+    decodeGet (skip dataOffset)
     startOff <- gets decStateOffset
     liftIO (startOff @?= fromIntegral dataOffset)
     chunk <- decodeWavChunk 16 (sampleGet :: Get Int16)

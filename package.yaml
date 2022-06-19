@@ -24,7 +24,8 @@ dependencies:
 - mtl
 - transformers
 - containers
-- yaml
+- text
+# - yaml
 
 default-extensions:
 - BangPatterns

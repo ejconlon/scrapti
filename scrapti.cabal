@@ -27,6 +27,9 @@ library
       Scrapti
       Scrapti.Binary
       Scrapti.Pti
+      Scrapti.Riff
+      Scrapti.Sample
+      Scrapti.Sfont
       Scrapti.Wav
   other-modules:
       Paths_scrapti
@@ -66,9 +69,9 @@ library
     , resourcet
     , sdl2
     , sdl2-mixer
+    , text
     , transformers
     , vector
-    , yaml
   default-language: Haskell2010
 
 executable scrapti-exe
@@ -112,9 +115,9 @@ executable scrapti-exe
     , scrapti
     , sdl2
     , sdl2-mixer
+    , text
     , transformers
     , vector
-    , yaml
   default-language: Haskell2010
 
 test-suite scrapti-test
@@ -161,7 +164,7 @@ test-suite scrapti-test
     , sdl2-mixer
     , tasty
     , tasty-hunit
+    , text
     , transformers
     , vector
-    , yaml
   default-language: Haskell2010
