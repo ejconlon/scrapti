@@ -10,8 +10,8 @@ import Data.Sequence (Seq)
 import Data.Text (Text)
 import qualified Data.Text.Encoding as TE
 import Data.Word (Word16, Word32)
-import Scrapti.Binary (ByteLength, DecodeM, Get, decodeBounded, decodeGet, decodeRepeated, getByteString,
-                       getWord16le, getWord32le)
+import Scrapti.Binary (ByteLength, DecodeT, Get, decodeBounded, decodeGet, decodeRepeated, getByteString, getWord16le,
+                       getWord32le)
 import Scrapti.Riff (expectLabel, getLabel, labelRiff)
 import Scrapti.Wav (WavData)
 
@@ -60,12 +60,12 @@ getSfontHeader = do
   expectLabel labelRiff
   chunkSize <- getWord32le
   expectLabel labelSfbk
-  pure $! fromIntegral chunkSize
+  pure $! fromIntegral chunkSize - 4
 
-decodeSfont :: DecodeM Sfont
+decodeSfont :: Monad m => DecodeT m Sfont
 decodeSfont = do
-  chunkSize <- decodeGet getSfontHeader
-  decodeBounded chunkSize $ do
+  remainingSize <- decodeGet getSfontHeader
+  decodeBounded remainingSize $ do
     infos <- decodeInfos
     sdta <- undefined
     pdta <- undefined
@@ -76,14 +76,17 @@ getInfosHeader = do
   expectLabel labelList
   chunkSize <- getWord32le
   expectLabel labelInfo
-  pure $! fromIntegral chunkSize
+  pure $! fromIntegral chunkSize - 4
 
 getZstr :: Word32 -> Get Text
 getZstr len = do
   bs <- getByteString (fromIntegral len)
-  let !nul = BS.last bs
-  unless (nul == 0) (fail "bad null byte")
-  pure $! TE.decodeLatin1 bs
+  case BS.unsnoc bs of
+    Nothing -> fail "empty zstr"
+    Just (bs', nul) -> do
+      unless (nul == 0) (fail "bad null byte")
+      let !bs'' = if not (BS.null bs') && BS.last bs' == 0 then BS.init bs' else bs'
+      pure $! TE.decodeLatin1 bs''
 
 getInfo :: Get Info
 getInfo = do
@@ -122,10 +125,10 @@ getInfo = do
       bs <- getByteString (fromIntegral chunkSize)
       pure $! InfoReserved label bs
 
-decodeInfos :: DecodeM (Seq Info)
+decodeInfos :: Monad m => DecodeT m (Seq Info)
 decodeInfos = do
-  chunkSize <- decodeGet getInfosHeader
-  decodeRepeated chunkSize (decodeGet getInfo)
+  remainingSize <- decodeGet getInfosHeader
+  decodeRepeated remainingSize (decodeGet getInfo)
 
 data Info =
     InfoVersion !Word16 !Word16

@@ -97,19 +97,21 @@ decodeBounded len dec = do
     | otherwise -> fail ("consumed too little input: " ++ show (end - off'))
 
 decodeRepeated :: Monad m => ByteLength -> DecodeT m a -> DecodeT m (Seq a)
-decodeRepeated len dec = result where
-  result = do
-    off <- gets decStateOffset
-    let !end = off + len
-    advance end Empty
-  advance end !acc = do
+decodeRepeated len dec = do
+  off <- gets decStateOffset
+  let !end = off + len
+  decodeUntil end dec
+
+decodeUntil :: Monad m => ByteOffset -> DecodeT m a -> DecodeT m (Seq a)
+decodeUntil end dec = go Empty where
+  go !acc = do
     off' <- gets decStateOffset
     if
       | off' > end -> fail ("consumed too much input: " ++ show (off' - end))
       | off' == end -> pure acc
       | otherwise -> do
         elt <- dec
-        advance end (acc :|> elt)
+        go (acc :|> elt)
 
 decodeGet :: Monad m => Get a -> DecodeT m a
 decodeGet getter = do

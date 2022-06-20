@@ -8,6 +8,7 @@ import qualified Data.Sequence as Seq
 import qualified Data.Vector.Unboxed as VU
 import Scrapti.Binary (ByteLength, ByteOffset, DecodeState (..), Get, decodeGet, decodeIO, skip)
 import Scrapti.Sample (Sampled (..), sampleGet)
+import Scrapti.Sfont (decodeInfos, getSfontHeader)
 import Scrapti.Wav (Wav (..), WavChunk (..), WavData (..), WavFormat (..), WavHeader (..), decodeAnyWav, decodeWavChunk,
                     decodeWavHeader, encodeAnyWav)
 import Test.Tasty (TestTree, defaultMain, testGroup)
@@ -78,8 +79,18 @@ testWavWrite = testCase "write" $ do
 testWav :: TestTree
 testWav = testGroup "wav" [testWavHeader, testWavData, testWavWhole, testWavWrite]
 
+testSfontManual :: TestTree
+testSfontManual = testCase "manual" $ do
+  bs <- BSL.readFile "testdata/timpani.sf2"
+  (remainingSize, infos) <- decodeIO bs $ do
+    remainingSize <- decodeGet getSfontHeader
+    infos <- decodeInfos
+    pure (remainingSize, infos)
+  remainingSize @?= 2733222
+  Seq.length infos @?= 5
+
 testSfont :: TestTree
-testSfont = testGroup "sfont" []
+testSfont = testGroup "sfont" [testSfontManual]
 
 main :: IO ()
 main = defaultMain (testGroup "Scrapti" [testWav, testSfont])
