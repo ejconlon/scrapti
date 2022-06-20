@@ -2,7 +2,7 @@ module Scrapti where
 
 import Control.Monad.Trans.Resource (MonadResource, allocate, runResourceT)
 import qualified Data.ByteString.Lazy as BSL
-import Scrapti.Binary (decodeIO)
+import Scrapti.Binary (decode)
 import Scrapti.Sample (Sampled)
 import Scrapti.Wav (Wav, decodeAnyWav)
 import qualified SDL
@@ -10,7 +10,7 @@ import qualified SDL
 exe :: IO ()
 exe = do
   bs <- BSL.readFile "testdata/drums.wav"
-  swav <- decodeIO bs decodeAnyWav
+  swav <- decode bs decodeAnyWav
   playSound swav
 
 playSound :: Sampled Wav -> IO ()

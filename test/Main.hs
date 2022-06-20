@@ -6,9 +6,9 @@ import qualified Data.ByteString.Lazy as BSL
 import Data.Int (Int16)
 import qualified Data.Sequence as Seq
 import qualified Data.Vector.Unboxed as VU
-import Scrapti.Binary (ByteLength, ByteOffset, DecodeState (..), Get, decodeGet, decodeIO, skip)
+import Scrapti.Binary (ByteLength, ByteOffset, DecodeState (..), Get, decode, decodeGet, skip)
 import Scrapti.Sample (Sampled (..), sampleGet)
-import Scrapti.Sfont (decodeInfos, getSfontHeader)
+import Scrapti.Sfont (Sdta (sdtaHighBits, sdtaLowBits), decodeInfos, getSdta, getSfontHeader)
 import Scrapti.Wav (Wav (..), WavChunk (..), WavData (..), WavFormat (..), WavHeader (..), decodeAnyWav, decodeWavChunk,
                     decodeWavHeader, encodeAnyWav)
 import Test.Tasty (TestTree, defaultMain, testGroup)
@@ -35,7 +35,7 @@ drumDataLen = 248886
 testWavHeader :: TestTree
 testWavHeader = testCase "header" $ do
   bs <- BSL.readFile "testdata/drums.wav"
-  decodeIO bs $ do
+  decode bs $ do
     startOff <- gets decStateOffset
     liftIO (startOff @?= 0)
     header <- decodeWavHeader
@@ -46,7 +46,7 @@ testWavHeader = testCase "header" $ do
 testWavData :: TestTree
 testWavData = testCase "data" $ do
   bs <- BSL.readFile "testdata/drums.wav"
-  decodeIO bs $ do
+  decode bs $ do
     decodeGet (skip dataOffset)
     startOff <- gets decStateOffset
     liftIO (startOff @?= fromIntegral dataOffset)
@@ -58,7 +58,7 @@ testWavData = testCase "data" $ do
 testWavWhole :: TestTree
 testWavWhole = testCase "whole" $ do
   bs <- BSL.readFile "testdata/drums.wav"
-  decodeIO bs $ do
+  decode bs $ do
     Sampled (Wav fmt mid (WavData vec) tra) <- decodeAnyWav
     liftIO (fmt @?= drumFmt)
     liftIO (Seq.length mid @?= 0)
@@ -72,7 +72,7 @@ testWavWhole = testCase "whole" $ do
 testWavWrite :: TestTree
 testWavWrite = testCase "write" $ do
   bs <- BSL.readFile "testdata/drums.wav"
-  swav <- decodeIO bs decodeAnyWav
+  swav <- decode bs decodeAnyWav
   let bs' = encodeAnyWav swav
   bs' @?= bs
 
@@ -82,12 +82,15 @@ testWav = testGroup "wav" [testWavHeader, testWavData, testWavWhole, testWavWrit
 testSfontManual :: TestTree
 testSfontManual = testCase "manual" $ do
   bs <- BSL.readFile "testdata/timpani.sf2"
-  (remainingSize, infos) <- decodeIO bs $ do
+  (remainingSize, infos, sdta) <- decode bs $ do
     remainingSize <- decodeGet getSfontHeader
     infos <- decodeInfos
-    pure (remainingSize, infos)
+    sdta <- decodeGet getSdta
+    pure (remainingSize, infos, sdta)
   remainingSize @?= 2733222
   Seq.length infos @?= 5
+  VU.length (unWavData (sdtaHighBits sdta)) @?= 1365026
+  sdtaLowBits sdta @?= Nothing
 
 testSfont :: TestTree
 testSfont = testGroup "sfont" [testSfontManual]

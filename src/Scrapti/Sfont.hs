@@ -5,15 +5,15 @@ module Scrapti.Sfont where
 import Control.Monad (unless)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
-import Data.Int (Int16, Int8)
+import Data.Int (Int16)
 import Data.Sequence (Seq)
 import Data.Text (Text)
 import qualified Data.Text.Encoding as TE
-import Data.Word (Word16, Word32)
-import Scrapti.Binary (ByteLength, DecodeT, Get, decodeBounded, decodeGet, decodeRepeated, getByteString, getWord16le,
-                       getWord32le)
+import Data.Word (Word16, Word32, Word8)
+import Scrapti.Binary (ByteLength, DecodeT, Get, decodeBounded, decodeGet, decodeRepeated, getByteString, getInt16le,
+                       getVec, getWord16le, getWord32le, getWord8, skip)
 import Scrapti.Riff (expectLabel, getLabel, labelRiff)
-import Scrapti.Wav (WavData)
+import Scrapti.Wav (WavData (..))
 
 data Sfont = Sfont
   { sfontInfos :: !(Seq Info)
@@ -38,8 +38,8 @@ data Sfont = Sfont
 -- getSfontChunk :: Get SfontChunk
 -- getSfontChunk = do
 
-labelSfbk, labelList, labelInfo, labelIfil, labelIver, labelIsng, labelInam, labelIrom,
-  labelIcrd, labelIeng, labelIprd, labelIcop, labelIcmt, labelIsft :: ByteString
+labelSfbk, labelList, labelInfo, labelIfil, labelIver, labelIsng, labelInam, labelIrom, labelIcrd,
+  labelIeng, labelIprd, labelIcop, labelIcmt, labelIsft, labelSdta, labelSmpl, labelSm24 :: ByteString
 labelSfbk = "sfbk"
 labelList = "LIST"
 labelInfo = "INFO"
@@ -54,6 +54,9 @@ labelIprd = "IPRD"
 labelIcop = "ICOP"
 labelIcmt = "ICMT"
 labelIsft = "ISFT"
+labelSdta = "sdta"
+labelSmpl = "smpl"
+labelSm24 = "sm24"
 
 getSfontHeader :: Get ByteLength
 getSfontHeader = do
@@ -67,7 +70,7 @@ decodeSfont = do
   remainingSize <- decodeGet getSfontHeader
   decodeBounded remainingSize $ do
     infos <- decodeInfos
-    sdta <- undefined
+    sdta <- decodeGet getSdta
     pdta <- undefined
     pure $! Sfont infos sdta pdta
 
@@ -130,6 +133,45 @@ decodeInfos = do
   remainingSize <- decodeGet getInfosHeader
   decodeRepeated remainingSize (decodeGet getInfo)
 
+
+-- getLowBits :: Get (WavData Int16)
+-- getLowBits bitsPer getter = do
+--   let !bytesPer = div bitsPer 8
+--   chunkSize <- getWord32le
+--   unless (mod chunkSize (fromIntegral bytesPer) == 0) (fail "bad data chunk size")
+--   let !samples = fromIntegral (div chunkSize (fromIntegral bytesPer))
+--   vec <- getVec samples getter
+--   unless (VU.length vec == samples) (fail "bad samples")
+--   pure $! WavData vec
+
+getHighBits :: Word32 -> Get (WavData Int16)
+getHighBits numSamples = WavData <$> getVec (fromIntegral numSamples) getInt16le
+
+getLowBits :: Word32 -> Get (WavData Word8)
+getLowBits numSamples = WavData <$> getVec (fromIntegral numSamples) getWord8
+
+getSdta :: Get Sdta
+getSdta = do
+  expectLabel labelList
+  chunkSize <- getWord32le
+  expectLabel labelSdta
+  expectLabel labelSmpl
+  highSize <- getWord32le
+  let !numSamples = div highSize 2
+  highBits <- getHighBits numSamples
+  let !numExtra = chunkSize - highSize - 12
+  if
+    | numExtra > 0 -> do
+      expectLabel labelSm24
+      lowSize <- getWord32le
+      let !expectedSize = if even numSamples then numSamples else numSamples + 1
+      unless (lowSize == expectedSize) (fail "invalid low sample size")
+      lowBits <- getLowBits numSamples
+      unless (even numSamples) (skip 1)
+      pure $! Sdta highBits (Just lowBits)
+    | numExtra == 0 -> pure $! Sdta highBits Nothing
+    | otherwise -> fail "invalid sdata chunk/sample sizes"
+
 data Info =
     InfoVersion !Word16 !Word16
   | InfoTargetSoundEngine !Text
@@ -147,7 +189,7 @@ data Info =
 
 data Sdta = Sdta
   { sdtaHighBits :: !(WavData Int16)
-  , sdtaLowBits :: !(Maybe (WavData Int8))
+  , sdtaLowBits :: !(Maybe (WavData Word8))
   } deriving stock (Eq, Show)
 
 data Pdta = Pdta
