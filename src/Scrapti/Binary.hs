@@ -1,6 +1,9 @@
+{-# LANGUAGE MultiWayIf #-}
+
 module Scrapti.Binary
   ( Get
   , Put
+  , ByteLength
   , ByteOffset
   , DecodeState (..)
   , DecodeT (..)
@@ -10,6 +13,8 @@ module Scrapti.Binary
   , decodeIO
   , decodeGet
   , guardEnd
+  , decodeBounded
+  , decodeRepeated
   , runPut
   , getExpect
   , getWord8
@@ -44,7 +49,11 @@ import Data.Binary.Get (ByteOffset, Get, getByteString, getInt16le, getInt32le, 
 import Data.Binary.Put (Put, putByteString, putInt16le, putInt32le, putInt64le, putInt8, putWord16le, putWord32le,
                         putWord8, runPut)
 import qualified Data.ByteString.Lazy as BSL
+import Data.Int (Int64)
+import Data.Sequence (Seq (..))
 import qualified Data.Vector.Unboxed as VU
+
+type ByteLength = Int64
 
 data DecodeState = DecodeState
   { decStateInput :: !BSL.ByteString
@@ -77,6 +86,32 @@ guardEnd :: Monad m => DecodeT m ()
 guardEnd = do
   bs <- gets decStateInput
   unless (BSL.null bs) (fail "not end of input")
+
+decodeBounded :: Monad m => ByteLength -> DecodeT m a -> DecodeT m a
+decodeBounded len dec = do
+  off <- gets decStateOffset
+  let !end = off + len
+  elt <- dec
+  off' <- gets decStateOffset
+  if
+    | off' > end -> fail ("consumed too much input: " ++ show (off' - end))
+    | off' == end -> pure elt
+    | otherwise -> fail ("consumed too little input: " ++ show (end - off'))
+
+decodeRepeated :: Monad m => ByteLength -> DecodeT m a -> DecodeT m (Seq a)
+decodeRepeated len dec = result where
+  result = do
+    off <- gets decStateOffset
+    let !end = off + len
+    advance end Empty
+  advance end !acc = do
+    off' <- gets decStateOffset
+    if
+      | off' > end -> fail ("consumed too much input: " ++ show (off' - end))
+      | off' == end -> pure acc
+      | otherwise -> do
+        elt <- dec
+        advance end (acc :|> elt)
 
 decodeGet :: Monad m => Get a -> DecodeT m a
 decodeGet getter = do

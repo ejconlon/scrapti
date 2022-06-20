@@ -6,7 +6,7 @@ import qualified Data.ByteString.Lazy as BSL
 import Data.Int (Int16)
 import qualified Data.Sequence as Seq
 import qualified Data.Vector.Unboxed as VU
-import Scrapti.Binary (DecodeState (..), Get, decodeGet, decodeIO, skip)
+import Scrapti.Binary (ByteLength, ByteOffset, DecodeState (..), Get, decodeGet, decodeIO, skip)
 import Scrapti.Sample (Sampled (..), sampleGet)
 import Scrapti.Wav (Wav (..), WavChunk (..), WavData (..), WavFormat (..), WavHeader (..), decodeAnyWav, decodeWavChunk,
                     decodeWavHeader, encodeAnyWav)
@@ -19,14 +19,14 @@ dataOffset = 36
 drumFmt :: WavFormat
 drumFmt = WavFormat 2 44100 16
 
-drumFileSize :: Int
+drumFileSize :: ByteLength
 drumFileSize = 497896
 
-drumEndOffset :: Int
+drumEndOffset :: ByteOffset
 drumEndOffset = drumFileSize + 8
 
 drumHeader :: WavHeader
-drumHeader = WavHeader (fromIntegral drumFileSize) drumFmt
+drumHeader = WavHeader (drumFileSize - 28) drumFmt
 
 drumDataLen :: Int
 drumDataLen = 248886
@@ -66,7 +66,7 @@ testWhole = testCase "whole" $ do
     endInp <- gets decStateInput
     liftIO (assertBool "expected file end" (BSL.null endInp))
     endOff <- gets decStateOffset
-    liftIO (endOff @?= fromIntegral (drumFileSize + 8))
+    liftIO (endOff @?= drumEndOffset)
 
 testWrite :: TestTree
 testWrite = testCase "write" $ do

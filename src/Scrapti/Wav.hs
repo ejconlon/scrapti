@@ -27,9 +27,9 @@ import Data.Semigroup (Sum (..))
 import Data.Sequence (Seq (..))
 import qualified Data.Vector.Unboxed as VU
 import Data.Word (Word16, Word32)
-import Scrapti.Binary (DecodeState (decStateInput), DecodeT, Get, Put, decodeGet, getByteString, getExpect, getVec,
-                       getWord16le, getWord32le, guardEnd, putByteString, putVec, putWord16le, putWord32le, runPut,
-                       skip)
+import Scrapti.Binary (ByteLength, DecodeState (decStateInput), DecodeT, Get, Put, decodeBounded, decodeGet,
+                       getByteString, getExpect, getVec, getWord16le, getWord32le, guardEnd, putByteString, putVec,
+                       putWord16le, putWord32le, runPut, skip)
 import Scrapti.Riff (expectLabel, getLabel, labelRiff)
 import Scrapti.Sample (Sample (..), Sampled (..), getSampled)
 
@@ -44,7 +44,7 @@ newtype WavData a = WavData { unWavData :: VU.Vector a }
   deriving newtype (Eq)
 
 data WavHeader = WavHeader
-  { wavHeaderFileSize :: !Word32
+  { wavHeaderRemainingSize :: !ByteLength
   , wavHeaderFormat :: !WavFormat
   } deriving stock (Eq, Show)
 
@@ -88,22 +88,23 @@ decodeWavTrailers = go Empty where
 
 decodeAnyWav :: Monad m => DecodeT m (Sampled Wav)
 decodeAnyWav = do
-  WavHeader _ fmt <- decodeWavHeader
+  WavHeader remainingSize fmt <- decodeWavHeader
   case getSampled (wfBitsPerSample fmt) of
     Nothing -> fail "bad bps"
-    Just (Sampled getter) -> fmap Sampled (decodeRestOfWav fmt getter)
+    Just (Sampled getter) -> fmap Sampled (decodeRestOfWav remainingSize fmt getter)
 
 decodeSpecificWav :: (Monad m, Sample a) => Proxy a -> DecodeT m (Wav a)
 decodeSpecificWav _ = do
-  WavHeader _ fmt <- decodeWavHeader
-  decodeRestOfWav fmt sampleGet
+  WavHeader remainingSize fmt <- decodeWavHeader
+  decodeRestOfWav remainingSize fmt sampleGet
 
-decodeRestOfWav :: (Monad m, Sample a) => WavFormat -> Get a -> DecodeT m (Wav a)
-decodeRestOfWav fmt getter = do
-  WavBody mid dat <- decodeGet (getWavBody (wfBitsPerSample fmt) getter)
-  tra <- decodeWavTrailers
-  guardEnd
-  pure $! Wav fmt mid dat tra
+decodeRestOfWav :: (Monad m, Sample a) => ByteLength -> WavFormat -> Get a -> DecodeT m (Wav a)
+decodeRestOfWav remainingSize fmt getter =
+  decodeBounded remainingSize $ do
+    WavBody mid dat <- decodeGet (getWavBody (wfBitsPerSample fmt) getter)
+    tra <- decodeWavTrailers
+    guardEnd
+    pure $! Wav fmt mid dat tra
 
 encodeAnyWav :: Sampled Wav -> BSL.ByteString
 encodeAnyWav (Sampled wav) = encodeSpecificWav wav
@@ -125,8 +126,9 @@ getWavHeader = do
   fileSize <- getWord32le
   expectLabel labelWave
   expectLabel labelFmt
-  format <- getWavFormat
-  pure $! WavHeader fileSize format
+  (format, formatSize) <- getWavFormat
+  let remainingSize = fromIntegral (fileSize - formatSize - 12)
+  pure $! WavHeader remainingSize format
 
 isSupportedBPS :: Word16 -> Bool
 isSupportedBPS w = mod w 8 == 0 && w <= 64
@@ -134,7 +136,7 @@ isSupportedBPS w = mod w 8 == 0 && w <= 64
 isSupportedFmtChunkSize :: Word32 -> Bool
 isSupportedFmtChunkSize x = x == 16 || x == 18 || x == 40
 
-getWavFormat :: Get WavFormat
+getWavFormat :: Get (WavFormat, Word32)
 getWavFormat = do
   chunkSize <- getWord32le
   unless (isSupportedFmtChunkSize chunkSize) (fail "bad fmt chunk size")
@@ -148,7 +150,8 @@ getWavFormat = do
   unless (isSupportedBPS bps) (fail "bad bps")
   unless (bpsSlice == div bps 8 * numChannels) (fail "bad bps slice")
   skip (fromIntegral (chunkSize - 16))
-  pure $! WavFormat numChannels sampleRate bps
+  let !format = WavFormat numChannels sampleRate bps
+  pure (format, chunkSize)
 
 getWavChunk :: VU.Unbox a => Word16 -> Get a -> Get (WavChunk a)
 getWavChunk bps getter = go where

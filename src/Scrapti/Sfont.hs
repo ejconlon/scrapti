@@ -1,17 +1,64 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Scrapti.Sfont where
 
 import Data.ByteString (ByteString)
+import Data.Int (Int16, Int8)
 import Data.Sequence (Seq)
 import Data.Text (Text)
-import Data.Word (Word32, Word16)
+import Data.Word (Word16, Word32)
+import Scrapti.Binary (DecodeM, DecodeT (..), Get, decodeBounded, decodeGet, getWord32le)
+import Scrapti.Riff (expectLabel, labelRiff)
 import Scrapti.Wav (WavData)
-import Data.Int (Int16, Int8)
 
-data Sfont a = Sfont
+data Sfont = Sfont
   { sfontInfos :: !(Seq Info)
   , sfontSdta :: !Sdta
   , sfontPdta :: !Pdta
   } deriving stock (Eq, Show)
+
+-- decodeSfont :: Monad m => DecodeT m Sfont
+-- decodeSfont = do
+--   expectLabel labelRiff
+
+-- getSfontHeader :: Get ()
+-- getSfontHeader = do
+--   expectLabel labelRiff
+
+-- data SfontChunk =
+--     SfontChunkInfo !Info
+--   | SfontChunkSdta !Sdta
+--   | SfontChunkPdta !Pdta
+--   deriving stock (Eq, Show)
+
+-- getSfontChunk :: Get SfontChunk
+-- getSfontChunk = do
+
+labelSfbk :: ByteString
+labelSfbk = "sfbk"
+
+getSfontHeader :: Get Word32
+getSfontHeader = do
+  expectLabel labelRiff
+  chunkSize <- getWord32le
+  expectLabel labelSfbk
+  pure chunkSize
+
+decodeSfont :: DecodeM Sfont
+decodeSfont = do
+  chunkSize <- decodeGet getSfontHeader
+  decodeBounded (fromIntegral chunkSize) $ do
+    infos <- decodeInfos
+    sdta <- undefined
+    pdta <- undefined
+    pure $! Sfont infos sdta pdta
+
+getInfosHeader :: Get Word32
+getInfosHeader = do
+  undefined
+
+decodeInfos :: DecodeM (Seq Info)
+decodeInfos = undefined
 
 data Info =
     InfoVersion !Word16 !Word16
