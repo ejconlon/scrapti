@@ -31,8 +31,8 @@ drumHeader = WavHeader (drumFileSize - 28) drumFmt
 drumDataLen :: Int
 drumDataLen = 248886
 
-testHeader :: TestTree
-testHeader = testCase "header" $ do
+testWavHeader :: TestTree
+testWavHeader = testCase "header" $ do
   bs <- BSL.readFile "testdata/drums.wav"
   decodeIO bs $ do
     startOff <- gets decStateOffset
@@ -42,8 +42,8 @@ testHeader = testCase "header" $ do
     endOff <- gets decStateOffset
     liftIO (endOff @?= fromIntegral dataOffset)
 
-testData :: TestTree
-testData = testCase "data" $ do
+testWavData :: TestTree
+testWavData = testCase "data" $ do
   bs <- BSL.readFile "testdata/drums.wav"
   decodeIO bs $ do
     decodeGet (skip dataOffset)
@@ -54,8 +54,8 @@ testData = testCase "data" $ do
       WavChunkData (WavData vec) -> liftIO (VU.length vec @?= drumDataLen)
       _ -> fail "expected data"
 
-testWhole :: TestTree
-testWhole = testCase "whole" $ do
+testWavWhole :: TestTree
+testWavWhole = testCase "whole" $ do
   bs <- BSL.readFile "testdata/drums.wav"
   decodeIO bs $ do
     Sampled (Wav fmt mid (WavData vec) tra) <- decodeAnyWav
@@ -68,12 +68,18 @@ testWhole = testCase "whole" $ do
     endOff <- gets decStateOffset
     liftIO (endOff @?= drumEndOffset)
 
-testWrite :: TestTree
-testWrite = testCase "write" $ do
+testWavWrite :: TestTree
+testWavWrite = testCase "write" $ do
   bs <- BSL.readFile "testdata/drums.wav"
   swav <- decodeIO bs decodeAnyWav
   let bs' = encodeAnyWav swav
   bs' @?= bs
 
+testWav :: TestTree
+testWav = testGroup "wav" [testWavHeader, testWavData, testWavWhole, testWavWrite]
+
+testSfont :: TestTree
+testSfont = testGroup "sfont" []
+
 main :: IO ()
-main = defaultMain (testGroup "Scrapti" [testHeader, testData, testWhole, testWrite])
+main = defaultMain (testGroup "Scrapti" [testWav, testSfont])
