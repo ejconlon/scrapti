@@ -52,6 +52,7 @@ library
       LambdaCase
       KindSignatures
       MultiParamTypeClasses
+      MultiWayIf
       Rank2Types
       ScopedTypeVariables
       StandaloneDeriving
@@ -97,6 +98,7 @@ executable scrapti-exe
       LambdaCase
       KindSignatures
       MultiParamTypeClasses
+      MultiWayIf
       Rank2Types
       ScopedTypeVariables
       StandaloneDeriving
@@ -144,6 +146,7 @@ test-suite scrapti-test
       LambdaCase
       KindSignatures
       MultiParamTypeClasses
+      MultiWayIf
       Rank2Types
       ScopedTypeVariables
       StandaloneDeriving

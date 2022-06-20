@@ -1,5 +1,3 @@
-{-# LANGUAGE MultiWayIf #-}
-
 module Scrapti.Binary
   ( Get
   , Put

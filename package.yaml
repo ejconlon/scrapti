@@ -44,6 +44,7 @@ default-extensions:
 - LambdaCase
 - KindSignatures
 - MultiParamTypeClasses
+- MultiWayIf
 - Rank2Types
 - ScopedTypeVariables
 - StandaloneDeriving

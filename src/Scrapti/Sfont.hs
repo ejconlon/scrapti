@@ -2,13 +2,17 @@
 
 module Scrapti.Sfont where
 
+import Control.Monad (unless)
 import Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
 import Data.Int (Int16, Int8)
 import Data.Sequence (Seq)
 import Data.Text (Text)
+import qualified Data.Text.Encoding as TE
 import Data.Word (Word16, Word32)
-import Scrapti.Binary (DecodeM, DecodeT (..), Get, decodeBounded, decodeGet, getWord32le)
-import Scrapti.Riff (expectLabel, labelRiff)
+import Scrapti.Binary (ByteLength, DecodeM, Get, decodeBounded, decodeGet, decodeRepeated, getByteString,
+                       getWord16le, getWord32le)
+import Scrapti.Riff (expectLabel, getLabel, labelRiff)
 import Scrapti.Wav (WavData)
 
 data Sfont = Sfont
@@ -34,31 +38,94 @@ data Sfont = Sfont
 -- getSfontChunk :: Get SfontChunk
 -- getSfontChunk = do
 
-labelSfbk :: ByteString
+labelSfbk, labelList, labelInfo, labelIfil, labelIver, labelIsng, labelInam, labelIrom,
+  labelIcrd, labelIeng, labelIprd, labelIcop, labelIcmt, labelIsft :: ByteString
 labelSfbk = "sfbk"
+labelList = "LIST"
+labelInfo = "INFO"
+labelIfil = "ifil"
+labelIver = "iver"
+labelIsng = "isng"
+labelInam = "INAM"
+labelIrom = "irom"
+labelIcrd = "ICRD"
+labelIeng = "IENG"
+labelIprd = "IPRD"
+labelIcop = "ICOP"
+labelIcmt = "ICMT"
+labelIsft = "ISFT"
 
-getSfontHeader :: Get Word32
+getSfontHeader :: Get ByteLength
 getSfontHeader = do
   expectLabel labelRiff
   chunkSize <- getWord32le
   expectLabel labelSfbk
-  pure chunkSize
+  pure $! fromIntegral chunkSize
 
 decodeSfont :: DecodeM Sfont
 decodeSfont = do
   chunkSize <- decodeGet getSfontHeader
-  decodeBounded (fromIntegral chunkSize) $ do
+  decodeBounded chunkSize $ do
     infos <- decodeInfos
     sdta <- undefined
     pdta <- undefined
     pure $! Sfont infos sdta pdta
 
-getInfosHeader :: Get Word32
+getInfosHeader :: Get ByteLength
 getInfosHeader = do
-  undefined
+  expectLabel labelList
+  chunkSize <- getWord32le
+  expectLabel labelInfo
+  pure $! fromIntegral chunkSize
+
+getZstr :: Word32 -> Get Text
+getZstr len = do
+  bs <- getByteString (fromIntegral len)
+  let !nul = BS.last bs
+  unless (nul == 0) (fail "bad null byte")
+  pure $! TE.decodeLatin1 bs
+
+getInfo :: Get Info
+getInfo = do
+  label <- getLabel
+  chunkSize <- getWord32le
+  if
+    | label == labelIfil -> do
+      unless (chunkSize == 4) (fail "bad ifil chunk size")
+      w1 <- getWord16le
+      w2 <- getWord16le
+      pure $! InfoVersion w1 w2
+    | label == labelIver -> do
+      unless (chunkSize == 4) (fail "bad iver chunk size")
+      w1 <- getWord16le
+      w2 <- getWord16le
+      pure $! InfoRomVersion w1 w2
+    | label == labelIsng ->
+      InfoTargetSoundEngine <$> getZstr chunkSize
+    | label == labelInam -> do
+      InfoBankName <$> getZstr chunkSize
+    | label == labelIrom -> do
+      InfoRomName <$> getZstr chunkSize
+    | label == labelIcrd -> do
+      InfoCreationDate <$> getZstr chunkSize
+    | label == labelIeng -> do
+      InfoAuthors <$> getZstr chunkSize
+    | label == labelIprd -> do
+      InfoIntendedProduct <$> getZstr chunkSize
+    | label == labelIcop -> do
+      InfoCopyrightMessage <$> getZstr chunkSize
+    | label == labelIcmt -> do
+      InfoComments <$> getZstr chunkSize
+    | label == labelIsft -> do
+      InfoUsedTools <$> getZstr chunkSize
+    | otherwise -> do
+      bs <- getByteString (fromIntegral chunkSize)
+      pure $! InfoReserved label bs
 
 decodeInfos :: DecodeM (Seq Info)
-decodeInfos = undefined
+decodeInfos = do
+  chunkSize <- decodeGet getInfosHeader
+  decodeRepeated chunkSize (decodeGet getInfo)
 
 data Info =
     InfoVersion !Word16 !Word16
@@ -72,7 +139,7 @@ data Info =
   | InfoCopyrightMessage !Text
   | InfoComments !Text
   | InfoUsedTools !Text
-  | InfoReservedInfo !Text !Word16 !ByteString
+  | InfoReserved !ByteString !ByteString
   deriving stock (Eq, Show)
 
 data Sdta = Sdta
