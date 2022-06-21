@@ -8,7 +8,7 @@ import qualified Data.Sequence as Seq
 import qualified Data.Vector.Unboxed as VU
 import Scrapti.Binary (ByteLength, ByteOffset, DecodeState (..), Get, decode, decodeGet, skip)
 import Scrapti.Sample (Sampled (..), sampleGet)
-import Scrapti.Sfont (Sdta (sdtaHighBits, sdtaLowBits), decodeInfos, getSdta, getSfontHeader)
+import Scrapti.Sfont (Sdta (..), Sfont (..), decodeInfos, decodeSfont, getSdta, getSfontHeader)
 import Scrapti.Wav (Wav (..), WavChunk (..), WavData (..), WavFormat (..), WavHeader (..), decodeAnyWav, decodeWavChunk,
                     decodeWavHeader, encodeAnyWav)
 import Test.Tasty (TestTree, defaultMain, testGroup)
@@ -86,11 +86,20 @@ testSfontManual = testCase "manual" $ do
     remainingSize <- decodeGet getSfontHeader
     infos <- decodeInfos
     sdta <- decodeGet getSdta
+    -- TODO manually parse pdata header
     pure (remainingSize, infos, sdta)
   remainingSize @?= 2733222
   Seq.length infos @?= 5
   VU.length (unWavData (sdtaHighBits sdta)) @?= 1365026
   sdtaLowBits sdta @?= Nothing
+
+-- testSfontWhole :: TestTree
+-- testSfontWhole = testCase "whole" $ do
+--   bs <- BSL.readFile "testdata/timpani.sf2"
+--   Sfont infos sdta pdtaElems <- decode bs decodeSfont
+--   Seq.length infos @?= 5
+--   VU.length (unWavData (sdtaHighBits sdta)) @?= 1365026
+--   sdtaLowBits sdta @?= Nothing
 
 testSfont :: TestTree
 testSfont = testGroup "sfont" [testSfontManual]

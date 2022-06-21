@@ -12,7 +12,9 @@ module Scrapti.Binary
   , decodeGet
   , guardEnd
   , decodeBounded
+  , decodeFolded
   , decodeRepeated
+  , decodeMonoid
   , runPut
   , getExpect
   , getWord8
@@ -24,6 +26,7 @@ module Scrapti.Binary
   , getInt64le
   , getByteString
   , getVec
+  , getSeq
   , skip
   , putWord8
   , putWord16le
@@ -34,6 +37,7 @@ module Scrapti.Binary
   , putInt64le
   , putByteString
   , putVec
+  , putSeq
   ) where
 
 import Control.Monad (unless)
@@ -47,8 +51,10 @@ import Data.Binary.Get (ByteOffset, Get, getByteString, getInt16le, getInt32le, 
 import Data.Binary.Put (Put, putByteString, putInt16le, putInt32le, putInt64le, putInt8, putWord16le, putWord32le,
                         putWord8, runPut)
 import qualified Data.ByteString.Lazy as BSL
+import Data.Foldable (foldMap')
 import Data.Int (Int64)
 import Data.Sequence (Seq (..))
+import qualified Data.Sequence as Seq
 import qualified Data.Vector.Unboxed as VU
 
 type ByteLength = Int64
@@ -96,22 +102,28 @@ decodeBounded len dec = do
     | off' == end -> pure elt
     | otherwise -> fail ("consumed too little input: " ++ show (end - off'))
 
-decodeRepeated :: Monad m => ByteLength -> DecodeT m a -> DecodeT m (Seq a)
-decodeRepeated len dec = do
+decodeFolded :: Monad m => ByteLength -> b -> (b -> DecodeT m b) -> DecodeT m b
+decodeFolded len acc fdec = do
   off <- gets decStateOffset
   let !end = off + len
-  decodeUntil end dec
+  decodeFoldedUntil end acc fdec
 
-decodeUntil :: Monad m => ByteOffset -> DecodeT m a -> DecodeT m (Seq a)
-decodeUntil end dec = go Empty where
+decodeFoldedUntil :: Monad m => ByteOffset -> b -> (b -> DecodeT m b) -> DecodeT m b
+decodeFoldedUntil end acc0 fdec = go acc0 where
   go !acc = do
     off' <- gets decStateOffset
     if
       | off' > end -> fail ("consumed too much input: " ++ show (off' - end))
       | off' == end -> pure acc
       | otherwise -> do
-        elt <- dec
-        go (acc :|> elt)
+        acc' <- fdec acc
+        go acc'
+
+decodeRepeated :: Monad m => ByteLength -> DecodeT m a -> DecodeT m (Seq a)
+decodeRepeated len dec = decodeFolded len Empty (\acc -> fmap (acc :|>) dec)
+
+decodeMonoid :: (Monad m, Monoid a) => ByteOffset -> DecodeT m a -> DecodeT m a
+decodeMonoid len dec = decodeFolded len mempty (\acc -> fmap (acc <>) dec)
 
 decodeGet :: Monad m => Get a -> DecodeT m a
 decodeGet getter = do
@@ -136,8 +148,14 @@ getExpect typ getter expec = do
 getVec :: VU.Unbox a => Int -> Get a -> Get (VU.Vector a)
 getVec len getter = VU.generateM len (const getter)
 
+getSeq :: Int -> Get a -> Get (Seq a)
+getSeq = Seq.replicateA
+
 -- putInt24le :: Int24 -> Put ()
 -- putInt24le = undefined
 
 putVec :: VU.Unbox a => (a -> Put) -> VU.Vector a -> Put
 putVec = VU.foldMap'
+
+putSeq :: (a -> Put) -> Seq a -> Put
+putSeq = foldMap'
