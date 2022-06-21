@@ -8,7 +8,7 @@ import qualified Data.Sequence as Seq
 import qualified Data.Vector.Unboxed as VU
 import Scrapti.Binary (ByteLength, ByteOffset, DecodeState (..), Get, decode, decodeGet, skip)
 import Scrapti.Sample (Sampled (..), sampleGet)
-import Scrapti.Sfont (Sdta (..), Sfont (..), decodeSfont)
+import Scrapti.Sfont (Sdta (..), Sfont (..), decodeSfont, encodeSfont)
 import Scrapti.Wav (Wav (..), WavChunk (..), WavData (..), WavFormat (..), WavHeader (..), decodeAnyWav, decodeWavChunk,
                     decodeWavHeader, encodeAnyWav)
 import Test.Tasty (TestTree, defaultMain, testGroup)
@@ -82,14 +82,21 @@ testWav = testGroup "wav" [testWavHeader, testWavData, testWavWhole, testWavWrit
 testSfontWhole :: TestTree
 testSfontWhole = testCase "whole" $ do
   bs <- BSL.readFile "testdata/timpani.sf2"
-  Sfont infos sdta pdtaElems <- decode bs decodeSfont
+  Sfont infos sdta pdtaBlocks <- decode bs decodeSfont
   Seq.length infos @?= 5
   VU.length (unWavData (sdtaHighBits sdta)) @?= 1365026
   sdtaLowBits sdta @?= Nothing
-  Seq.length pdtaElems @?= 503
+  Seq.length pdtaBlocks @?= 9
+
+testSfontWrite :: TestTree
+testSfontWrite = testCase "write" $ do
+  bs <- BSL.readFile "testdata/timpani.sf2"
+  sfont <- decode bs decodeSfont
+  let bs' = encodeSfont sfont
+  bs' @?= bs
 
 testSfont :: TestTree
-testSfont = testGroup "sfont" [testSfontWhole]
+testSfont = testGroup "sfont" [testSfontWhole, testSfontWrite]
 
 main :: IO ()
 main = defaultMain (testGroup "Scrapti" [testWav, testSfont])

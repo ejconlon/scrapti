@@ -51,7 +51,7 @@ import Data.Binary.Get (ByteOffset, Get, getByteString, getInt16le, getInt32le, 
 import Data.Binary.Put (Put, putByteString, putInt16le, putInt32le, putInt64le, putInt8, putWord16le, putWord32le,
                         putWord8, runPut)
 import qualified Data.ByteString.Lazy as BSL
-import Data.Foldable (foldMap')
+import Data.Foldable (foldMap', traverse_)
 import Data.Int (Int64)
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
@@ -155,7 +155,7 @@ getSeq = Seq.replicateA
 -- putInt24le = undefined
 
 putVec :: VU.Unbox a => (a -> Put) -> VU.Vector a -> Put
-putVec = VU.foldMap'
+putVec = VU.mapM_
 
 putSeq :: (a -> Put) -> Seq a -> Put
-putSeq = foldMap'
+putSeq = traverse_

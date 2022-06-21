@@ -7,6 +7,7 @@ module Scrapti.Wav
   , WavUnparsed (..)
   , WavChunk (..)
   , Wav (..)
+  , wavDataSamples
   , decodeWavHeader
   , decodeWavChunk
   , decodeWavTrailers
@@ -21,15 +22,15 @@ import Control.Monad.State.Strict (gets)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
-import Data.Foldable (for_)
+import Data.Foldable (foldMap', for_)
 import Data.Proxy (Proxy)
 import Data.Semigroup (Sum (..))
 import Data.Sequence (Seq (..))
 import qualified Data.Vector.Unboxed as VU
 import Data.Word (Word16, Word32)
-import Scrapti.Binary (ByteLength, DecodeState (decStateInput), DecodeT, Get, Put, decodeBounded, decodeGet,
-                       getByteString, getExpect, getVec, getWord16le, getWord32le, guardEnd, putByteString, putVec,
-                       putWord16le, putWord32le, runPut, skip)
+import Scrapti.Binary (ByteLength, DecodeState (..), DecodeT, Get, Put, decodeBounded, decodeGet, getByteString,
+                       getExpect, getVec, getWord16le, getWord32le, guardEnd, putByteString, putVec, putWord16le,
+                       putWord32le, runPut, skip)
 import Scrapti.Riff (expectLabel, getLabel, labelRiff)
 import Scrapti.Sample (Sample (..), Sampled (..), getSampled)
 
@@ -69,6 +70,9 @@ data WavChunk a =
     WavChunkUnparsed !WavUnparsed
   | WavChunkData !(WavData a)
   deriving stock (Eq, Show)
+
+wavDataSamples :: VU.Unbox a => WavData a -> Int
+wavDataSamples = VU.length . unWavData
 
 decodeWavHeader :: Monad m => DecodeT m WavHeader
 decodeWavHeader = decodeGet getWavHeader
@@ -186,20 +190,8 @@ getWavBody bps getter = go Empty where
       WavChunkUnparsed unp -> go (unps :|> unp)
 
 putSpecificWav :: Sample a => Wav a -> Put
-putSpecificWav (Wav (WavFormat nchan sr bps) mid (WavData vec) tra) = res where
-  putFmt = do
-    putWord32le fmtChunkSize
-    putWord16le 1
-    putWord16le nchan
-    putWord32le sr
-    putWord32le bpsAvg
-    putWord16le bpsSlice
-    putWord16le bps
-  putUnp (WavUnparsed lab con)= do
-    putByteString lab
-    putWord32le (fromIntegral (BS.length con))
-    putByteString con
-  res = do
+putSpecificWav (Wav (WavFormat nchan sr bps) mid (WavData vec) tra) = result where
+  result = do
     putByteString labelRiff
     putWord32le fileSize
     putByteString labelWave
@@ -210,7 +202,19 @@ putSpecificWav (Wav (WavFormat nchan sr bps) mid (WavData vec) tra) = res where
     putWord32le dataChunkSize
     putVec samplePut vec
     for_ tra putUnp
-  unpSize unps = getSum (foldMap (\(WavUnparsed _ con) -> Sum (8 + fromIntegral (BS.length con))) unps)
+  putFmt = do
+    putWord32le fmtChunkSize
+    putWord16le 1
+    putWord16le nchan
+    putWord32le sr
+    putWord32le bpsAvg
+    putWord16le bpsSlice
+    putWord16le bps
+  putUnp (WavUnparsed lab con) = do
+    putByteString lab
+    putWord32le (fromIntegral (BS.length con))
+    putByteString con
+  unpSize unps = getSum (foldMap' (\(WavUnparsed _ con) -> Sum (8 + fromIntegral (BS.length con))) unps)
   midSize = unpSize mid
   traSize = unpSize tra
   framingSize = 20
