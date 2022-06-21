@@ -12,7 +12,7 @@ import Data.Text (Text)
 import qualified Data.Text.Encoding as TE
 import Data.Word (Word16, Word32, Word8)
 import Scrapti.Binary (ByteLength, DecodeT, Get, decodeBounded, decodeGet, decodeMonoid, decodeRepeated, getByteString,
-                       getInt16le, getInt8, getSeq, getVec, getWord16le, getWord32le, getWord8, skip)
+                       getInt16le, getInt8, getSeq, getVec, getWord16le, getWord32le, getWord8, guardEnd, skip)
 import Scrapti.Riff (expectLabel, getLabel, labelRiff)
 import Scrapti.Wav (WavData (..))
 
@@ -245,11 +245,13 @@ getSfontHeader = do
 decodeSfont :: Monad m => DecodeT m Sfont
 decodeSfont = do
   remainingSize <- decodeGet getSfontHeader
-  decodeBounded remainingSize $ do
+  sfont <- decodeBounded remainingSize $ do
     infos <- decodeInfos
     sdta <- decodeGet getSdta
     pdta <- decodePdta
     pure $! Sfont infos sdta pdta
+  guardEnd
+  pure sfont
 
 getInfosHeader :: Get ByteLength
 getInfosHeader = do
@@ -347,7 +349,7 @@ sizeShdr = 46
 getPdtaElemChunk :: ByteString -> ByteLength -> ByteLength -> Get PdtaElem -> Get (Seq PdtaElem)
 getPdtaElemChunk label chunkLen size getter = do
   unless (mod chunkLen size == 0) (fail ("invalid size for pdta elem: " ++ show label))
-  let !numElems = div chunkLen sizePhdr
+  let !numElems = div chunkLen size
   getSeq (fromIntegral numElems) getter
 
 getPhdr :: Get Phdr
@@ -526,7 +528,7 @@ getPdtaElem = do
     | label == labelIgen ->
       get sizeGen (fmap (PdtaElemGen PdataCatInst) getGen)
     | label == labelShdr ->
-      get sizeInst (fmap PdtaElemShdr getShdr)
+      get sizeShdr (fmap PdtaElemShdr getShdr)
     | otherwise ->
       fail ("unrecognized pdta elem: " ++ show label)
 
