@@ -1,6 +1,21 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Scrapti.Sfont where
+module Scrapti.Sfont
+  ( Sfont (..)
+  , Info (..)
+  , Sdta (..)
+  , PdtaCat (..)
+  , PdtaElem (..)
+  , Pdta (..)
+  , Phdr (..)
+  , Bag (..)
+  , Mod (..)
+  , Gen (..)
+  , Inst (..)
+  , Shdr (..)
+  , buildPdta
+  , decodeSfont
+  ) where
 
 import Control.Monad (unless)
 import Data.ByteString (ByteString)
@@ -76,25 +91,6 @@ data Pdta = Pdta
   , pdtaShdrs :: !(Seq Shdr)
   -- ^ Sample headers
   } deriving stock (Eq, Show)
-
-emptyPdta :: Pdta
-emptyPdta = Pdta Empty Empty Empty Empty Empty Empty Empty Empty Empty
-
-buildPdta :: Seq PdtaElem -> Pdta
-buildPdta = foldl' go emptyPdta where
-  go p = \case
-    PdtaElemPhdr phdr -> p { pdtaPhdrs = pdtaPhdrs p :|> phdr }
-    PdtaElemBag cat bag -> case cat of
-      PdataCatPreset -> p { pdtaPbags = pdtaPbags p :|> bag }
-      PdataCatInst -> p { pdtaIbags = pdtaIbags p :|> bag }
-    PdtaElemMod cat modd -> case cat of
-      PdataCatPreset -> p { pdtaPmods = pdtaPmods p :|> modd }
-      PdataCatInst -> p { pdtaImods = pdtaImods p :|> modd }
-    PdtaElemGen cat gen -> case cat of
-      PdataCatPreset -> p { pdtaPgens = pdtaPgens p :|> gen }
-      PdataCatInst -> p { pdtaIgens = pdtaIgens p :|> gen }
-    PdtaElemInst inst -> p { pdtaInsts = pdtaInsts p :|> inst }
-    PdtaElemShdr shdr -> p { pdtaShdrs = pdtaShdrs p :|> shdr }
 
 -- | Preset header
 data Phdr = Phdr
@@ -203,6 +199,25 @@ data Shdr = Shdr
   , shdrSampleLink :: !Word16
   , shdrSampleType :: !Word16
   } deriving stock (Eq, Show)
+
+emptyPdta :: Pdta
+emptyPdta = Pdta Empty Empty Empty Empty Empty Empty Empty Empty Empty
+
+buildPdta :: Seq PdtaElem -> Pdta
+buildPdta = foldl' go emptyPdta where
+  go p = \case
+    PdtaElemPhdr phdr -> p { pdtaPhdrs = pdtaPhdrs p :|> phdr }
+    PdtaElemBag cat bag -> case cat of
+      PdataCatPreset -> p { pdtaPbags = pdtaPbags p :|> bag }
+      PdataCatInst -> p { pdtaIbags = pdtaIbags p :|> bag }
+    PdtaElemMod cat modd -> case cat of
+      PdataCatPreset -> p { pdtaPmods = pdtaPmods p :|> modd }
+      PdataCatInst -> p { pdtaImods = pdtaImods p :|> modd }
+    PdtaElemGen cat gen -> case cat of
+      PdataCatPreset -> p { pdtaPgens = pdtaPgens p :|> gen }
+      PdataCatInst -> p { pdtaIgens = pdtaIgens p :|> gen }
+    PdtaElemInst inst -> p { pdtaInsts = pdtaInsts p :|> inst }
+    PdtaElemShdr shdr -> p { pdtaShdrs = pdtaShdrs p :|> shdr }
 
 labelSfbk, labelList, labelInfo, labelIfil, labelIver, labelIsng, labelInam, labelIrom, labelIcrd,
   labelIeng, labelIprd, labelIcop, labelIcmt, labelIsft, labelSdta, labelSmpl, labelSm24,
