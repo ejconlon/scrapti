@@ -70,8 +70,6 @@ library
     , data-default
     , mtl
     , resourcet
-    , sdl2
-    , sdl2-mixer
     , text
     , transformers
     , vector
@@ -118,8 +116,6 @@ executable scrapti-exe
     , mtl
     , resourcet
     , scrapti
-    , sdl2
-    , sdl2-mixer
     , text
     , transformers
     , vector
@@ -167,8 +163,6 @@ test-suite scrapti-test
     , mtl
     , resourcet
     , scrapti
-    , sdl2
-    , sdl2-mixer
     , tasty
     , tasty-hunit
     , text

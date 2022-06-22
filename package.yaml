@@ -18,15 +18,15 @@ dependencies:
 - binary
 - bytestring
 - data-default
-- sdl2
 - resourcet
-- sdl2-mixer
 - vector
 - mtl
 - transformers
 - containers
 - text
 # - yaml
+# - sdl2
+# - sdl2-mixer
 
 default-extensions:
 - BangPatterns

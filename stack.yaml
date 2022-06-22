@@ -6,5 +6,5 @@ ghc-options:
 packages:
 - .
 
-extra-deps:
-- sdl2-mixer-1.2.0.0
+# extra-deps:
+# - sdl2-mixer-1.2.0.0
