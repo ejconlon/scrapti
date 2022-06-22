@@ -73,6 +73,9 @@ data Preamble = Preamble
   , preWavetablePosition :: !Word16
   } deriving stock (Eq, Show)
 
+instance Default Preamble where
+  def = Preamble False "" 0 def 0 def 0 1 65534 65535 0
+
 data AutoEnvelope = AutoEnvelope
   { aeAmount :: Float
   , aeAttack :: !Word16
@@ -80,6 +83,9 @@ data AutoEnvelope = AutoEnvelope
   , aeSustain :: !Float
   , aeRelease :: !Word16
   } deriving stock (Eq, Show)
+
+instance Default AutoEnvelope where
+  def = AutoEnvelope 1.0 0 0 1.0 1000
 
 data AutoType =
     ATOff
@@ -106,6 +112,9 @@ data Auto = Auto
   { autoEnvelope :: !AutoEnvelope
   , autoType :: !AutoType
   } deriving stock (Eq, Show)
+
+instance Default Auto where
+  def = Auto def def
 
 data LfoType =
     LTRevSaw
@@ -152,11 +161,14 @@ data LfoSteps =
 instance Default LfoSteps where
   def = LS24
 
-data LFO = LFO
+data Lfo = Lfo
   { lfoType :: !LfoType
   , lfoSteps :: !LfoSteps
   , lfoAmount :: !Float
   } deriving stock (Eq, Show)
+
+instance Default Lfo where
+  def = Lfo def def 0.5
 
 data FilterType =
     FTDisabled
@@ -188,6 +200,9 @@ data Filter = Filter
   , filtType :: !FilterType
   } deriving stock (Eq, Show)
 
+instance Default Filter where
+  def = Filter 1.0 0.0 def
+
 data InstParams = InstParams
   { ipTune :: !Int8
   , ipFineTune :: !Int8
@@ -196,11 +211,21 @@ data InstParams = InstParams
   , ipDelaySend :: !Word8
   } deriving stock (Eq, Show)
 
+instance Default InstParams where
+  def = InstParams 0 0 50 50 0
+
+numSlices :: Int
+numSlices = 48
+
 data Slices = Slices
   { slicesAdjust :: !(VU.Vector Word16)
+  -- ^ Must be 48 elements long
   , slicesNumber :: !Word8
   , slicesActive :: !Word8
   } deriving stock (Eq, Show)
+
+instance Default Slices where
+  def = Slices (VU.replicate numSlices 0) 0 0
 
 data GranularShape =
     GSSquare
@@ -231,11 +256,17 @@ data Granular = Granular
   , granLoopMode :: !GranularLoopMode
   } deriving stock (Eq, Show)
 
+instance Default Granular where
+  def = Granular 441 0 def def
+
 data Effects = Effects
   { effReverbSend :: !Word8
   , effOverdrive :: !Word8
   , effBitDepth :: !Word8
   } deriving stock (Eq, Show)
+
+instance Default Effects where
+  def = Effects 0 0 16
 
 data Header = Header
   { headPreamble :: !Preamble
@@ -245,16 +276,19 @@ data Header = Header
   , headWavetablePositionAuto :: !Auto
   , headGranularPositionAuto :: !Auto
   , headFinetuneAuto :: !Auto
-  , headVolumeLFO :: !LFO
-  , headPanningLFO :: !LFO
-  , headCutoffLFO :: !LFO
-  , headWavetablePositionLFO :: !LFO
-  , headGranularPositionLFO :: !LFO
-  , headFinetuneLFO :: !LFO
+  , headVolumeLfo :: !Lfo
+  , headPanningLfo :: !Lfo
+  , headCutoffLfo :: !Lfo
+  , headWavetablePositionLfo :: !Lfo
+  , headGranularPositionLfo :: !Lfo
+  , headFinetuneLfo :: !Lfo
   , headFilter :: !Filter
   , headInstParams :: !InstParams
   , headSlices :: !Slices
   } deriving stock (Eq, Show)
+
+instance Default Header where
+  def = Header def def def def def def def def def def def def def def def def
 
 data Aux = Aux
   { auxMajVer :: !Word8
@@ -268,6 +302,9 @@ data Pti = Pti
   { ptiHeader :: !Header
   , ptiWav :: !(Wav Int16)
   } deriving stock (Eq, Show)
+
+instance Default Pti where
+  def = Pti def def
 
 decodeAuxHeader :: Monad m => DecodeT m (WithAux Header)
 decodeAuxHeader = decodeGet getAuxHeader

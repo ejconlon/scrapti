@@ -22,6 +22,7 @@ import Control.Monad.State.Strict (gets)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
+import Data.Default (Default (..))
 import Data.Foldable (foldMap', for_)
 import Data.Proxy (Proxy)
 import Data.Semigroup (Sum (..))
@@ -40,9 +41,15 @@ data WavFormat = WavFormat
   , wfBitsPerSample :: !Word16
   } deriving stock (Eq, Show)
 
+instance Default WavFormat where
+  def = WavFormat 2 44100 16
+
 newtype WavData a = WavData { unWavData :: VU.Vector a }
   deriving stock (Show)
   deriving newtype (Eq)
+
+instance VU.Unbox a => Default (WavData a) where
+  def = WavData VU.empty
 
 data WavHeader = WavHeader
   { wavHeaderRemainingSize :: !ByteLength
@@ -65,6 +72,9 @@ data Wav a = Wav
   , wavData :: !(WavData a)
   , wavTrailer :: !(Seq WavUnparsed)
   } deriving stock (Eq, Show)
+
+instance VU.Unbox a => Default (Wav a) where
+  def = Wav def Empty def Empty
 
 data WavChunk a =
     WavChunkUnparsed !WavUnparsed
