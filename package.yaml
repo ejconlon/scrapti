@@ -24,6 +24,7 @@ dependencies:
 - transformers
 - containers
 - text
+- primitive
 # - yaml
 # - sdl2
 # - sdl2-mixer

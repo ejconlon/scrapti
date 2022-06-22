@@ -11,8 +11,8 @@ import Data.Proxy (Proxy (..))
 import Data.Text (Text)
 import qualified Data.Vector.Unboxed as VU
 import Data.Word (Word16, Word32, Word8)
-import Scrapti.Binary (Binary (..), DecodeT, Get, decodeGet, getBoolByte, getByteString, getFixedString, getFloatle,
-                       getWord16le, getWord32le, getWord8, putBoolByte, putByteString, putFixedString, putFloatle,
+import Scrapti.Binary (Binary (..), BoolByte (..), DecodeT, Get, decodeGet, getByteString, getFixedString, getFloatle,
+                       getWord16le, getWord32le, getWord8, putByteString, putFixedString, putFloatle,
                        putWord16le, putWord32le, putWord8)
 import Scrapti.Classes (BinaryRep (..), ViaBinaryRep (..), ViaBoundedEnum (..))
 import Scrapti.Wav (Wav, decodeSpecificWav)
@@ -73,7 +73,7 @@ instance Default SamplePlayback where
   def = SPOneShot
 
 data Preamble = Preamble
-  { preIsWavetable :: !Bool
+  { preIsWavetable :: !BoolByte
   , preName :: !Text
   , preSampleLength :: !Word32
   , preWavetableWindowSize :: !WavetableWindowSize
@@ -87,7 +87,7 @@ data Preamble = Preamble
   } deriving stock (Eq, Show)
 
 instance Default Preamble where
-  def = Preamble False "" 0 def 0 def 0 1 65534 65535 0
+  def = Preamble (BoolByte False) "" 0 def 0 def 0 1 65534 65535 0
 
 data AuxPreamble = AuxPreamble
   { auxPre0To19 :: !ByteString
@@ -111,7 +111,7 @@ instance Binary PairPreamble where
     -- 0-19
     auxPre0To19 <- getByteString 20
     -- 20
-    preIsWavetable <- getBoolByte
+    preIsWavetable <- get @BoolByte
     -- 21-51
     preName <- getFixedString 30
     -- 52-59
@@ -152,7 +152,7 @@ instance Binary PairPreamble where
     -- 0-19
     putByteString auxPre0To19
     -- 20
-    putBoolByte preIsWavetable
+    put preIsWavetable
     -- 21-51
     putFixedString 30 preName
     -- 52-59

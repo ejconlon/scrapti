@@ -1,3 +1,5 @@
+{-# LANGUAGE UnboxedTuples #-}
+
 module Scrapti.Binary
   ( Binary (..)
   , Get
@@ -17,6 +19,12 @@ module Scrapti.Binary
   , decodeRepeated
   , decodeMonoid
   , runPut
+  , BoolByte (..)
+  , FloatLE (..)
+  , Word16LE (..)
+  , Int16LE (..)
+  , Word32LE (..)
+  , Int32LE (..)
   , getExpect
   , getFloatle
   , getWord8
@@ -30,7 +38,6 @@ module Scrapti.Binary
   , getVec
   , getSeq
   , getFixedString
-  , getBoolByte
   , skip
   , putFloatle
   , putWord8
@@ -44,7 +51,6 @@ module Scrapti.Binary
   , putVec
   , putSeq
   , putFixedString
-  , putBoolByte
   ) where
 
 import Control.Monad (unless)
@@ -63,13 +69,15 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC
 import qualified Data.ByteString.Lazy as BSL
 import Data.Foldable (traverse_)
-import Data.Int (Int64)
+import Data.Int (Int64, Int16, Int32)
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.Vector.Unboxed as VU
+import Data.Word (Word16, Word32)
+import Data.Primitive (Prim)
 
 type ByteLength = Int64
 
@@ -185,8 +193,68 @@ putFixedString len t =
       !bs1 = if len0 < intLen then bs0 <> BS.replicate (intLen - len0) 0 else bs0
   in putByteString bs1
 
-getBoolByte :: Get Bool
-getBoolByte = fmap (== 0) getWord8
+newtype BoolByte = BoolByte { unBoolByte :: Bool }
+  deriving stock (Show)
+  deriving newtype (Eq)
 
-putBoolByte :: Bool -> Put
-putBoolByte b = putWord8 (if b then 1 else 0)
+instance Binary BoolByte where
+  get = fmap (BoolByte . (== 0)) getWord8
+  put (BoolByte b) = putWord8 (if b then 1 else 0)
+
+newtype FloatLE = FloatLE { unFloatLE :: Float }
+  deriving stock (Show)
+  deriving newtype (Eq, Ord, Num, Prim)
+
+instance Binary FloatLE where
+  get = fmap FloatLE getFloatle
+  put = putFloatle . unFloatLE
+
+newtype Word16LE = Word16LE { unWord16LE :: Word16 }
+  deriving stock (Show)
+  deriving newtype (Eq, Ord, Num, Prim)
+
+instance Binary Word16LE where
+  get = fmap Word16LE getWord16le
+  put = putWord16le . unWord16LE
+
+newtype Int16LE = Int16LE { unInt16LE :: Int16 }
+  deriving stock (Show)
+  deriving newtype (Eq, Ord, Num, Prim)
+
+instance Binary Int16LE where
+  get = fmap Int16LE getInt16le
+  put = putInt16le . unInt16LE
+
+newtype Word32LE = Word32LE { unWord32LE :: Word32 }
+  deriving stock (Show)
+  deriving newtype (Eq, Ord, Num, Prim)
+
+instance Binary Word32LE where
+  get = fmap Word32LE getWord32le
+  put = putWord32le . unWord32LE
+
+newtype Int32LE = Int32LE { unInt32LE :: Int32 }
+  deriving stock (Show)
+  deriving newtype (Eq, Ord, Num, Prim)
+
+instance Binary Int32LE where
+  get = fmap Int32LE getInt32le
+  put = putInt32le . unInt32LE
+
+-- newtype instance VU.Vector Int32LE = VecInt32LE (VU.Vector Int32)
+-- newtype instance VU.MVector s Int32LE = MVecInt32LE (VU.MVector s Int32)
+
+-- deriving newtype instance VU.Unbox Int32LE
+-- deriving newtype instance VG.Vector VU.Vector Int32LE
+-- deriving newtype instance VGM.MVector VU.MVector Int32LE
+
+-- newtype VecInt32LE = VecInt32LE { unVecInt32LE :: VU.Vector Int32LE }
+-- newtype MVecInt32LE s = MVecInt32LE { unMVecInt32LE :: VU.MVector s Int32LE }
+
+-- deriving newtype instance VU.Unbox Int32LE
+-- deriving newtype instance VGM.MVector VU.MVector Int32LE
+-- deriving newtype instance VG.Vector VecInt32LE Int32LE
+
+-- deriving newtype instance VU.Unbox Int32
+-- deriving anyclass instance VB.Vector VU.Vector Int32LE
+-- deriving anyclass instance VU.Unbox Int32LE

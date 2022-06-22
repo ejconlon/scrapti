@@ -69,6 +69,7 @@ library
     , containers
     , data-default
     , mtl
+    , primitive
     , resourcet
     , text
     , transformers
@@ -114,6 +115,7 @@ executable scrapti-exe
     , containers
     , data-default
     , mtl
+    , primitive
     , resourcet
     , scrapti
     , text
@@ -161,6 +163,7 @@ test-suite scrapti-test
     , containers
     , data-default
     , mtl
+    , primitive
     , resourcet
     , scrapti
     , tasty
