@@ -1,17 +1,29 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Scrapti.Pti where
 
-import Data.Binary (Binary (..))
 import Data.Default (Default (..))
 import Data.Int (Int16, Int8)
 import Data.Proxy (Proxy (..))
 import Data.Text (Text)
 import qualified Data.Vector.Unboxed as VU
 import Data.Word (Word16, Word32, Word8)
-import Scrapti.Binary (DecodeT, Get, decodeGet)
+import Scrapti.Binary (Binary (..), Get, getByteString, getWord8, getWord32le, getWord16le, DecodeT, decodeGet, putByteString, putWord16le, putWord8, putWord32le)
 import Scrapti.Classes (BinaryRep (..), ViaBinaryRep (..), ViaBoundedEnum (..))
 import Scrapti.Wav (Wav, decodeSpecificWav)
+import qualified Data.ByteString as BS
+import qualified Data.Text.Encoding as TE
+import Data.ByteString (ByteString)
+
+-- | Just a strict tuple
+data Pair a b = Pair
+  { pairFirst :: !a
+  , pairSecond :: !b
+  } deriving stock (Eq, Show, Functor, Foldable, Traversable)
+
+instance (Default a, Default b) => Default (Pair a b) where
+  def = Pair def def
 
 data WavetableWindowSize =
     WWS32
@@ -75,6 +87,106 @@ data Preamble = Preamble
 
 instance Default Preamble where
   def = Preamble False "" 0 def 0 def 0 1 65534 65535 0
+
+data AuxPreamble = AuxPreamble
+  { auxPre0To19 :: !ByteString
+  , auxPre52To59 :: !ByteString
+  , auxPre66To67 :: !Word16
+  , auxPre70To75 :: !ByteString
+  , auxPre77 :: !Word8
+  , auxPre86To87 :: !Word16
+  , auxPre90To91 :: !Word16
+  } deriving stock (Eq, Show)
+
+instance Default AuxPreamble where
+  def = AuxPreamble (BS.replicate 20 0) (BS.replicate 8 0) def (BS.replicate 6 0) def def def
+
+newtype PairPreamble = PairPreamble { unPairPreamble :: Pair AuxPreamble Preamble }
+  deriving newtype (Default, Show)
+  deriving stock (Eq)
+
+instance Binary PairPreamble where
+  get = do
+    -- 0-19
+    auxPre0To19 <- getByteString 20
+    -- 20
+    isWavetableWord <- getWord8
+    let !preIsWavetable = isWavetableWord == 0
+    -- 21-51
+    rawName <- getByteString 30
+    let !preName = TE.decodeLatin1 (BS.takeWhile (/= 0) rawName)
+    -- 52-59
+    auxPre52To59 <- getByteString 8
+    -- 60-63
+    preSampleLength <- getWord32le
+    -- 64-65
+    preWavetableWindowSize <- get @WavetableWindowSize
+    -- 66-67
+    auxPre66To67 <- getWord16le
+    -- 68-69
+    preWavetableTotalPositions <- getWord16le
+    -- 70-75
+    auxPre70To75 <- getByteString 6
+    -- 76
+    preSamplePlayback <- get @SamplePlayback
+    -- 77
+    auxPre77 <- getWord8
+    -- 78-79
+    prePlaybackStart <- getWord16le
+    -- 80-81
+    preLoopStart <- getWord16le
+    -- 82-83
+    preLoopEnd <- getWord16le
+    -- 84-85
+    prePlaybackEnd <- getWord16le
+    -- 86-87
+    auxPre86To87 <- getWord16le
+    -- 88-89
+    preWavetablePosition <- getWord16le
+    -- 90-91
+    auxPre90To91 <- getWord16le
+    let !auxPre = AuxPreamble {..}
+        !pre = Preamble {..}
+        !pair = Pair auxPre pre
+    pure $! PairPreamble pair
+  put (PairPreamble (Pair auxPre pre)) = do
+    -- -- 0-19
+    -- putByteString (auxPre0To19 auxPre)
+    -- -- 20
+    -- putWord8 _
+    -- -- 21-51
+    -- putByteString _
+    -- -- 52-59
+    -- putByteString _
+    -- -- 60-63
+    -- putWord32le _
+    -- -- 64-65
+    -- put _
+    -- -- 66-67
+    -- putWord16le _
+    -- -- 68-69
+    -- putWord16le _
+    -- -- 70-75
+    -- putByteString _
+    -- -- 76
+    -- put _
+    -- -- 77
+    -- putWord8 _
+    -- -- 78-79
+    -- putWord16le _
+    -- -- 80-81
+    -- putWord16le _
+    -- -- 82-83
+    -- putWord16le _
+    -- -- 84-85
+    -- putWord16le _
+    -- -- 86-87
+    -- putWord16le _
+    -- -- 88-89
+    -- putWord16le _
+    -- -- 90-91
+    -- putWord16le _
+    pure () -- TODO
 
 data AutoEnvelope = AutoEnvelope
   { aeAmount :: Float
@@ -290,13 +402,9 @@ data Header = Header
 instance Default Header where
   def = Header def def def def def def def def def def def def def def def def
 
-data Aux = Aux
-  { auxMajVer :: !Word8
-  , auxMinVer :: !Word8
+data AuxHeader = AuxHeader
+  {
   } deriving stock (Eq, Show)
-
-data WithAux a = WithAux !Aux !a
-  deriving stock (Eq, Show, Functor, Foldable, Traversable)
 
 data Pti = Pti
   { ptiHeader :: !Header
@@ -306,25 +414,12 @@ data Pti = Pti
 instance Default Pti where
   def = Pti def def
 
-decodeAuxHeader :: Monad m => DecodeT m (WithAux Header)
-decodeAuxHeader = decodeGet getAuxHeader
 
-getAuxHeader :: Get (WithAux Header)
-getAuxHeader = do
-  undefined
-  -- getExpect "0-1: header" (getByteString 2) "PT"
-  -- getExpect "2: ?" getWord8 1
-  -- getExpect "3: ?" getWord8 0
-  -- majVer <- getWord8
-  -- minVer <- getWord8
-  -- -- getExpect "6: ?" getWord8 0
-  -- -- getExpect "7: ?" getWord8 1
-  -- pure $! PtiHeader
-  --   majVer
-  --   minVer
+getPairHeader :: Get (Pair AuxHeader Header)
+getPairHeader = undefined
 
-decodeAuxPti :: Monad m => DecodeT m (WithAux Pti)
-decodeAuxPti = do
-  WithAux aux hd <- decodeAuxHeader
+decodePairPti :: Monad m => DecodeT m (Pair AuxHeader Pti)
+decodePairPti = do
+  Pair auxHd hd <- decodeGet getPairHeader
   wav <- decodeSpecificWav Proxy
-  pure $! WithAux aux (Pti hd wav)
+  pure $! Pair auxHd (Pti hd wav)

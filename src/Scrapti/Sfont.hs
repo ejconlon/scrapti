@@ -34,7 +34,7 @@ import qualified Data.Text.Encoding as TE
 import Data.Word (Word16, Word32, Word8)
 import Scrapti.Binary (ByteLength, DecodeT, Get, Put, decodeBounded, decodeGet, decodeRepeated, getByteString,
                        getInt16le, getInt8, getSeq, getVec, getWord16le, getWord32le, getWord8, guardEnd, putByteString,
-                       putInt16le, putInt8, putSeq, putVec, putWord16le, putWord32le, putWord8, runPut, skip)
+                       putInt16le, putInt8, putSeq, putVec, putWord16le, putWord32le, putWord8, runPut, skip, getFixedString, putFixedString)
 import Scrapti.Riff (expectLabel, getLabel, labelRiff)
 import Scrapti.Wav (WavData (..), wavDataSamples)
 
@@ -385,14 +385,10 @@ getPdtaElems label chunkLen size getter = do
   getSeq (fromIntegral numElems) getter
 
 getShortString :: Get Text
-getShortString = fmap (TE.decodeLatin1 . BS.takeWhile (/= 0)) (getByteString 20)
+getShortString = getFixedString 20
 
 putShortString :: Text -> Put
-putShortString t =
-  let !bs0 = BSC.pack (take 20 (T.unpack t))
-      !len0 = BS.length bs0
-      !bs1 = if len0 < 20 then bs0 <> BS.replicate (20 - len0) 0 else bs0
-  in putByteString bs1
+putShortString = putFixedString 20
 
 getPhdr :: Get Phdr
 getPhdr = do

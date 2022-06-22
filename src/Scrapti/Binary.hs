@@ -1,5 +1,6 @@
 module Scrapti.Binary
-  ( Get
+  ( Binary (..)
+  , Get
   , Put
   , ByteLength
   , ByteOffset
@@ -27,6 +28,7 @@ module Scrapti.Binary
   , getByteString
   , getVec
   , getSeq
+  , getFixedString
   , skip
   , putWord8
   , putWord16le
@@ -38,14 +40,17 @@ module Scrapti.Binary
   , putByteString
   , putVec
   , putSeq
+  , putFixedString
   ) where
 
 import Control.Monad (unless)
 import Control.Monad.Except (ExceptT, MonadError (..), runExceptT)
 import Control.Monad.Identity (Identity (..))
 import Control.Monad.IO.Class (MonadIO)
-import Control.Monad.State.Strict (MonadState (..), StateT (..), gets)
+import Control.Monad.State.Strict (MonadState, StateT (..), gets)
+import qualified Control.Monad.State.Strict as State
 import Control.Monad.Trans (MonadTrans (..))
+import Data.Binary (Binary (..))
 import Data.Binary.Get (ByteOffset, Get, getByteString, getInt16le, getInt32le, getInt64le, getInt8, getWord16le,
                         getWord32le, getWord8, runGetOrFail, skip)
 import Data.Binary.Put (Put, putByteString, putInt16le, putInt32le, putInt64le, putInt8, putWord16le, putWord32le,
@@ -56,6 +61,11 @@ import Data.Int (Int64)
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
 import qualified Data.Vector.Unboxed as VU
+import Data.Text (Text)
+import qualified Data.ByteString as BS
+import qualified Data.Text.Encoding as TE
+import qualified Data.ByteString.Char8 as BSC
+import qualified Data.Text as T
 
 type ByteLength = Int64
 
@@ -127,13 +137,13 @@ decodeMonoid len dec = decodeFolded len mempty (\acc -> fmap (acc <>) dec)
 
 decodeGet :: Monad m => Get a -> DecodeT m a
 decodeGet getter = do
-  DecodeState bs off <- get
+  DecodeState bs off <- State.get
   case runGetOrFail getter bs of
     Left (bs', off', reason) -> do
-      put (DecodeState bs' (off + off'))
+      State.put (DecodeState bs' (off + off'))
       fail reason
     Right (bs', off', value) -> do
-      put (DecodeState bs' (off + off'))
+      State.put (DecodeState bs' (off + off'))
       pure value
 
 getExpect :: (Eq a, Show a) => String -> Get a -> a -> Get ()
@@ -145,17 +155,28 @@ getExpect typ getter expec = do
 -- getInt24le :: Get Int24
 -- getInt24le = get
 
-getVec :: VU.Unbox a => Int -> Get a -> Get (VU.Vector a)
-getVec len getter = VU.generateM len (const getter)
-
-getSeq :: Int -> Get a -> Get (Seq a)
-getSeq = Seq.replicateA
-
 -- putInt24le :: Int24 -> Put ()
 -- putInt24le = undefined
+
+getVec :: VU.Unbox a => Int -> Get a -> Get (VU.Vector a)
+getVec len getter = VU.generateM len (const getter)
 
 putVec :: VU.Unbox a => (a -> Put) -> VU.Vector a -> Put
 putVec = VU.mapM_
 
+getSeq :: Int -> Get a -> Get (Seq a)
+getSeq = Seq.replicateA
+
 putSeq :: (a -> Put) -> Seq a -> Put
 putSeq = traverse_
+
+getFixedString :: ByteLength -> Get Text
+getFixedString len = fmap (TE.decodeLatin1 . BS.takeWhile (/= 0)) (getByteString (fromIntegral len))
+
+putFixedString :: ByteLength -> Text -> Put
+putFixedString len t =
+  let !intLen = fromIntegral len
+      !bs0 = BSC.pack (take intLen (T.unpack t))
+      !len0 = BS.length bs0
+      !bs1 = if len0 < intLen then bs0 <> BS.replicate (intLen - len0) 0 else bs0
+  in putByteString bs1
