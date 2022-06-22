@@ -8,7 +8,7 @@ module Scrapti.Binary
   , runDecodeT
   , DecodeM
   , runDecodeM
-  , decode
+  , decodeFail
   , decodeGet
   , guardEnd
   , decodeBounded
@@ -81,8 +81,8 @@ type DecodeM = DecodeT Identity
 runDecodeM :: DecodeM a -> DecodeState -> (Either String a, DecodeState)
 runDecodeM dm = runIdentity . runDecodeT dm
 
-decode :: MonadFail m => BSL.ByteString -> DecodeT m a -> m a
-decode bs act = do
+decodeFail :: MonadFail m => BSL.ByteString -> DecodeT m a -> m a
+decodeFail bs act = do
   (ea, _) <- runDecodeT act (DecodeState bs 0)
   either fail pure ea
 

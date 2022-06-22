@@ -6,7 +6,7 @@ import qualified Data.ByteString.Lazy as BSL
 import Data.Int (Int16)
 import qualified Data.Sequence as Seq
 import qualified Data.Vector.Unboxed as VU
-import Scrapti.Binary (ByteLength, ByteOffset, DecodeState (..), Get, decode, decodeGet, skip)
+import Scrapti.Binary (ByteLength, ByteOffset, DecodeState (..), Get, decodeFail, decodeGet, skip)
 import Scrapti.Sample (Sampled (..), sampleGet)
 import Scrapti.Sfont (Sdta (..), Sfont (..), decodeSfont, encodeSfont)
 import Scrapti.Wav (Wav (..), WavChunk (..), WavData (..), WavFormat (..), WavHeader (..), decodeAnyWav, decodeWavChunk,
@@ -35,7 +35,7 @@ drumDataLen = 248886
 testWavHeader :: TestTree
 testWavHeader = testCase "header" $ do
   bs <- BSL.readFile "testdata/drums.wav"
-  decode bs $ do
+  decodeFail bs $ do
     startOff <- gets decStateOffset
     liftIO (startOff @?= 0)
     header <- decodeWavHeader
@@ -46,7 +46,7 @@ testWavHeader = testCase "header" $ do
 testWavData :: TestTree
 testWavData = testCase "data" $ do
   bs <- BSL.readFile "testdata/drums.wav"
-  decode bs $ do
+  decodeFail bs $ do
     decodeGet (skip dataOffset)
     startOff <- gets decStateOffset
     liftIO (startOff @?= fromIntegral dataOffset)
@@ -58,7 +58,7 @@ testWavData = testCase "data" $ do
 testWavWhole :: TestTree
 testWavWhole = testCase "whole" $ do
   bs <- BSL.readFile "testdata/drums.wav"
-  decode bs $ do
+  decodeFail bs $ do
     Sampled (Wav fmt mid (WavData vec) tra) <- decodeAnyWav
     liftIO (fmt @?= drumFmt)
     liftIO (Seq.length mid @?= 0)
@@ -72,7 +72,7 @@ testWavWhole = testCase "whole" $ do
 testWavWrite :: TestTree
 testWavWrite = testCase "write" $ do
   bs <- BSL.readFile "testdata/drums.wav"
-  swav <- decode bs decodeAnyWav
+  swav <- decodeFail bs decodeAnyWav
   let bs' = encodeAnyWav swav
   bs' @?= bs
 
@@ -82,7 +82,7 @@ testWav = testGroup "wav" [testWavHeader, testWavData, testWavWhole, testWavWrit
 testSfontWhole :: TestTree
 testSfontWhole = testCase "whole" $ do
   bs <- BSL.readFile "testdata/timpani.sf2"
-  Sfont infos sdta pdtaBlocks <- decode bs decodeSfont
+  Sfont infos sdta pdtaBlocks <- decodeFail bs decodeSfont
   Seq.length infos @?= 5
   VU.length (unWavData (sdtaHighBits sdta)) @?= 1365026
   sdtaLowBits sdta @?= Nothing
@@ -91,7 +91,7 @@ testSfontWhole = testCase "whole" $ do
 testSfontWrite :: TestTree
 testSfontWrite = testCase "write" $ do
   bs <- BSL.readFile "testdata/timpani.sf2"
-  sfont <- decode bs decodeSfont
+  sfont <- decodeFail bs decodeSfont
   let bs' = encodeSfont sfont
   bs' @?= bs
 

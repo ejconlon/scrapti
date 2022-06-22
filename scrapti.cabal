@@ -26,6 +26,7 @@ library
   exposed-modules:
       Scrapti
       Scrapti.Binary
+      Scrapti.Classes
       Scrapti.Pti
       Scrapti.Riff
       Scrapti.Sample
@@ -66,6 +67,7 @@ library
     , binary
     , bytestring
     , containers
+    , data-default
     , mtl
     , resourcet
     , sdl2
@@ -112,6 +114,7 @@ executable scrapti-exe
     , binary
     , bytestring
     , containers
+    , data-default
     , mtl
     , resourcet
     , scrapti
@@ -160,6 +163,7 @@ test-suite scrapti-test
     , binary
     , bytestring
     , containers
+    , data-default
     , mtl
     , resourcet
     , scrapti
