@@ -18,6 +18,7 @@ module Scrapti.Binary
   , decodeMonoid
   , runPut
   , getExpect
+  , getFloatle
   , getWord8
   , getWord16le
   , getWord32le
@@ -29,7 +30,9 @@ module Scrapti.Binary
   , getVec
   , getSeq
   , getFixedString
+  , getBoolByte
   , skip
+  , putFloatle
   , putWord8
   , putWord16le
   , putWord32le
@@ -41,6 +44,7 @@ module Scrapti.Binary
   , putVec
   , putSeq
   , putFixedString
+  , putBoolByte
   ) where
 
 import Control.Monad (unless)
@@ -51,21 +55,21 @@ import Control.Monad.State.Strict (MonadState, StateT (..), gets)
 import qualified Control.Monad.State.Strict as State
 import Control.Monad.Trans (MonadTrans (..))
 import Data.Binary (Binary (..))
-import Data.Binary.Get (ByteOffset, Get, getByteString, getInt16le, getInt32le, getInt64le, getInt8, getWord16le,
-                        getWord32le, getWord8, runGetOrFail, skip)
-import Data.Binary.Put (Put, putByteString, putInt16le, putInt32le, putInt64le, putInt8, putWord16le, putWord32le,
-                        putWord8, runPut)
+import Data.Binary.Get (ByteOffset, Get, getByteString, getFloatle, getInt16le, getInt32le, getInt64le, getInt8,
+                        getWord16le, getWord32le, getWord8, runGetOrFail, skip)
+import Data.Binary.Put (Put, putByteString, putFloatle, putInt16le, putInt32le, putInt64le, putInt8, putWord16le,
+                        putWord32le, putWord8, runPut)
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Char8 as BSC
 import qualified Data.ByteString.Lazy as BSL
 import Data.Foldable (traverse_)
 import Data.Int (Int64)
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
-import qualified Data.Vector.Unboxed as VU
 import Data.Text (Text)
-import qualified Data.ByteString as BS
-import qualified Data.Text.Encoding as TE
-import qualified Data.ByteString.Char8 as BSC
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as TE
+import qualified Data.Vector.Unboxed as VU
 
 type ByteLength = Int64
 
@@ -180,3 +184,9 @@ putFixedString len t =
       !len0 = BS.length bs0
       !bs1 = if len0 < intLen then bs0 <> BS.replicate (intLen - len0) 0 else bs0
   in putByteString bs1
+
+getBoolByte :: Get Bool
+getBoolByte = fmap (== 0) getWord8
+
+putBoolByte :: Bool -> Put
+putBoolByte b = putWord8 (if b then 1 else 0)

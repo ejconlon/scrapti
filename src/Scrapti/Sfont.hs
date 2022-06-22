@@ -33,8 +33,9 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import Data.Word (Word16, Word32, Word8)
 import Scrapti.Binary (ByteLength, DecodeT, Get, Put, decodeBounded, decodeGet, decodeRepeated, getByteString,
-                       getInt16le, getInt8, getSeq, getVec, getWord16le, getWord32le, getWord8, guardEnd, putByteString,
-                       putInt16le, putInt8, putSeq, putVec, putWord16le, putWord32le, putWord8, runPut, skip, getFixedString, putFixedString)
+                       getFixedString, getInt16le, getInt8, getSeq, getVec, getWord16le, getWord32le, getWord8,
+                       guardEnd, putByteString, putFixedString, putInt16le, putInt8, putSeq, putVec, putWord16le,
+                       putWord32le, putWord8, runPut, skip)
 import Scrapti.Riff (expectLabel, getLabel, labelRiff)
 import Scrapti.Wav (WavData (..), wavDataSamples)
 
