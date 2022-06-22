@@ -1,6 +1,5 @@
-module Main (main) where
+module Main
+  ( main
+  ) where
 
-import Scrapti (exe)
-
-main :: IO ()
-main = exe
+import Scrapti.Main (main)

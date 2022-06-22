@@ -27,13 +27,14 @@ import Data.Foldable (foldMap', for_)
 import Data.Proxy (Proxy)
 import Data.Semigroup (Sum (..))
 import Data.Sequence (Seq (..))
-import qualified Data.Vector.Unboxed as VU
+import qualified Data.Vector.Primitive as VP
 import Data.Word (Word16, Word32)
 import Scrapti.Binary (ByteLength, DecodeState (..), DecodeT, Get, Put, decodeBounded, decodeGet, getByteString,
                        getExpect, getVec, getWord16le, getWord32le, guardEnd, putByteString, putVec, putWord16le,
-                       putWord32le, runPut, skip)
+                       putWord32le, runPut, skip, Binary (..))
 import Scrapti.Riff (expectLabel, getLabel, labelRiff)
 import Scrapti.Sample (Sample (..), Sampled (..), getSampled)
+import Data.Primitive (Prim)
 
 data WavFormat = WavFormat
   { wfNumChannels :: !Word16
@@ -44,12 +45,12 @@ data WavFormat = WavFormat
 instance Default WavFormat where
   def = WavFormat 2 44100 16
 
-newtype WavData a = WavData { unWavData :: VU.Vector a }
+newtype WavData a = WavData { unWavData :: VP.Vector a }
   deriving stock (Show)
   deriving newtype (Eq)
 
-instance VU.Unbox a => Default (WavData a) where
-  def = WavData VU.empty
+instance Prim a => Default (WavData a) where
+  def = WavData VP.empty
 
 data WavHeader = WavHeader
   { wavHeaderRemainingSize :: !ByteLength
@@ -73,7 +74,7 @@ data Wav a = Wav
   , wavTrailer :: !(Seq WavUnparsed)
   } deriving stock (Eq, Show)
 
-instance VU.Unbox a => Default (Wav a) where
+instance Prim a => Default (Wav a) where
   def = Wav def Empty def Empty
 
 data WavChunk a =
@@ -81,13 +82,13 @@ data WavChunk a =
   | WavChunkData !(WavData a)
   deriving stock (Eq, Show)
 
-wavDataSamples :: VU.Unbox a => WavData a -> Int
-wavDataSamples = VU.length . unWavData
+wavDataSamples :: Prim a => WavData a -> Int
+wavDataSamples = VP.length . unWavData
 
 decodeWavHeader :: Monad m => DecodeT m WavHeader
 decodeWavHeader = decodeGet getWavHeader
 
-decodeWavChunk :: (Monad m, VU.Unbox a) => Word16 -> Get a -> DecodeT m (WavChunk a)
+decodeWavChunk :: (Monad m, Prim a) => Word16 -> Get a -> DecodeT m (WavChunk a)
 decodeWavChunk bps getter = decodeGet (getWavChunk bps getter)
 
 decodeWavTrailers :: Monad m => DecodeT m (Seq WavUnparsed)
@@ -110,7 +111,7 @@ decodeAnyWav = do
 decodeSpecificWav :: (Monad m, Sample a) => Proxy a -> DecodeT m (Wav a)
 decodeSpecificWav _ = do
   WavHeader remainingSize fmt <- decodeWavHeader
-  decodeRestOfWav remainingSize fmt sampleGet
+  decodeRestOfWav remainingSize fmt get
 
 decodeRestOfWav :: (Monad m, Sample a) => ByteLength -> WavFormat -> Get a -> DecodeT m (Wav a)
 decodeRestOfWav remainingSize fmt getter =
@@ -167,7 +168,7 @@ getWavFormat = do
   let !format = WavFormat numChannels sampleRate bps
   pure (format, chunkSize)
 
-getWavChunk :: VU.Unbox a => Word16 -> Get a -> Get (WavChunk a)
+getWavChunk :: Prim a => Word16 -> Get a -> Get (WavChunk a)
 getWavChunk bps getter = go where
   go = do
     lab <- getLabel
@@ -175,14 +176,14 @@ getWavChunk bps getter = go where
       then fmap WavChunkData (getWavData bps getter)
       else fmap WavChunkUnparsed (getWavUnparsed lab)
 
-getWavData :: VU.Unbox a => Word16 -> Get a -> Get (WavData a)
+getWavData :: Prim a => Word16 -> Get a -> Get (WavData a)
 getWavData bitsPer getter = do
   let !bytesPer = div bitsPer 8
   chunkSize <- getWord32le
   unless (mod chunkSize (fromIntegral bytesPer) == 0) (fail "bad data chunk size")
   let !samples = fromIntegral (div chunkSize (fromIntegral bytesPer))
   vec <- getVec samples getter
-  unless (VU.length vec == samples) (fail "bad samples")
+  unless (VP.length vec == samples) (fail "bad samples")
   pure $! WavData vec
 
 getWavUnparsed :: ByteString -> Get WavUnparsed
@@ -191,7 +192,7 @@ getWavUnparsed lab = do
   contents <- getByteString (fromIntegral chunkSize)
   pure $! WavUnparsed lab contents
 
-getWavBody :: VU.Unbox a => Word16 -> Get a -> Get (WavBody a)
+getWavBody :: Prim a => Word16 -> Get a -> Get (WavBody a)
 getWavBody bps getter = go Empty where
   go !unps = do
     chunk <- getWavChunk bps getter
@@ -210,7 +211,7 @@ putSpecificWav (Wav (WavFormat nchan sr bps) mid (WavData vec) tra) = result whe
     for_ mid putUnp
     putByteString labelData
     putWord32le dataChunkSize
-    putVec samplePut vec
+    putVec put vec
     for_ tra putUnp
   putFmt = do
     putWord32le fmtChunkSize
@@ -230,7 +231,7 @@ putSpecificWav (Wav (WavFormat nchan sr bps) mid (WavData vec) tra) = result whe
   framingSize = 20
   fmtChunkSize = 16
   bytesPer = fromIntegral (div bps 8)
-  dataChunkSize = bytesPer * fromIntegral (VU.length vec)
+  dataChunkSize = bytesPer * fromIntegral (VP.length vec)
   fileSize = framingSize + fmtChunkSize + midSize + dataChunkSize + traSize
   bpsAvg = sr * fromIntegral bpsSlice
   bpsSlice = div bps 8 * nchan

@@ -6,14 +6,13 @@ module Scrapti.Pti where
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.Default (Default (..))
-import Data.Int (Int16, Int8)
+import Data.Int (Int8)
 import Data.Proxy (Proxy (..))
 import Data.Text (Text)
-import qualified Data.Vector.Unboxed as VU
-import Data.Word (Word16, Word32, Word8)
-import Scrapti.Binary (Binary (..), BoolByte (..), DecodeT, Get, decodeGet, getByteString, getFixedString, getFloatle,
-                       getWord16le, getWord32le, getWord8, putByteString, putFixedString, putFloatle,
-                       putWord16le, putWord32le, putWord8)
+import qualified Data.Vector.Primitive as VP
+import Data.Word (Word8)
+import Scrapti.Binary (Binary (..), BoolByte (..), DecodeT, Get, decodeGet, getByteString, getFixedString, putByteString, putFixedString,
+  Int16LE, Word16LE, Word32LE, FloatLE)
 import Scrapti.Classes (BinaryRep (..), ViaBinaryRep (..), ViaBoundedEnum (..))
 import Scrapti.Wav (Wav, decodeSpecificWav)
 
@@ -39,7 +38,7 @@ data WavetableWindowSize =
 instance Default WavetableWindowSize where
   def = WWS2048
 
-instance BinaryRep Word16 WavetableWindowSize where
+instance BinaryRep Word16LE WavetableWindowSize where
   parse = \case
     32 -> Right WWS32
     64 -> Right WWS64
@@ -75,15 +74,15 @@ instance Default SamplePlayback where
 data Preamble = Preamble
   { preIsWavetable :: !BoolByte
   , preName :: !Text
-  , preSampleLength :: !Word32
+  , preSampleLength :: !Word32LE
   , preWavetableWindowSize :: !WavetableWindowSize
-  , preWavetableTotalPositions :: !Word16
+  , preWavetableTotalPositions :: !Word16LE
   , preSamplePlayback :: !SamplePlayback
-  , prePlaybackStart :: !Word16
-  , preLoopStart :: !Word16
-  , preLoopEnd :: !Word16
-  , prePlaybackEnd :: !Word16
-  , preWavetablePosition :: !Word16
+  , prePlaybackStart :: !Word16LE
+  , preLoopStart :: !Word16LE
+  , preLoopEnd :: !Word16LE
+  , prePlaybackEnd :: !Word16LE
+  , preWavetablePosition :: !Word16LE
   } deriving stock (Eq, Show)
 
 instance Default Preamble where
@@ -92,11 +91,11 @@ instance Default Preamble where
 data AuxPreamble = AuxPreamble
   { auxPre0To19 :: !ByteString
   , auxPre52To59 :: !ByteString
-  , auxPre66To67 :: !Word16
+  , auxPre66To67 :: !Word16LE
   , auxPre70To75 :: !ByteString
   , auxPre77 :: !Word8
-  , auxPre86To87 :: !Word16
-  , auxPre90To91 :: !Word16
+  , auxPre86To87 :: !Word16LE
+  , auxPre90To91 :: !Word16LE
   } deriving stock (Eq, Show)
 
 instance Default AuxPreamble where
@@ -111,39 +110,39 @@ instance Binary PairPreamble where
     -- 0-19
     auxPre0To19 <- getByteString 20
     -- 20
-    preIsWavetable <- get @BoolByte
+    preIsWavetable <- get
     -- 21-51
     preName <- getFixedString 30
     -- 52-59
     auxPre52To59 <- getByteString 8
     -- 60-63
-    preSampleLength <- getWord32le
+    preSampleLength <- get
     -- 64-65
-    preWavetableWindowSize <- get @WavetableWindowSize
+    preWavetableWindowSize <- get
     -- 66-67
-    auxPre66To67 <- getWord16le
+    auxPre66To67 <- get
     -- 68-69
-    preWavetableTotalPositions <- getWord16le
+    preWavetableTotalPositions <- get
     -- 70-75
     auxPre70To75 <- getByteString 6
     -- 76
-    preSamplePlayback <- get @SamplePlayback
+    preSamplePlayback <- get
     -- 77
-    auxPre77 <- getWord8
+    auxPre77 <- get
     -- 78-79
-    prePlaybackStart <- getWord16le
+    prePlaybackStart <- get
     -- 80-81
-    preLoopStart <- getWord16le
+    preLoopStart <- get
     -- 82-83
-    preLoopEnd <- getWord16le
+    preLoopEnd <- get
     -- 84-85
-    prePlaybackEnd <- getWord16le
+    prePlaybackEnd <- get
     -- 86-87
-    auxPre86To87 <- getWord16le
+    auxPre86To87 <- get
     -- 88-89
-    preWavetablePosition <- getWord16le
+    preWavetablePosition <- get
     -- 90-91
-    auxPre90To91 <- getWord16le
+    auxPre90To91 <- get
     let !auxPre = AuxPreamble {..}
         !pre = Preamble {..}
         !pair = Pair auxPre pre
@@ -158,48 +157,48 @@ instance Binary PairPreamble where
     -- 52-59
     putByteString auxPre52To59
     -- 60-63
-    putWord32le preSampleLength
+    put preSampleLength
     -- 64-65
     put preWavetableWindowSize
     -- 66-67
-    putWord16le auxPre66To67
+    put auxPre66To67
     -- 68-69
-    putWord16le preWavetableTotalPositions
+    put preWavetableTotalPositions
     -- 70-75
     putByteString auxPre70To75
     -- 76
     put preSamplePlayback
     -- 77
-    putWord8 auxPre77
+    put auxPre77
     -- 78-79
-    putWord16le prePlaybackStart
+    put prePlaybackStart
     -- 80-81
-    putWord16le preLoopStart
+    put preLoopStart
     -- 82-83
-    putWord16le preLoopEnd
+    put preLoopEnd
     -- 84-85
-    putWord16le prePlaybackEnd
+    put prePlaybackEnd
     -- 86-87
-    putWord16le auxPre86To87
+    put auxPre86To87
     -- 88-89
-    putWord16le preWavetablePosition
+    put preWavetablePosition
     -- 90-91
-    putWord16le auxPre90To91
+    put auxPre90To91
 
 data AutoEnvelope = AutoEnvelope
-  { aeAmount :: !Float
-  , aeAttack :: !Word16
-  , aeDecay :: !Word16
-  , aeSustain :: !Float
-  , aeRelease :: !Word16
+  { aeAmount :: !FloatLE
+  , aeAttack :: !Word16LE
+  , aeDecay :: !Word16LE
+  , aeSustain :: !FloatLE
+  , aeRelease :: !Word16LE
   } deriving stock (Eq, Show)
 
 instance Default AutoEnvelope where
   def = AutoEnvelope 1.0 0 0 1.0 1000
 
 data AuxAutoEnvelope = AuxAutoEnvelope
-  { aae96To97 :: !Word16
-  , aae100To101 :: !Word16
+  { aae96To97 :: !Word16LE
+  , aae100To101 :: !Word16LE
   } deriving stock (Eq, Show)
 
 instance Default AuxAutoEnvelope where
@@ -212,38 +211,38 @@ newtype PairAutoEnvelope = PairAutoEnvelope { unPairAutoEnvelope :: Pair AuxAuto
 instance Binary PairAutoEnvelope where
   get = do
     -- 92-95
-    aeAmount <- getFloatle
+    aeAmount <- get
     -- 96-97
-    aae96To97 <- getWord16le
+    aae96To97 <- get
     -- 98-99
-    aeAttack <- getWord16le
+    aeAttack <- get
     -- 100-101
-    aae100To101 <- getWord16le
+    aae100To101 <- get
     -- 102-103
-    aeDecay <- getWord16le
+    aeDecay <- get
     -- 104-107
-    aeSustain <- getFloatle
+    aeSustain <- get
     -- 108-109
-    aeRelease <- getWord16le
+    aeRelease <- get
     let !aae = AuxAutoEnvelope {..}
         !ae = AutoEnvelope {..}
         !pair = Pair aae ae
     pure $! PairAutoEnvelope pair
   put (PairAutoEnvelope (Pair (AuxAutoEnvelope {..}) (AutoEnvelope {..}))) = do
     -- 92-95
-    putFloatle aeAmount
+    put aeAmount
     -- 96-97
-    putWord16le aae96To97
+    put aae96To97
     -- 98-99
-    putWord16le aeAttack
+    put aeAttack
     -- 100-101
-    putWord16le aae100To101
+    put aae100To101
     -- 102-103
-    putWord16le aeDecay
+    put aeDecay
     -- 104-107
-    putFloatle aeSustain
+    put aeSustain
     -- 108-109
-    putWord16le aeRelease
+    put aeRelease
 
 data AutoType =
     ATOff
@@ -255,7 +254,7 @@ data AutoType =
 instance Default AutoType where
   def = ATEnvelope
 
-instance BinaryRep Word16 AutoType where
+instance BinaryRep Word16LE AutoType where
   parse = \case
     0x0000 -> Right ATOff
     0x0001 -> Right ATEnvelope
@@ -281,7 +280,7 @@ newtype PairAuto = PairAuto { unPairAuto :: Pair AuxAutoEnvelope Auto }
 instance Binary PairAuto where
   get = do
     PairAutoEnvelope (Pair aae ae) <- get
-    at <- get @AutoType
+    at <- get
     let !pair = Pair aae (Auto ae at)
     pure $! PairAuto pair
   put (PairAuto (Pair aae (Auto ae at))) = do
@@ -336,14 +335,14 @@ instance Default LfoSteps where
 data Lfo = Lfo
   { lfoType :: !LfoType
   , lfoSteps :: !LfoSteps
-  , lfoAmount :: !Float
+  , lfoAmount :: !FloatLE
   } deriving stock (Eq, Show)
 
 instance Default Lfo where
   def = Lfo def def 0.5
 
 newtype AuxLfo = AuxLfo
-  { auxLfo214To215 :: Word16
+  { auxLfo214To215 :: Word16LE
   } deriving stock (Show)
     deriving newtype (Eq)
 
@@ -361,9 +360,9 @@ instance Binary PairLfo where
     -- 213
     lfoSteps <- get @LfoSteps
     -- 215-215
-    auxLfo214To215 <- getWord16le
+    auxLfo214To215 <- get
     -- 216-129
-    lfoAmount <- getFloatle
+    lfoAmount <- get
     let !auxLfo = AuxLfo {..}
         !lfo = Lfo {..}
         !pair = Pair auxLfo lfo
@@ -374,9 +373,9 @@ instance Binary PairLfo where
     -- 213
     put lfoSteps
     -- 215-215
-    putWord16le auxLfo214To215
+    put auxLfo214To215
     -- 216-129
-    putFloatle lfoAmount
+    put lfoAmount
 
 data FilterType =
     FTDisabled
@@ -389,7 +388,7 @@ data FilterType =
 instance Default FilterType where
   def = FTDisabled
 
-instance BinaryRep Word16 FilterType where
+instance BinaryRep Word16LE FilterType where
   parse = \case
     0x0000 -> pure FTDisabled
     0x0001 -> pure FTLowPass
@@ -426,14 +425,14 @@ numSlices :: Int
 numSlices = 48
 
 data Slices = Slices
-  { slicesAdjust :: !(VU.Vector Word16)
+  { slicesAdjust :: !(VP.Vector Word16LE)
   -- ^ Must be 48 elements long
   , slicesNumber :: !Word8
   , slicesActive :: !Word8
   } deriving stock (Eq, Show)
 
 instance Default Slices where
-  def = Slices (VU.replicate numSlices 0) 0 0
+  def = Slices (VP.replicate numSlices 0) 0 0
 
 data GranularShape =
     GSSquare
@@ -458,8 +457,8 @@ instance Default GranularLoopMode where
   def = GLMForward
 
 data Granular = Granular
-  { granLen :: !Word16
-  , granPos :: !Word16
+  { granLen :: !Word16LE
+  , granPos :: !Word16LE
   , granShape :: !GranularShape
   , granLoopMode :: !GranularLoopMode
   } deriving stock (Eq, Show)
@@ -504,12 +503,11 @@ data AuxHeader = AuxHeader
 
 data Pti = Pti
   { ptiHeader :: !Header
-  , ptiWav :: !(Wav Int16)
+  , ptiWav :: !(Wav Int16LE)
   } deriving stock (Eq, Show)
 
 instance Default Pti where
   def = Pti def def
-
 
 getPairHeader :: Get (Pair AuxHeader Header)
 getPairHeader = undefined

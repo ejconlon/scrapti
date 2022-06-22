@@ -24,9 +24,9 @@ source-repository head
 
 library
   exposed-modules:
-      Scrapti
       Scrapti.Binary
       Scrapti.Classes
+      Scrapti.Main
       Scrapti.Pti
       Scrapti.Riff
       Scrapti.Sample

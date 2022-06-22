@@ -25,6 +25,8 @@ module Scrapti.Binary
   , Int16LE (..)
   , Word32LE (..)
   , Int32LE (..)
+  , Word64LE (..)
+  , Int64LE (..)
   , getExpect
   , getFloatle
   , getWord8
@@ -62,9 +64,9 @@ import qualified Control.Monad.State.Strict as State
 import Control.Monad.Trans (MonadTrans (..))
 import Data.Binary (Binary (..))
 import Data.Binary.Get (ByteOffset, Get, getByteString, getFloatle, getInt16le, getInt32le, getInt64le, getInt8,
-                        getWord16le, getWord32le, getWord8, runGetOrFail, skip)
+                        getWord16le, getWord32le, getWord8, runGetOrFail, skip, getWord64le)
 import Data.Binary.Put (Put, putByteString, putFloatle, putInt16le, putInt32le, putInt64le, putInt8, putWord16le,
-                        putWord32le, putWord8, runPut)
+                        putWord32le, putWord8, runPut, putWord64le)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC
 import qualified Data.ByteString.Lazy as BSL
@@ -75,9 +77,10 @@ import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
-import qualified Data.Vector.Unboxed as VU
-import Data.Word (Word16, Word32)
+import qualified Data.Vector.Primitive as VP
+import Data.Word (Word16, Word32, Word64)
 import Data.Primitive (Prim)
+import Data.Default (Default (..))
 
 type ByteLength = Int64
 
@@ -170,11 +173,11 @@ getExpect typ getter expec = do
 -- putInt24le :: Int24 -> Put ()
 -- putInt24le = undefined
 
-getVec :: VU.Unbox a => Int -> Get a -> Get (VU.Vector a)
-getVec len getter = VU.generateM len (const getter)
+getVec :: Prim a => Int -> Get a -> Get (VP.Vector a)
+getVec len getter = VP.generateM len (const getter)
 
-putVec :: VU.Unbox a => (a -> Put) -> VU.Vector a -> Put
-putVec = VU.mapM_
+putVec :: Prim a => (a -> Put) -> VP.Vector a -> Put
+putVec = VP.mapM_
 
 getSeq :: Int -> Get a -> Get (Seq a)
 getSeq = Seq.replicateA
@@ -201,9 +204,12 @@ instance Binary BoolByte where
   get = fmap (BoolByte . (== 0)) getWord8
   put (BoolByte b) = putWord8 (if b then 1 else 0)
 
+instance Default BoolByte where
+  def = BoolByte False
+
 newtype FloatLE = FloatLE { unFloatLE :: Float }
   deriving stock (Show)
-  deriving newtype (Eq, Ord, Num, Prim)
+  deriving newtype (Eq, Ord, Num, Fractional, Prim, Default)
 
 instance Binary FloatLE where
   get = fmap FloatLE getFloatle
@@ -211,7 +217,7 @@ instance Binary FloatLE where
 
 newtype Word16LE = Word16LE { unWord16LE :: Word16 }
   deriving stock (Show)
-  deriving newtype (Eq, Ord, Num, Prim)
+  deriving newtype (Eq, Ord, Num, Prim, Default)
 
 instance Binary Word16LE where
   get = fmap Word16LE getWord16le
@@ -219,7 +225,7 @@ instance Binary Word16LE where
 
 newtype Int16LE = Int16LE { unInt16LE :: Int16 }
   deriving stock (Show)
-  deriving newtype (Eq, Ord, Num, Prim)
+  deriving newtype (Eq, Ord, Num, Prim, Default)
 
 instance Binary Int16LE where
   get = fmap Int16LE getInt16le
@@ -227,7 +233,7 @@ instance Binary Int16LE where
 
 newtype Word32LE = Word32LE { unWord32LE :: Word32 }
   deriving stock (Show)
-  deriving newtype (Eq, Ord, Num, Prim)
+  deriving newtype (Eq, Ord, Num, Prim, Default)
 
 instance Binary Word32LE where
   get = fmap Word32LE getWord32le
@@ -235,26 +241,24 @@ instance Binary Word32LE where
 
 newtype Int32LE = Int32LE { unInt32LE :: Int32 }
   deriving stock (Show)
-  deriving newtype (Eq, Ord, Num, Prim)
+  deriving newtype (Eq, Ord, Num, Prim, Default)
 
 instance Binary Int32LE where
   get = fmap Int32LE getInt32le
   put = putInt32le . unInt32LE
 
--- newtype instance VU.Vector Int32LE = VecInt32LE (VU.Vector Int32)
--- newtype instance VU.MVector s Int32LE = MVecInt32LE (VU.MVector s Int32)
+newtype Word64LE = Word64LE { unWord64LE :: Word64 }
+  deriving stock (Show)
+  deriving newtype (Eq, Ord, Num, Prim, Default)
 
--- deriving newtype instance VU.Unbox Int32LE
--- deriving newtype instance VG.Vector VU.Vector Int32LE
--- deriving newtype instance VGM.MVector VU.MVector Int32LE
+instance Binary Word64LE where
+  get = fmap Word64LE getWord64le
+  put = putWord64le . unWord64LE
 
--- newtype VecInt32LE = VecInt32LE { unVecInt32LE :: VU.Vector Int32LE }
--- newtype MVecInt32LE s = MVecInt32LE { unMVecInt32LE :: VU.MVector s Int32LE }
+newtype Int64LE = Int64LE { unInt64LE :: Int64 }
+  deriving stock (Show)
+  deriving newtype (Eq, Ord, Num, Prim, Default)
 
--- deriving newtype instance VU.Unbox Int32LE
--- deriving newtype instance VGM.MVector VU.MVector Int32LE
--- deriving newtype instance VG.Vector VecInt32LE Int32LE
-
--- deriving newtype instance VU.Unbox Int32
--- deriving anyclass instance VB.Vector VU.Vector Int32LE
--- deriving anyclass instance VU.Unbox Int32LE
+instance Binary Int64LE where
+  get = fmap Int64LE getInt64le
+  put = putInt64le . unInt64LE
