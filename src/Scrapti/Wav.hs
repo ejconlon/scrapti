@@ -31,17 +31,17 @@ import Data.Proxy (Proxy)
 import Data.Semigroup (Sum (..))
 import Data.Sequence (Seq (..))
 import qualified Data.Vector.Primitive as VP
-import Scrapti.Binary (Binary (..), ByteLength, DecodeState (..), DecodeT, Get, Int16LE, Int32LE, Int64LE, Put,
-                       SizedBinary, Word16LE, Word32LE (..), decodeBounded, decodeGet, getByteString, getExpect,
-                       getVecWith, guardEnd, putByteString, putVec, runPut, skip)
+import Scrapti.Binary (Binary (..), ByteLength, ByteSized, DecodeState (..), DecodeT, Get, Int16LE, Int32LE, Int64LE,
+                       Put, Word16LE, Word32LE (..), decodeBounded, decodeGet, getByteString, getExpect, getVecWith,
+                       guardEnd, putByteString, putVec, runPut, skip)
 import Scrapti.Riff (Label, expectLabel, getChunkSize, labelRiff, putChunkSize)
 
 newtype BitLength = BitLength { unBitLength :: Word16LE }
   deriving stock (Show)
-  deriving newtype (Eq, Ord, Num, Enum, Real, Integral, Default, Binary, SizedBinary)
+  deriving newtype (Eq, Ord, Num, Enum, Real, Integral, Default, Binary, ByteSized)
 
 data Sampled f where
-  Sampled :: (Prim a, SizedBinary a) => !(f a) -> Sampled f
+  Sampled :: (Prim a, Binary a) => !(f a) -> Sampled f
 
 getSampled :: BitLength -> Maybe (Sampled Get)
 getSampled = \case
@@ -124,7 +124,7 @@ decodeAnyWav = do
     Nothing -> fail "bad bps"
     Just (Sampled getter) -> fmap Sampled (decodeRestOfWav remainingSize fmt getter)
 
-decodeSpecificWav :: (Monad m, Prim a, SizedBinary a) => Proxy a -> DecodeT m (Wav a)
+decodeSpecificWav :: (Monad m, Prim a, Binary a) => Proxy a -> DecodeT m (Wav a)
 decodeSpecificWav _ = do
   WavHeader remainingSize fmt <- decodeWavHeader
   decodeRestOfWav remainingSize fmt get
@@ -140,7 +140,7 @@ decodeRestOfWav remainingSize fmt getter = do
 encodeAnyWav :: Sampled Wav -> BSL.ByteString
 encodeAnyWav (Sampled wav) = encodeSpecificWav wav
 
-encodeSpecificWav :: (Prim a, SizedBinary a) => Wav a -> BSL.ByteString
+encodeSpecificWav :: (Prim a, Binary a) => Wav a -> BSL.ByteString
 encodeSpecificWav = runPut . putSpecificWav
 
 labelWave, labelFmt, labelData :: Label
@@ -213,7 +213,7 @@ getWavBody bps getter = go Empty where
       WavChunkData dat -> pure $! WavBody unps dat
       WavChunkUnparsed unp -> go (unps :|> unp)
 
-putSpecificWav :: (Prim a, SizedBinary a) => Wav a -> Put
+putSpecificWav :: (Prim a, Binary a) => Wav a -> Put
 putSpecificWav (Wav (WavFormat nchan sr bps) mid (WavData vec) tra) = result where
   result = do
     put labelRiff
