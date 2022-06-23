@@ -18,7 +18,6 @@ module Scrapti.Binary
   , decodeBounded
   , decodeFolded
   , decodeRepeated
-  , Encoded (..)
   , ByteSized (..)
   , BoolByte (..)
   , FloatLE (..)
@@ -189,10 +188,6 @@ putSeqWith = traverse_
 
 putSeq :: Binary a => Seq a -> Put
 putSeq = putSeqWith put
-
-class Encoded a where
-  decode :: DecodeM a
-  encode :: a -> Put
 
 class ByteSized a where
   byteSize :: a -> ByteLength

@@ -1,22 +1,29 @@
 {-# LANGUAGE UndecidableInstances #-}
 
-module Scrapti.Classes where
+module Scrapti.Classes
+  ( BinaryRep (..)
+  , BinaryEncoded (..)
+  , BinaryTagged (..)
+  , ViaBoundedEnum (..)
+  , ViaBinaryRep (..)
+  , ViaBinary (..)
+  , ViaBinaryTagged (..)
+  ) where
 
-import Data.Binary (Binary (..), Put)
-import Scrapti.Binary (DecodeT, decodeGet)
+import Scrapti.Binary (Binary (..), DecodeM, Get, Put, decodeGet)
 
 class Binary x => BinaryRep x a | a -> x where
   parse :: x -> Either String a
   rep :: a -> x
 
-class BinaryEncoder a where
+class BinaryEncoded a where
+  decode :: DecodeM a
   encode :: a -> Put
 
-class (BinaryEncoder a, Monad m) => BinaryDecoder m a where
-  decode :: DecodeT m a
-
-class DefaultWith e a | a -> e where
-  defWith :: e -> a
+class Binary x => BinaryTagged x a | a -> x where
+  getTagged :: x -> Get a
+  howTagged :: a -> x
+  putTagged :: a -> Put
 
 newtype ViaBoundedEnum x a = ViaBoundedEnum { unViaBoundedEnum :: a }
 
@@ -36,8 +43,16 @@ instance BinaryRep x a => Binary (ViaBinaryRep a) where
 
 newtype ViaBinary a = ViaBinary { unViaBinary :: a }
 
-instance Binary a => BinaryEncoder (ViaBinary a) where
+instance Binary a => BinaryEncoded (ViaBinary a) where
+  decode = decodeGet (fmap ViaBinary get)
   encode = put . unViaBinary
 
-instance (Binary a, Monad m) => BinaryDecoder m (ViaBinary a) where
-  decode = decodeGet (fmap ViaBinary get)
+newtype ViaBinaryTagged a = ViaBinaryTagged { unViaBinaryTagged :: a }
+
+instance BinaryTagged x a => Binary (ViaBinaryTagged a) where
+  get = do
+    x <- get
+    fmap ViaBinaryTagged (getTagged x)
+  put (ViaBinaryTagged a) = do
+    put (howTagged a)
+    putTagged a
