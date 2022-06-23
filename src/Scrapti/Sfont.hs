@@ -28,17 +28,18 @@ import Data.Int (Int8)
 import Data.Semigroup (Sum (..))
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
-import Data.Text (Text)
 import Data.Word (Word8)
-import Scrapti.Binary (Binary (..), ByteLength, DecodeT, Get, Int16LE, Put, SizedBinary (..), TermText, Word16LE,
-                       Word32LE, decodeBounded, decodeGet, decodeRepeated, getByteString, getFixedString, getSeq,
-                       getVec, guardEnd, putByteString, putFixedString, putSeq, putVec, runPut, skip)
-import Scrapti.Riff (expectLabel, getChunkSize, getLabel, labelRiff, putChunkSize)
+import Scrapti.Binary (Binary (..), ByteLength, DecodeT, FixedText, Get, Int16LE, Put, SizedBinary (..), TermText,
+                       Word16LE, Word32LE, decodeBounded, decodeGet, decodeRepeated, getByteString, getSeq, getVec,
+                       guardEnd, putSeq, putVec, runPut, skip)
+import Scrapti.Riff (Label, expectLabel, getChunkSize, labelRiff, putChunkSize)
 import Scrapti.Wav (WavData (..), wavDataSamples)
 
 newtype SampleCount = Samplecount { unSampleCount :: Word32LE }
   deriving stock (Show)
   deriving newtype (Eq, Ord, Num, Enum, Real, Integral, Binary)
+
+type ShortText = FixedText 20
 
 data Sfont = Sfont
   { sfontInfos :: !(Seq Info)
@@ -58,7 +59,7 @@ data Info =
   | InfoCopyrightMessage !TermText
   | InfoComments !TermText
   | InfoUsedTools !TermText
-  | InfoReserved !ByteString !ByteString
+  | InfoReserved !Label !ByteString
   deriving stock (Eq, Show)
 
 data Sdta = Sdta
@@ -103,7 +104,7 @@ data Pdta = Pdta
 
 -- | Preset header
 data Phdr = Phdr
-  { phdrPresetName :: !Text
+  { phdrPresetName :: !ShortText
   , phdrPreset :: !Word16LE
   , phdrBank :: !Word16LE
   , phdrPresetBagIndex :: !Word16LE
@@ -191,13 +192,13 @@ data Gen =
 
 -- | Instrument
 data Inst = Inst
-  { instName :: !Text
+  { instName :: !ShortText
   , instBagIndex :: !Word16LE
   } deriving stock (Eq, Show)
 
 -- | Sample header
 data Shdr = Shdr
-  { shdrSampleName :: !Text
+  { shdrSampleName :: !ShortText
   , shdrStart :: !Word32LE
   , shdrEnd :: !Word32LE
   , shdrStartLoop :: !Word32LE
@@ -230,7 +231,7 @@ buildPdta = foldl' go emptyPdta where
 
 labelSfbk, labelList, labelInfo, labelIfil, labelIver, labelIsng, labelInam, labelIrom, labelIcrd,
   labelIeng, labelIprd, labelIcop, labelIcmt, labelIsft, labelSdta, labelSmpl, labelSm24,
-  labelPdta, labelPhdr, labelPbag, labelPmod, labelPgen, labelInst, labelIbag, labelImod, labelIgen, labelShdr :: ByteString
+  labelPdta, labelPhdr, labelPbag, labelPmod, labelPgen, labelInst, labelIbag, labelImod, labelIgen, labelShdr :: Label
 labelSfbk = "sfbk"
 labelList = "LIST"
 labelInfo = "INFO"
@@ -286,7 +287,7 @@ getInfosHeader = do
 
 getInfo :: Get Info
 getInfo = do
-  label <- getLabel
+  label <- get
   chunkSize <- getChunkSize
   if
     | label == labelIfil -> do
@@ -360,21 +361,15 @@ sizeGen = 4
 sizeInst = 22
 sizeShdr = 46
 
-getPdtaElems :: ByteString -> ByteLength -> ByteLength -> Get a -> Get (Seq a)
+getPdtaElems :: Label -> ByteLength -> ByteLength -> Get a -> Get (Seq a)
 getPdtaElems label chunkLen size getter = do
   unless (mod chunkLen size == 0) (fail ("invalid size for pdta elem: " ++ show label))
   let !numElems = div chunkLen size
   getSeq (fromIntegral numElems) getter
 
-getShortString :: Get Text
-getShortString = getFixedString 20
-
-putShortString :: Text -> Put
-putShortString = putFixedString 20
-
 getPhdr :: Get Phdr
 getPhdr = do
-  phdrPresetName <- getShortString
+  phdrPresetName <- get
   phdrPreset <- get
   phdrBank <- get
   phdrPresetBagIndex <- get
@@ -385,7 +380,7 @@ getPhdr = do
 
 putPhdr :: Phdr -> Put
 putPhdr (Phdr {..}) = do
-  putShortString phdrPresetName
+  put phdrPresetName
   put phdrPreset
   put phdrBank
   put phdrPresetBagIndex
@@ -614,18 +609,18 @@ putGen gen = do
 
 getInst :: Get Inst
 getInst = do
-  instName <- getShortString
+  instName <- get
   instBagIndex <- get
   pure $! Inst {..}
 
 putInst :: Inst -> Put
 putInst (Inst {..}) = do
-  putShortString instName
+  put instName
   put instBagIndex
 
 getShdr :: Get Shdr
 getShdr = do
-  shdrSampleName <- getShortString
+  shdrSampleName <- get
   shdrStart <- get
   shdrEnd <- get
   shdrStartLoop <- get
@@ -639,7 +634,7 @@ getShdr = do
 
 putShdr :: Shdr -> Put
 putShdr (Shdr {..}) = do
-  putShortString shdrSampleName
+  put shdrSampleName
   put shdrStart
   put shdrEnd
   put shdrStartLoop
@@ -652,7 +647,7 @@ putShdr (Shdr {..}) = do
 
 getPdtaBlock :: Get PdtaBlock
 getPdtaBlock = do
-  label <- getLabel
+  label <- get
   chunkSize <- getChunkSize
   if
     | label == labelPhdr ->
@@ -687,9 +682,9 @@ encodeSfont = runPut . putSfont
 putSfont :: Sfont -> Put
 putSfont sfont@(Sfont infos sdta pdtaBlocks) = result where
   result = do
-    putByteString labelRiff
+    put labelRiff
     putChunkSize (sizeSfont sfont)
-    putByteString labelSfbk
+    put labelSfbk
     putInfos infos
     putSdta sdta
     putPdtaBlocks pdtaBlocks
@@ -734,12 +729,12 @@ sizePdtaBlock = \case
 
 putInfos :: Seq Info -> Put
 putInfos infos = do
-  putByteString labelList
+  put labelList
   putChunkSize (sizeInfos infos)
-  putByteString labelInfo
+  put labelInfo
   putSeq putInfo infos
 
-whichLabelInfo :: Info -> ByteString
+whichLabelInfo :: Info -> Label
 whichLabelInfo = \case
   InfoVersion _ _ -> labelIfil
   InfoRomVersion _ _ -> labelIver
@@ -756,7 +751,7 @@ whichLabelInfo = \case
 
 putInfo :: Info -> Put
 putInfo info = do
-  putByteString (whichLabelInfo info)
+  put (whichLabelInfo info)
   putChunkSize (sizeInfo info)
   case info of
     InfoVersion w1 w2 -> put w1 *> put w2
@@ -774,27 +769,27 @@ putInfo info = do
 
 putSdta :: Sdta -> Put
 putSdta sdta@(Sdta highBits mayLowBits) = do
-  putByteString labelList
+  put labelList
   putChunkSize (sizeSdta sdta)
-  putByteString labelSdta
-  putByteString labelSmpl
+  put labelSdta
+  put labelSmpl
   putChunkSize (fromIntegral (wavDataSamples highBits * 2))
   putVec put (unWavData highBits)
   case mayLowBits of
     Nothing -> pure ()
     Just lowBits -> do
-      putByteString labelSm24
+      put labelSm24
       putChunkSize (fromIntegral (wavDataSamples lowBits))
       putVec put (unWavData lowBits)
 
 putPdtaBlocks :: Seq PdtaBlock -> Put
 putPdtaBlocks pdtaBlocks = do
-  putByteString labelList
+  put labelList
   putChunkSize (sizePdtaBlocks pdtaBlocks)
-  putByteString labelPdta
+  put labelPdta
   putSeq putPdtaBlock pdtaBlocks
 
-whichLabelPdtaBlock :: PdtaBlock -> ByteString
+whichLabelPdtaBlock :: PdtaBlock -> Label
 whichLabelPdtaBlock = \case
   PdtaBlockPhdr _ -> labelPhdr
   PdtaBlockBag pc _ -> case pc of
@@ -811,7 +806,7 @@ whichLabelPdtaBlock = \case
 
 putPdtaBlock :: PdtaBlock -> Put
 putPdtaBlock block = do
-  putByteString (whichLabelPdtaBlock block)
+  put (whichLabelPdtaBlock block)
   putChunkSize (sizePdtaBlock block)
   case block of
     PdtaBlockPhdr phdrs -> putSeq putPhdr phdrs

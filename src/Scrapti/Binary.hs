@@ -28,32 +28,16 @@ module Scrapti.Binary
   , Word64LE (..)
   , Int64LE (..)
   , TermText (..)
-  , getExpect
-  , getFloatle
-  , getWord8
-  , getWord16le
-  , getWord32le
-  , getInt8
-  , getInt16le
-  , getInt32le
-  , getInt64le
+  , FixedText (..)
+  , FixedBytes (..)
   , getByteString
+  , getExpect
   , getVec
   , getSeq
-  , getFixedString
   , skip
-  , putFloatle
-  , putWord8
-  , putWord16le
-  , putWord32le
-  , putInt8
-  , putInt16le
-  , putInt32le
-  , putInt64le
   , putByteString
   , putVec
   , putSeq
-  , putFixedString
   ) where
 
 import Control.Monad (unless)
@@ -64,10 +48,10 @@ import Control.Monad.State.Strict (MonadState, StateT (..), gets)
 import qualified Control.Monad.State.Strict as State
 import Control.Monad.Trans (MonadTrans (..))
 import Data.Binary (Binary (..))
-import Data.Binary.Get (ByteOffset, Get, getByteString, getFloatle, getInt16le, getInt32le, getInt64le, getInt8,
-                        getWord16le, getWord32le, getWord64le, getWord8, runGetOrFail, skip)
-import Data.Binary.Put (Put, putByteString, putFloatle, putInt16le, putInt32le, putInt64le, putInt8, putWord16le,
-                        putWord32le, putWord64le, putWord8, runPut)
+import Data.Binary.Get (ByteOffset, Get, getByteString, getFloatle, getInt16le, getInt32le, getInt64le, getWord16le,
+                        getWord32le, getWord64le, getWord8, runGetOrFail, skip)
+import Data.Binary.Put (Put, putByteString, putFloatle, putInt16le, putInt32le, putInt64le, putWord16le, putWord32le,
+                        putWord64le, putWord8, runPut)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC
@@ -76,14 +60,16 @@ import Data.Default (Default (..))
 import Data.Foldable (toList, traverse_)
 import Data.Int (Int16, Int32, Int64, Int8)
 import Data.Primitive (Prim)
+import Data.Proxy (Proxy (..))
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
-import Data.String (IsString)
+import Data.String (IsString (..))
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.Vector.Primitive as VP
 import Data.Word (Word16, Word32, Word64, Word8)
+import GHC.TypeNats (KnownNat, Nat, natVal)
 
 newtype ByteLength = ByteLength { unByteLength :: Int64 }
   deriving stock (Show)
@@ -187,17 +173,6 @@ getSeq = Seq.replicateA
 putSeq :: (a -> Put) -> Seq a -> Put
 putSeq = traverse_
 
-getFixedString :: ByteLength -> Get Text
-getFixedString len = fmap (TE.decodeLatin1 . BS.takeWhile (/= 0)) (getByteString (fromIntegral len))
-
-putFixedString :: ByteLength -> Text -> Put
-putFixedString len t =
-  let !intLen = fromIntegral len
-      !bs0 = BSC.pack (take intLen (T.unpack t))
-      !len0 = BS.length bs0
-      !bs1 = if len0 < intLen then bs0 <> BS.replicate (intLen - len0) 0 else bs0
-  in putByteString bs1
-
 class Binary a => SizedBinary a where
   byteSize :: a -> ByteLength
 
@@ -298,13 +273,6 @@ instance Binary Int64LE where
 instance SizedBinary Int64LE where
   byteSize = const 8
 
-newtype TermText = TermText { unTermText :: Text }
-  deriving stock (Show)
-  deriving newtype (Eq, Ord, IsString)
-
-instance Default TermText where
-  def = TermText T.empty
-
 getUntilNull :: Get ByteString
 getUntilNull = fmap (BS.pack . toList) (go Empty) where
   go !acc = do
@@ -312,6 +280,13 @@ getUntilNull = fmap (BS.pack . toList) (go Empty) where
     if w == 0
       then pure acc
       else go (acc :|> w)
+
+newtype TermText = TermText { unTermText :: Text }
+  deriving stock (Show)
+  deriving newtype (Eq, Ord, IsString)
+
+instance Default TermText where
+  def = TermText T.empty
 
 instance Binary TermText where
   get = do
@@ -331,3 +306,49 @@ instance SizedBinary TermText where
   byteSize (TermText t) =
     let len = fromIntegral (T.length t + 1)
     in if even len then len else len + 1
+
+getFixedText :: ByteLength -> Get Text
+getFixedText len = fmap (TE.decodeLatin1 . BS.takeWhile (/= 0)) (getByteString (fromIntegral len))
+
+putFixedText :: ByteLength -> Text -> Put
+putFixedText len t =
+  let !intLen = fromIntegral len
+      !bs0 = BSC.pack (take intLen (T.unpack t))
+      !len0 = BS.length bs0
+      !bs1 = if len0 < intLen then bs0 <> BS.replicate (intLen - len0) 0 else bs0
+  in putByteString bs1
+
+newtype FixedText (n :: Nat) = FixedText { unFixedText :: Text }
+  deriving stock (Show)
+  deriving newtype (Eq, Ord, IsString)
+
+instance Default (FixedText n) where
+  def = FixedText T.empty
+
+instance KnownNat n => Binary (FixedText n) where
+  get = fmap FixedText (getFixedText (fromIntegral (natVal (Proxy :: Proxy n))))
+  put ft@(FixedText t) = putFixedText (fromIntegral (natVal ft)) t
+
+instance KnownNat n => SizedBinary (FixedText n) where
+  byteSize = fromIntegral . natVal
+
+putFixedBytes :: ByteLength -> ByteString -> Put
+putFixedBytes len bs0 =
+  let !intLen = fromIntegral len
+      !len0 = BS.length bs0
+      !bs1 = if len0 < intLen then bs0 <> BS.replicate (intLen - len0) 0 else bs0
+  in putByteString bs1
+
+newtype FixedBytes (n :: Nat) = FixedBytes { unFixedBytes :: ByteString }
+  deriving stock (Show)
+  deriving newtype (Eq, Ord, IsString)
+
+instance Default (FixedBytes n) where
+  def = FixedBytes BS.empty
+
+instance KnownNat n => Binary (FixedBytes n) where
+  get = fmap FixedBytes (getByteString (fromIntegral (natVal (Proxy :: Proxy n))))
+  put fb@(FixedBytes bs) = putFixedBytes (fromIntegral (natVal fb)) bs
+
+instance KnownNat n => SizedBinary (FixedBytes n) where
+  byteSize = fromIntegral . natVal

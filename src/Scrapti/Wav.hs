@@ -34,7 +34,7 @@ import qualified Data.Vector.Primitive as VP
 import Scrapti.Binary (Binary (..), ByteLength, DecodeState (..), DecodeT, Get, Int16LE, Int32LE, Int64LE, Put,
                        SizedBinary, Word16LE, Word32LE (..), decodeBounded, decodeGet, getByteString, getExpect, getVec,
                        guardEnd, putByteString, putVec, runPut, skip)
-import Scrapti.Riff (expectLabel, getChunkSize, getLabel, labelRiff, putChunkSize)
+import Scrapti.Riff (Label, expectLabel, getChunkSize, labelRiff, putChunkSize)
 
 newtype BitLength = BitLength { unBitLength :: Word16LE }
   deriving stock (Show)
@@ -74,7 +74,7 @@ data WavHeader = WavHeader
   } deriving stock (Eq, Show)
 
 data WavUnparsed = WavUnparsed
-  { wavUnparsedLabel :: !ByteString
+  { wavUnparsedLabel :: !Label
   , wavUnparsedContents :: !ByteString
   } deriving stock (Eq, Show)
 
@@ -114,7 +114,7 @@ decodeWavTrailers = go Empty where
     if BSL.null bs
       then pure acc
       else do
-        unp <- decodeGet (getLabel >>= getWavUnparsed)
+        unp <- decodeGet (get >>= getWavUnparsed)
         go (acc :|> unp)
 
 decodeAnyWav :: Monad m => DecodeT m (Sampled Wav)
@@ -130,7 +130,7 @@ decodeSpecificWav _ = do
   decodeRestOfWav remainingSize fmt get
 
 decodeRestOfWav :: (Monad m, Prim a) => ByteLength -> WavFormat -> Get a -> DecodeT m (Wav a)
-decodeRestOfWav remainingSize fmt getter =
+decodeRestOfWav remainingSize fmt getter = do
   decodeBounded remainingSize $ do
     WavBody mid dat <- decodeGet (getWavBody (wfBitsPerSample fmt) getter)
     tra <- decodeWavTrailers
@@ -143,7 +143,7 @@ encodeAnyWav (Sampled wav) = encodeSpecificWav wav
 encodeSpecificWav :: (Prim a, SizedBinary a) => Wav a -> BSL.ByteString
 encodeSpecificWav = runPut . putSpecificWav
 
-labelWave, labelFmt, labelData :: ByteString
+labelWave, labelFmt, labelData :: Label
 labelWave = "WAVE"
 labelFmt = "fmt "
 labelData = "data"
@@ -184,7 +184,7 @@ getWavFormat = do
 getWavChunk :: Prim a => BitLength -> Get a -> Get (WavChunk a)
 getWavChunk bps getter = go where
   go = do
-    lab <- getLabel
+    lab <- get
     if lab == labelData
       then fmap WavChunkData (getWavData bps getter)
       else fmap WavChunkUnparsed (getWavUnparsed lab)
@@ -199,7 +199,7 @@ getWavData bps getter = do
   unless (VP.length vec == samples) (fail "bad samples")
   pure $! WavData vec
 
-getWavUnparsed :: ByteString -> Get WavUnparsed
+getWavUnparsed :: Label -> Get WavUnparsed
 getWavUnparsed lab = do
   chunkSize <- getChunkSize
   contents <- getByteString (fromIntegral chunkSize)
@@ -216,13 +216,13 @@ getWavBody bps getter = go Empty where
 putSpecificWav :: (Prim a, SizedBinary a) => Wav a -> Put
 putSpecificWav (Wav (WavFormat nchan sr bps) mid (WavData vec) tra) = result where
   result = do
-    putByteString labelRiff
+    put labelRiff
     putChunkSize fileSize
-    putByteString labelWave
-    putByteString labelFmt
+    put labelWave
+    put labelFmt
     putFmt
     for_ mid putUnp
-    putByteString labelData
+    put labelData
     putChunkSize dataChunkSize
     putVec put vec
     for_ tra putUnp
@@ -235,7 +235,7 @@ putSpecificWav (Wav (WavFormat nchan sr bps) mid (WavData vec) tra) = result whe
     put bpsSlice
     put bps
   putUnp (WavUnparsed lab con) = do
-    putByteString lab
+    put lab
     putChunkSize (fromIntegral (BS.length con))
     putByteString con
   unpSize unps = getSum (foldMap' (\(WavUnparsed _ con) -> Sum (8 + fromIntegral (BS.length con))) unps)

@@ -38,6 +38,7 @@ library
   default-extensions:
       BangPatterns
       ConstraintKinds
+      DataKinds
       DeriveFunctor
       DeriveFoldable
       DeriveGeneric
@@ -84,6 +85,7 @@ executable scrapti-exe
   default-extensions:
       BangPatterns
       ConstraintKinds
+      DataKinds
       DeriveFunctor
       DeriveFoldable
       DeriveGeneric
@@ -132,6 +134,7 @@ test-suite scrapti-test
   default-extensions:
       BangPatterns
       ConstraintKinds
+      DataKinds
       DeriveFunctor
       DeriveFoldable
       DeriveGeneric

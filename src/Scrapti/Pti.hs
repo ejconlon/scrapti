@@ -3,16 +3,13 @@
 
 module Scrapti.Pti where
 
-import Data.ByteString (ByteString)
-import qualified Data.ByteString as BS
 import Data.Default (Default (..))
 import Data.Int (Int8)
 import Data.Proxy (Proxy (..))
-import Data.Text (Text)
 import qualified Data.Vector.Primitive as VP
 import Data.Word (Word8)
-import Scrapti.Binary (Binary (..), BoolByte (..), DecodeT, FloatLE, Get, Int16LE, Word16LE, Word32LE, decodeGet,
-                       getByteString, getFixedString, putByteString, putFixedString)
+import Scrapti.Binary (Binary (..), BoolByte (..), DecodeT, FixedBytes, FixedText, FloatLE, Get, Int16LE, Word16LE,
+                       Word32LE, decodeGet)
 import Scrapti.Classes (BinaryRep (..), ViaBinaryRep (..), ViaBoundedEnum (..))
 import Scrapti.Wav (Wav, decodeSpecificWav)
 
@@ -73,7 +70,7 @@ instance Default SamplePlayback where
 
 data Preamble = Preamble
   { preIsWavetable :: !BoolByte
-  , preName :: !Text
+  , preName :: !(FixedText 30)
   , preSampleLength :: !Word32LE
   , preWavetableWindowSize :: !WavetableWindowSize
   , preWavetableTotalPositions :: !Word16LE
@@ -89,17 +86,17 @@ instance Default Preamble where
   def = Preamble (BoolByte False) "" 0 def 0 def 0 1 65534 65535 0
 
 data AuxPreamble = AuxPreamble
-  { auxPre0To19 :: !ByteString
-  , auxPre52To59 :: !ByteString
+  { auxPre0To19 :: !(FixedBytes 20)
+  , auxPre52To59 :: !(FixedBytes 8)
   , auxPre66To67 :: !Word16LE
-  , auxPre70To75 :: !ByteString
+  , auxPre70To75 :: !(FixedBytes 6)
   , auxPre77 :: !Word8
   , auxPre86To87 :: !Word16LE
   , auxPre90To91 :: !Word16LE
   } deriving stock (Eq, Show)
 
 instance Default AuxPreamble where
-  def = AuxPreamble (BS.replicate 20 0) (BS.replicate 8 0) def (BS.replicate 6 0) def def def
+  def = AuxPreamble def def def def def def def
 
 newtype PairPreamble = PairPreamble { unPairPreamble :: Pair AuxPreamble Preamble }
   deriving stock (Show)
@@ -108,13 +105,13 @@ newtype PairPreamble = PairPreamble { unPairPreamble :: Pair AuxPreamble Preambl
 instance Binary PairPreamble where
   get = do
     -- 0-19
-    auxPre0To19 <- getByteString 20
+    auxPre0To19 <- get
     -- 20
     preIsWavetable <- get
     -- 21-51
-    preName <- getFixedString 30
+    preName <- get
     -- 52-59
-    auxPre52To59 <- getByteString 8
+    auxPre52To59 <- get
     -- 60-63
     preSampleLength <- get
     -- 64-65
@@ -124,7 +121,7 @@ instance Binary PairPreamble where
     -- 68-69
     preWavetableTotalPositions <- get
     -- 70-75
-    auxPre70To75 <- getByteString 6
+    auxPre70To75 <- get
     -- 76
     preSamplePlayback <- get
     -- 77
@@ -149,13 +146,13 @@ instance Binary PairPreamble where
     pure $! PairPreamble pair
   put (PairPreamble (Pair (AuxPreamble {..}) (Preamble {..}))) = do
     -- 0-19
-    putByteString auxPre0To19
+    put auxPre0To19
     -- 20
     put preIsWavetable
     -- 21-51
-    putFixedString 30 preName
+    put preName
     -- 52-59
-    putByteString auxPre52To59
+    put auxPre52To59
     -- 60-63
     put preSampleLength
     -- 64-65
@@ -165,7 +162,7 @@ instance Binary PairPreamble where
     -- 68-69
     put preWavetableTotalPositions
     -- 70-75
-    putByteString auxPre70To75
+    put auxPre70To75
     -- 76
     put preSamplePlayback
     -- 77

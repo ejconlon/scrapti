@@ -1,25 +1,23 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Scrapti.Riff
-  ( labelRiff
-  , getLabel
+  ( Label
+  , labelRiff
   , expectLabel
   , getChunkSize
   , expectChunkSize
   , putChunkSize
   ) where
 
-import Data.ByteString (ByteString)
-import Scrapti.Binary (Binary (..), ByteLength, Get, Put, Word32LE, getByteString, getExpect)
+import Scrapti.Binary (Binary (..), ByteLength, FixedBytes, Get, Put, Word32LE, getExpect)
 
-labelRiff :: ByteString
+type Label = FixedBytes 4
+
+labelRiff :: Label
 labelRiff = "RIFF"
 
-getLabel :: Get ByteString
-getLabel = getByteString 4
-
-expectLabel :: ByteString -> Get ()
-expectLabel = getExpect "label" getLabel
+expectLabel :: Label -> Get ()
+expectLabel = getExpect "label" get
 
 getChunkSize :: Get ByteLength
 getChunkSize = fmap fromIntegral (get @Word32LE)
