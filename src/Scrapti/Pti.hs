@@ -8,11 +8,10 @@ module Scrapti.Pti where
 import Data.Default (Default (..))
 import Data.Int (Int8)
 import Data.Proxy (Proxy (..))
-import qualified Data.Vector.Primitive as VP
 import Data.Word (Word8)
 import GHC.Generics (Generic)
-import Scrapti.Binary (Binary (..), BoolByte (..), DecodeT, FixedBytes, FixedText, FloatLE, Get, Int16LE, Word16LE,
-                       Word32LE, decodeGet)
+import Scrapti.Binary (Binary (..), BoolByte (..), DecodeM, FixedBytes, FixedText, FixedVec, FloatLE, Get, Int16LE,
+                       Word16LE, Word32LE, decodeGet)
 import Scrapti.Classes (BinaryRep (..), Equiv (..), Pair (..), ViaBinaryRep (..), ViaBoundedEnum (..), ViaEquiv (..))
 import Scrapti.Wav (Wav, decodeSpecificWav)
 
@@ -341,7 +340,8 @@ data Filter = Filter
   { filtCutoff :: !Float
   , filtResonance :: !Float
   , filtType :: !FilterType
-  } deriving stock (Eq, Show)
+  } deriving stock (Eq, Show, Generic)
+    deriving anyclass (Binary)
 
 instance Default Filter where
   def = Filter 1.0 0.0 def
@@ -357,18 +357,56 @@ data InstParams = InstParams
 instance Default InstParams where
   def = InstParams 0 0 50 50 0
 
+data AuxInstParams = AuxInstParams
+  { aip273To275 :: !Word16LE
+  , aip277 :: !Word8
+  , aip279 :: !Word8
+  } deriving stock (Eq, Show)
+
+instance Default AuxInstParams where
+  def = AuxInstParams 0 0 0
+
+data MixInstParams = MixInstParams
+  { ipTune :: !Int8
+  -- 270
+  , ipFineTune :: !Int8
+  -- 271
+  , ipVolume :: !Word8
+  -- 272
+  , aip273To275 :: !Word16LE
+  -- 273-275
+  , ipPanning :: !Word8
+  -- 276
+  , aip277 :: !Word8
+  -- 277
+  , ipDelaySend :: !Word8
+  -- 278
+  , aip279 :: !Word8
+  -- 279
+  } deriving stock (Eq, Show, Generic)
+    deriving anyclass (Binary)
+
+newtype PairInstParams = PairInstParams { unPairInstParams :: Pair AuxInstParams InstParams }
+  deriving stock (Show)
+  deriving newtype (Eq, Default)
+  deriving (Binary) via (ViaEquiv PairInstParams)
+
+instance Equiv MixInstParams PairInstParams where
+  equivFwd (MixInstParams {..}) = PairInstParams (Pair (AuxInstParams {..}) (InstParams {..}))
+  equivBwd (PairInstParams (Pair (AuxInstParams {..}) (InstParams {..}))) = MixInstParams {..}
+
 numSlices :: Int
 numSlices = 48
 
 data Slices = Slices
-  { slicesAdjust :: !(VP.Vector Word16LE)
-  -- ^ Must be 48 elements long
+  { slicesAdjust :: !(FixedVec 48 Word16LE)
   , slicesNumber :: !Word8
   , slicesActive :: !Word8
-  } deriving stock (Eq, Show)
+  } deriving stock (Eq, Show, Generic)
+    deriving anyclass (Binary)
 
 instance Default Slices where
-  def = Slices (VP.replicate numSlices 0) 0 0
+  def = Slices def 0 0
 
 data GranularShape =
     GSSquare
@@ -397,7 +435,8 @@ data Granular = Granular
   , granPos :: !Word16LE
   , granShape :: !GranularShape
   , granLoopMode :: !GranularLoopMode
-  } deriving stock (Eq, Show)
+  } deriving stock (Eq, Show, Generic)
+    deriving anyclass (Binary)
 
 instance Default Granular where
   def = Granular 441 0 def def
@@ -411,31 +450,73 @@ data Effects = Effects
 instance Default Effects where
   def = Effects 0 0 16
 
+data AuxEffects = AuxEffects
+  { auxEff387 :: !Word8
+  , auxEff388To391 :: !Word32LE
+  } deriving stock (Eq, Show)
+
+instance Default AuxEffects where
+  def = AuxEffects 0 0
+
+data MixEffects = MixEffects
+  { effReverbSend :: !Word8
+  -- 384
+  , effOverdrive :: !Word8
+  -- 385
+  , effBitDepth :: !Word8
+  -- 386
+  , auxEff387 :: !Word8
+  -- 387
+  , auxEff388To391 :: !Word32LE
+  -- 388-391
+  } deriving stock (Eq, Show, Generic)
+    deriving anyclass (Binary)
+
+newtype PairEffects = PairEffects { unPairEffects :: Pair AuxEffects Effects }
+  deriving stock (Show)
+  deriving newtype (Eq, Default)
+  deriving (Binary) via (ViaEquiv PairEffects)
+
+instance Equiv MixEffects PairEffects where
+  equivFwd (MixEffects {..}) = PairEffects (Pair (AuxEffects {..}) (Effects {..}))
+  equivBwd (PairEffects (Pair (AuxEffects {..}) (Effects {..}))) = MixEffects {..}
+
+data Block a = Block
+  { blockVolume :: !a
+  , blockPanning :: !a
+  , blockCutoff :: !a
+  , blockWavetablePosition :: !a
+  , blockGranularPosition :: !a
+  , blockFinetune :: !a
+  } deriving stock (Eq, Show)
+
+instance Default a => Default (Block a) where
+  def = let a = def in Block a a a a a a
+
 data Header = Header
   { headPreamble :: !Preamble
-  , headVolumeAuto :: !Auto
-  , headPanningAuto :: !Auto
-  , headCutoffAuto :: !Auto
-  , headWavetablePositionAuto :: !Auto
-  , headGranularPositionAuto :: !Auto
-  , headFinetuneAuto :: !Auto
-  , headVolumeLfo :: !Lfo
-  , headPanningLfo :: !Lfo
-  , headCutoffLfo :: !Lfo
-  , headWavetablePositionLfo :: !Lfo
-  , headGranularPositionLfo :: !Lfo
-  , headFinetuneLfo :: !Lfo
+  , headAutoBlock :: !(Block Auto)
+  , headLfoBlock :: !(Block Lfo)
   , headFilter :: !Filter
   , headInstParams :: !InstParams
   , headSlices :: !Slices
+  , headGranular :: !Granular
+  , headEffects :: !Effects
   } deriving stock (Eq, Show)
 
 instance Default Header where
-  def = Header def def def def def def def def def def def def def def def def
+  def = Header def def def def def def def def
 
 data AuxHeader = AuxHeader
-  {
+  { ahPreamble :: !AuxPreamble
+  , ahAutoBlock :: !(Block AuxAutoEnvelope)
+  , ahLfoBlock :: !(Block AuxLfo)
+  , ahInstParams :: !AuxInstParams
+  , ahEffects :: !AuxEffects
   } deriving stock (Eq, Show)
+
+instance Default AuxHeader where
+  def = AuxHeader def def def def def
 
 data Pti = Pti
   { ptiHeader :: !Header
@@ -448,7 +529,7 @@ instance Default Pti where
 getPairHeader :: Get (Pair AuxHeader Header)
 getPairHeader = undefined
 
-decodePairPti :: Monad m => DecodeT m (Pair AuxHeader Pti)
+decodePairPti :: DecodeM (Pair AuxHeader Pti)
 decodePairPti = do
   Pair auxHd hd <- decodeGet getPairHeader
   wav <- decodeSpecificWav Proxy

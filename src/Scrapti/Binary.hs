@@ -8,8 +8,6 @@ module Scrapti.Binary
   , ByteLength (..)
   , ByteOffset
   , DecodeState (..)
-  , DecodeT (..)
-  , runDecodeT
   , DecodeM
   , runDecodeM
   , decodeFail
@@ -20,6 +18,8 @@ module Scrapti.Binary
   , decodeRepeated
   , ByteSized (..)
   , StaticByteSized (..)
+  , WithByteSize (..)
+  , BinarySized (..)
   , ViaStaticByteSized (..)
   , BoolByte (..)
   , FloatLE (..)
@@ -39,6 +39,7 @@ module Scrapti.Binary
   , getVecWith
   , getSeq
   , getSeqWith
+  , getRepeated
   , skip
   , putByteString
   , putVec
@@ -49,11 +50,8 @@ module Scrapti.Binary
 
 import Control.Monad (unless)
 import Control.Monad.Except (ExceptT, MonadError (..), runExceptT)
-import Control.Monad.Identity (Identity (..))
-import Control.Monad.IO.Class (MonadIO)
-import Control.Monad.State.Strict (MonadState, StateT (..), gets)
+import Control.Monad.State.Strict (MonadState, State, gets, runState)
 import qualified Control.Monad.State.Strict as State
-import Control.Monad.Trans (MonadTrans (..))
 import Data.Binary (Binary (..))
 import Data.Binary.Get (ByteOffset, Get, getByteString, getFloatle, getInt16le, getInt32le, getInt64le, getWord16le,
                         getWord32le, getWord64le, getWord8, runGetOrFail, skip)
@@ -88,34 +86,26 @@ data DecodeState = DecodeState
   , decStateOffset :: !ByteOffset
   } deriving stock (Eq, Show)
 
-newtype DecodeT m a = DecodeT { unDecodeT :: ExceptT String (StateT DecodeState m) a }
-  deriving newtype (Functor, Applicative, Monad, MonadState DecodeState, MonadIO)
+newtype DecodeM a = DecodeM { unDecodeM :: ExceptT String (State DecodeState) a }
+  deriving newtype (Functor, Applicative, Monad, MonadState DecodeState)
 
-instance Monad m => MonadFail (DecodeT m) where
-  fail = DecodeT . throwError
-
-instance MonadTrans DecodeT where
-  lift = DecodeT . lift . lift
-
-runDecodeT :: DecodeT m a -> DecodeState -> m (Either String a, DecodeState)
-runDecodeT dm = runStateT (runExceptT (unDecodeT dm))
-
-type DecodeM = DecodeT Identity
+instance MonadFail DecodeM where
+  fail = DecodeM . throwError
 
 runDecodeM :: DecodeM a -> DecodeState -> (Either String a, DecodeState)
-runDecodeM dm = runIdentity . runDecodeT dm
+runDecodeM dm = runState (runExceptT (unDecodeM dm))
 
-decodeFail :: MonadFail m => BSL.ByteString -> DecodeT m a -> m a
-decodeFail bs act = do
-  (ea, _) <- runDecodeT act (DecodeState bs 0)
-  either fail pure ea
+decodeFail :: MonadFail m => BSL.ByteString -> DecodeM a -> m a
+decodeFail bs act =
+  let (ea, _) = runDecodeM act (DecodeState bs 0)
+  in either fail pure ea
 
-guardEnd :: Monad m => DecodeT m ()
+guardEnd :: DecodeM ()
 guardEnd = do
   bs <- gets decStateInput
   unless (BSL.null bs) (fail "not end of input")
 
-decodeBounded :: Monad m => ByteLength -> DecodeT m a -> DecodeT m a
+decodeBounded :: ByteLength -> DecodeM a -> DecodeM a
 decodeBounded len dec = do
   off <- gets decStateOffset
   let !end = off + unByteLength len
@@ -126,13 +116,13 @@ decodeBounded len dec = do
     | off' == end -> pure elt
     | otherwise -> fail ("consumed too little input: " ++ show (end - off'))
 
-decodeFolded :: Monad m => ByteLength -> b -> (b -> DecodeT m b) -> DecodeT m b
+decodeFolded :: ByteLength -> b -> (b -> DecodeM b) -> DecodeM b
 decodeFolded len acc fdec = do
   off <- gets decStateOffset
   let !end = off + unByteLength len
   decodeFoldedUntil end acc fdec
 
-decodeFoldedUntil :: Monad m => ByteOffset -> b -> (b -> DecodeT m b) -> DecodeT m b
+decodeFoldedUntil :: ByteOffset -> b -> (b -> DecodeM b) -> DecodeM b
 decodeFoldedUntil end acc0 fdec = go acc0 where
   go !acc = do
     off' <- gets decStateOffset
@@ -143,10 +133,10 @@ decodeFoldedUntil end acc0 fdec = go acc0 where
         acc' <- fdec acc
         go acc'
 
-decodeRepeated :: Monad m => ByteLength -> DecodeT m a -> DecodeT m (Seq a)
+decodeRepeated :: ByteLength -> DecodeM a -> DecodeM (Seq a)
 decodeRepeated len dec = decodeFolded len Empty (\acc -> fmap (acc :|>) dec)
 
-decodeGet :: Monad m => Get a -> DecodeT m a
+decodeGet :: Get a -> DecodeM a
 decodeGet getter = do
   DecodeState bs off <- State.get
   case runGetOrFail getter bs of
@@ -193,6 +183,16 @@ putSeqWith = traverse_
 putSeq :: Binary a => Seq a -> Put
 putSeq = putSeqWith put
 
+getRepeated :: BinarySized a => ByteLength -> Get (Seq a)
+getRepeated = go Empty where
+  go !acc !left = do
+    if
+      | left == 0 -> pure acc
+      | left < 0 -> fail ("consumed too much input by: " ++ show left ++ " for number of elements: " ++ show (Seq.length acc))
+      | otherwise -> do
+        WithByteSize sz a <- getSized
+        go (acc :|> a) (left - sz)
+
 class ByteSized a where
   byteSize :: a -> ByteLength
 
@@ -217,15 +217,29 @@ instance StaticByteSized Int8 where
 instance StaticByteSized Word8 where
   staticByteSize = const 1
 
+data WithByteSize a = WithByteSize !ByteLength !a
+  deriving stock (Eq, Show)
+
+instance (ByteSized a, Default a) => Default (WithByteSize a) where
+  def = let a = def in WithByteSize (byteSize a) a
+
+class (ByteSized a, Binary a) => BinarySized a where
+  getSized :: Get (WithByteSize a)
+  getSized = fmap (\a -> WithByteSize (byteSize a) a) get
+
 newtype ViaStaticByteSized a = ViaStaticByteSized { unStaticByteSized :: a }
+  deriving newtype (Binary)
 
 instance StaticByteSized a => ByteSized (ViaStaticByteSized a) where
   byteSize = const (staticByteSize (Proxy :: Proxy a))
 
+instance (StaticByteSized a, Binary a) => BinarySized (ViaStaticByteSized a) where
+  getSized = fmap (WithByteSize (staticByteSize (Proxy :: Proxy a)) . ViaStaticByteSized) get
+
 newtype BoolByte = BoolByte { unBoolByte :: Bool }
   deriving stock (Show)
   deriving newtype (Eq)
-  deriving (ByteSized) via (ViaStaticByteSized BoolByte)
+  deriving (ByteSized, BinarySized) via (ViaStaticByteSized BoolByte)
 
 instance Binary BoolByte where
   get = fmap (BoolByte . (== 0)) getWord8
@@ -240,7 +254,7 @@ instance Default BoolByte where
 newtype FloatLE = FloatLE { unFloatLE :: Float }
   deriving stock (Show)
   deriving newtype (Eq, Ord, Num, Real, Fractional, Prim, Default)
-  deriving (ByteSized) via (ViaStaticByteSized FloatLE)
+  deriving (ByteSized, BinarySized) via (ViaStaticByteSized FloatLE)
 
 instance Binary FloatLE where
   get = fmap FloatLE getFloatle
@@ -252,7 +266,7 @@ instance StaticByteSized FloatLE where
 newtype Word16LE = Word16LE { unWord16LE :: Word16 }
   deriving stock (Show)
   deriving newtype (Eq, Ord, Num, Enum, Real, Integral, Prim, Default)
-  deriving (ByteSized) via (ViaStaticByteSized Word16LE)
+  deriving (ByteSized, BinarySized) via (ViaStaticByteSized Word16LE)
 
 instance Binary Word16LE where
   get = fmap Word16LE getWord16le
@@ -264,7 +278,7 @@ instance StaticByteSized Word16LE where
 newtype Int16LE = Int16LE { unInt16LE :: Int16 }
   deriving stock (Show)
   deriving newtype (Eq, Ord, Num, Enum, Real, Integral, Prim, Default)
-  deriving (ByteSized) via (ViaStaticByteSized Int16LE)
+  deriving (ByteSized, BinarySized) via (ViaStaticByteSized Int16LE)
 
 instance Binary Int16LE where
   get = fmap Int16LE getInt16le
@@ -276,7 +290,7 @@ instance StaticByteSized Int16LE where
 newtype Word32LE = Word32LE { unWord32LE :: Word32 }
   deriving stock (Show)
   deriving newtype (Eq, Ord, Num, Enum, Real, Integral, Prim, Default)
-  deriving (ByteSized) via (ViaStaticByteSized Word32LE)
+  deriving (ByteSized, BinarySized) via (ViaStaticByteSized Word32LE)
 
 instance Binary Word32LE where
   get = fmap Word32LE getWord32le
@@ -288,7 +302,7 @@ instance StaticByteSized Word32LE where
 newtype Int32LE = Int32LE { unInt32LE :: Int32 }
   deriving stock (Show)
   deriving newtype (Eq, Ord, Num, Enum, Real, Integral, Prim, Default)
-  deriving (ByteSized) via (ViaStaticByteSized Int32LE)
+  deriving (ByteSized, BinarySized) via (ViaStaticByteSized Int32LE)
 
 instance Binary Int32LE where
   get = fmap Int32LE getInt32le
@@ -300,7 +314,7 @@ instance StaticByteSized Int32LE where
 newtype Word64LE = Word64LE { unWord64LE :: Word64 }
   deriving stock (Show)
   deriving newtype (Eq, Ord, Num, Enum, Real, Integral, Prim, Default)
-  deriving (ByteSized) via (ViaStaticByteSized Word64LE)
+  deriving (ByteSized, BinarySized) via (ViaStaticByteSized Word64LE)
 
 instance Binary Word64LE where
   get = fmap Word64LE getWord64le
@@ -312,7 +326,7 @@ instance StaticByteSized Word64LE where
 newtype Int64LE = Int64LE { unInt64LE :: Int64 }
   deriving stock (Show)
   deriving newtype (Eq, Ord, Num, Enum, Real, Integral, Prim, Default)
-  deriving (ByteSized) via (ViaStaticByteSized Int64LE)
+  deriving (ByteSized, BinarySized) via (ViaStaticByteSized Int64LE)
 
 instance Binary Int64LE where
   get = fmap Int64LE getInt64le
@@ -329,6 +343,9 @@ getUntilNull = fmap (BS.pack . toList) (go Empty) where
       then pure acc
       else go (acc :|> w)
 
+-- | Text terminated with null byte
+-- NOTE Terminated with TWO null bytes if the string is even length
+-- to align to Word16 boundaries
 newtype TermText = TermText { unTermText :: Text }
   deriving stock (Show)
   deriving newtype (Eq, Ord, IsString)
@@ -355,6 +372,9 @@ instance ByteSized TermText where
     let len = fromIntegral (T.length t + 1)
     in if even len then len else len + 1
 
+-- Use the default impl - could be better, but doesn't really matter
+instance BinarySized TermText
+
 getFixedText :: ByteLength -> Get Text
 getFixedText len = fmap (TE.decodeLatin1 . BS.takeWhile (/= 0)) (getByteString (fromIntegral len))
 
@@ -369,7 +389,7 @@ putFixedText len t =
 newtype FixedText (n :: Nat) = FixedText { unFixedText :: Text }
   deriving stock (Show)
   deriving newtype (Eq, Ord, IsString)
-  deriving (ByteSized) via (ViaStaticByteSized (FixedText n))
+  deriving (ByteSized, BinarySized) via (ViaStaticByteSized (FixedText n))
 
 instance Default (FixedText n) where
   def = FixedText T.empty
@@ -391,7 +411,7 @@ putFixedBytes len bs0 =
 newtype FixedBytes (n :: Nat) = FixedBytes { unFixedBytes :: ByteString }
   deriving stock (Show)
   deriving newtype (Eq, Ord, IsString)
-  deriving (ByteSized) via (ViaStaticByteSized (FixedBytes n))
+  deriving (ByteSized, BinarySized) via (ViaStaticByteSized (FixedBytes n))
 
 instance Default (FixedBytes n) where
   def = FixedBytes BS.empty
@@ -406,7 +426,7 @@ instance KnownNat n => StaticByteSized (FixedBytes n) where
 newtype FixedVec (n :: Nat) a = FixedVec { unFixedVec :: VP.Vector a }
   deriving stock (Show)
   deriving newtype (Eq)
-  deriving (ByteSized) via (ViaStaticByteSized (FixedVec n a))
+  deriving (ByteSized, BinarySized) via (ViaStaticByteSized (FixedVec n a))
 
 instance (KnownNat n, Prim a, Default a) => Default (FixedVec n a) where
   def = FixedVec (VP.replicate (fromIntegral (natVal (Proxy :: Proxy n))) def)

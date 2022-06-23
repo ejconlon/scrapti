@@ -31,7 +31,7 @@ import Data.Proxy (Proxy)
 import Data.Semigroup (Sum (..))
 import Data.Sequence (Seq (..))
 import qualified Data.Vector.Primitive as VP
-import Scrapti.Binary (Binary (..), ByteLength, ByteSized, DecodeState (..), DecodeT, Get, Int16LE, Int32LE, Int64LE,
+import Scrapti.Binary (Binary (..), ByteLength, ByteSized, DecodeM, DecodeState (..), Get, Int16LE, Int32LE, Int64LE,
                        Put, Word16LE, Word32LE (..), decodeBounded, decodeGet, getByteString, getExpect, getVecWith,
                        guardEnd, putByteString, putVec, runPut, skip)
 import Scrapti.Riff (Label, expectLabel, getChunkSize, labelRiff, putChunkSize)
@@ -101,13 +101,13 @@ data WavChunk a =
 wavDataSamples :: Prim a => WavData a -> Int
 wavDataSamples = VP.length . unWavData
 
-decodeWavHeader :: Monad m => DecodeT m WavHeader
+decodeWavHeader :: DecodeM WavHeader
 decodeWavHeader = decodeGet getWavHeader
 
-decodeWavChunk :: (Monad m, Prim a) => BitLength -> Get a -> DecodeT m (WavChunk a)
+decodeWavChunk :: Prim a => BitLength -> Get a -> DecodeM (WavChunk a)
 decodeWavChunk bps getter = decodeGet (getWavChunk bps getter)
 
-decodeWavTrailers :: Monad m => DecodeT m (Seq WavUnparsed)
+decodeWavTrailers :: DecodeM (Seq WavUnparsed)
 decodeWavTrailers = go Empty where
   go !acc = do
     bs <- gets decStateInput
@@ -117,19 +117,19 @@ decodeWavTrailers = go Empty where
         unp <- decodeGet (get >>= getWavUnparsed)
         go (acc :|> unp)
 
-decodeAnyWav :: Monad m => DecodeT m (Sampled Wav)
+decodeAnyWav :: DecodeM (Sampled Wav)
 decodeAnyWav = do
   WavHeader remainingSize fmt <- decodeWavHeader
   case getSampled (wfBitsPerSample fmt) of
     Nothing -> fail "bad bps"
     Just (Sampled getter) -> fmap Sampled (decodeRestOfWav remainingSize fmt getter)
 
-decodeSpecificWav :: (Monad m, Prim a, Binary a) => Proxy a -> DecodeT m (Wav a)
+decodeSpecificWav :: (Prim a, Binary a) => Proxy a -> DecodeM (Wav a)
 decodeSpecificWav _ = do
   WavHeader remainingSize fmt <- decodeWavHeader
   decodeRestOfWav remainingSize fmt get
 
-decodeRestOfWav :: (Monad m, Prim a) => ByteLength -> WavFormat -> Get a -> DecodeT m (Wav a)
+decodeRestOfWav :: Prim a => ByteLength -> WavFormat -> Get a -> DecodeM (Wav a)
 decodeRestOfWav remainingSize fmt getter = do
   decodeBounded remainingSize $ do
     WavBody mid dat <- decodeGet (getWavBody (wfBitsPerSample fmt) getter)

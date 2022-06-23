@@ -33,39 +33,42 @@ drumDataLen = 248886
 testWavHeader :: TestTree
 testWavHeader = testCase "header" $ do
   bs <- BSL.readFile "testdata/drums.wav"
-  decodeFail bs $ do
+  (startOff, header, endOff) <- decodeFail bs $ do
     startOff <- gets decStateOffset
-    liftIO (startOff @?= 0)
     header <- decodeWavHeader
-    liftIO (header @?= drumHeader)
     endOff <- gets decStateOffset
-    liftIO (endOff @?= fromIntegral dataOffset)
+    pure (startOff, header, endOff)
+  startOff @?= 0
+  header @?= drumHeader
+  endOff @?= fromIntegral dataOffset
 
 testWavData :: TestTree
 testWavData = testCase "data" $ do
   bs <- BSL.readFile "testdata/drums.wav"
-  decodeFail bs $ do
+  (startOff, vec) <- decodeFail bs $ do
     decodeGet (skip dataOffset)
     startOff <- gets decStateOffset
-    liftIO (startOff @?= fromIntegral dataOffset)
     chunk <- decodeWavChunk 16 (get @Int16LE)
     case chunk of
-      WavChunkData (WavData vec) -> liftIO (VP.length vec @?= drumDataLen)
+      WavChunkData (WavData vec) -> pure (startOff, vec)
       _ -> fail "expected data"
+  startOff @?= fromIntegral dataOffset
+  VP.length vec @?= drumDataLen
 
 testWavWhole :: TestTree
 testWavWhole = testCase "whole" $ do
   bs <- BSL.readFile "testdata/drums.wav"
-  decodeFail bs $ do
-    Sampled (Wav fmt mid (WavData vec) tra) <- decodeAnyWav
-    liftIO (fmt @?= drumFmt)
-    liftIO (Seq.length mid @?= 0)
-    liftIO (VP.length vec @?= drumDataLen)
-    liftIO (Seq.length tra @?= 2)
+  (swav, endInp, endOff) <- decodeFail bs $ do
+    swav <- decodeAnyWav
     endInp <- gets decStateInput
-    liftIO (assertBool "expected file end" (BSL.null endInp))
     endOff <- gets decStateOffset
-    liftIO (endOff @?= drumEndOffset)
+    pure (swav, endInp, endOff)
+  let Sampled (Wav fmt mid _ tra) = swav
+  fmt @?= drumFmt
+  Seq.length mid @?= 0
+  Seq.length tra @?= 2
+  assertBool "expected file end" (BSL.null endInp)
+  endOff @?= drumEndOffset
 
 testWavWrite :: TestTree
 testWavWrite = testCase "write" $ do

@@ -32,7 +32,7 @@ import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
 import Data.Word (Word8)
 import GHC.Generics (Generic)
-import Scrapti.Binary (Binary (..), ByteLength, ByteSized (..), DecodeT, FixedText, Get, Int16LE, Put, TermText,
+import Scrapti.Binary (Binary (..), ByteLength, ByteSized (..), DecodeM, FixedText, Get, Int16LE, Put, TermText,
                        Word16LE, Word32LE, decodeBounded, decodeGet, decodeRepeated, getByteString, getSeq, getVec,
                        guardEnd, putByteString, putSeq, putVec, runPut, skip)
 import Scrapti.Riff (Label, expectLabel, getChunkSize, labelRiff, putChunkSize)
@@ -531,7 +531,7 @@ getSfontHeader = do
   expectLabel labelSfbk
   pure $! chunkSize - 4
 
-decodeSfont :: Monad m => DecodeT m Sfont
+decodeSfont :: DecodeM Sfont
 decodeSfont = do
   remainingSize <- decodeGet getSfontHeader
   sfont <- decodeBounded remainingSize $ do
@@ -549,7 +549,7 @@ getInfosHeader = do
   expectLabel labelInfo
   pure $! chunkSize - 4
 
-decodeInfoChunk :: Monad m => DecodeT m InfoChunk
+decodeInfoChunk :: DecodeM InfoChunk
 decodeInfoChunk = do
   remainingSize <- decodeGet getInfosHeader
   fmap InfoChunk (decodeRepeated remainingSize (decodeGet get))
@@ -637,7 +637,7 @@ whichTagGen = \case
   GenRootKey _ -> 58
   GenReserved t _ -> t
 
-decodePdtaChunk :: Monad m => DecodeT m PdtaChunk
+decodePdtaChunk :: DecodeM PdtaChunk
 decodePdtaChunk = do
   remainingBytes <- decodeGet getPdtaHeader
   fmap PdtaChunk (decodeRepeated remainingBytes (decodeGet get))
