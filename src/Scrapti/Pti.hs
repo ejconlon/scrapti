@@ -160,45 +160,32 @@ data AuxAutoEnvelope = AuxAutoEnvelope
 instance Default AuxAutoEnvelope where
   def = AuxAutoEnvelope 0 0
 
+data MixAutoEnvelope = MixAutoEnvelope
+  { aeAmount :: !FloatLE
+  -- 92-95
+  , aae96To97 :: !Word16LE
+  -- 96-97
+  , aeAttack :: !Word16LE
+  -- 98-909
+  , aae100To101 :: !Word16LE
+  -- 100-101
+  , aeDecay :: !Word16LE
+  -- 102-103
+  , aeSustain :: !FloatLE
+  -- 104-107
+  , aeRelease :: !Word16LE
+  -- 108-109
+  } deriving stock (Eq, Show, Generic)
+    deriving anyclass (Binary)
+
 newtype PairAutoEnvelope = PairAutoEnvelope { unPairAutoEnvelope :: Pair AuxAutoEnvelope AutoEnvelope }
   deriving stock (Show)
   deriving newtype (Eq, Default)
+  deriving (Binary) via (ViaEquiv PairAutoEnvelope)
 
-instance Binary PairAutoEnvelope where
-  get = do
-    -- 92-95
-    aeAmount <- get
-    -- 96-97
-    aae96To97 <- get
-    -- 98-99
-    aeAttack <- get
-    -- 100-101
-    aae100To101 <- get
-    -- 102-103
-    aeDecay <- get
-    -- 104-107
-    aeSustain <- get
-    -- 108-109
-    aeRelease <- get
-    let !aae = AuxAutoEnvelope {..}
-        !ae = AutoEnvelope {..}
-        !pair = Pair aae ae
-    pure $! PairAutoEnvelope pair
-  put (PairAutoEnvelope (Pair (AuxAutoEnvelope {..}) (AutoEnvelope {..}))) = do
-    -- 92-95
-    put aeAmount
-    -- 96-97
-    put aae96To97
-    -- 98-99
-    put aeAttack
-    -- 100-101
-    put aae100To101
-    -- 102-103
-    put aeDecay
-    -- 104-107
-    put aeSustain
-    -- 108-109
-    put aeRelease
+instance Equiv MixAutoEnvelope PairAutoEnvelope where
+  equivFwd (MixAutoEnvelope {..}) = PairAutoEnvelope (Pair (AuxAutoEnvelope {..}) (AutoEnvelope {..}))
+  equivBwd (PairAutoEnvelope (Pair (AuxAutoEnvelope {..}) (AutoEnvelope {..}))) = MixAutoEnvelope {..}
 
 data AutoType =
     ATOff
@@ -305,33 +292,26 @@ newtype AuxLfo = AuxLfo
 instance Default AuxLfo where
   def = AuxLfo 0
 
+data MixLfo = MixLfo
+  { lfoType :: !LfoType
+  -- 212
+  , lfoSteps :: !LfoSteps
+  -- 213
+  , auxLfo214To215 :: Word16LE
+  -- 214-215
+  , lfoAmount :: !FloatLE
+  -- 216-219
+  } deriving stock (Eq, Show, Generic)
+    deriving anyclass (Binary)
+
 newtype PairLfo = PairLfo { unPairLfo :: Pair AuxLfo Lfo }
   deriving stock (Show)
   deriving newtype (Eq, Default)
+  deriving (Binary) via (ViaEquiv PairLfo)
 
-instance Binary PairLfo where
-  get = do
-    -- 212
-    lfoType <- get @LfoType
-    -- 213
-    lfoSteps <- get @LfoSteps
-    -- 215-215
-    auxLfo214To215 <- get
-    -- 216-129
-    lfoAmount <- get
-    let !auxLfo = AuxLfo {..}
-        !lfo = Lfo {..}
-        !pair = Pair auxLfo lfo
-    pure $! PairLfo pair
-  put (PairLfo (Pair (AuxLfo {..}) (Lfo {..}))) = do
-    -- 212
-    put lfoType
-    -- 213
-    put lfoSteps
-    -- 215-215
-    put auxLfo214To215
-    -- 216-129
-    put lfoAmount
+instance Equiv MixLfo PairLfo where
+  equivFwd (MixLfo {..}) = PairLfo (Pair (AuxLfo {..}) (Lfo {..}))
+  equivBwd (PairLfo (Pair (AuxLfo {..}) (Lfo {..}))) = MixLfo {..}
 
 data FilterType =
     FTDisabled

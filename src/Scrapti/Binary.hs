@@ -19,6 +19,8 @@ module Scrapti.Binary
   , decodeFolded
   , decodeRepeated
   , ByteSized (..)
+  , StaticByteSized (..)
+  , ViaStaticByteSized (..)
   , BoolByte (..)
   , FloatLE (..)
   , Word16LE (..)
@@ -30,6 +32,7 @@ module Scrapti.Binary
   , TermText (..)
   , FixedText (..)
   , FixedBytes (..)
+  , FixedVec (..)
   , getByteString
   , getExpect
   , getVec
@@ -61,10 +64,11 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC
 import qualified Data.ByteString.Lazy as BSL
 import Data.Default (Default (..))
-import Data.Foldable (toList, traverse_)
+import Data.Foldable (foldMap', toList, traverse_)
 import Data.Int (Int16, Int32, Int64, Int8)
 import Data.Primitive (Prim)
 import Data.Proxy (Proxy (..))
+import Data.Semigroup (Sum (..))
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
 import Data.String (IsString (..))
@@ -198,16 +202,37 @@ instance ByteSized Int8 where
 instance ByteSized Word8 where
   byteSize = const 1
 
+instance ByteSized a => ByteSized (Seq a) where
+  byteSize = getSum . foldMap' (Sum . byteSize)
+
+instance (ByteSized a, Prim a) => ByteSized (VP.Vector a) where
+  byteSize = getSum . VP.foldMap' (Sum . byteSize)
+
+class ByteSized a => StaticByteSized a where
+  staticByteSize :: Proxy a -> ByteLength
+
+instance StaticByteSized Int8 where
+  staticByteSize = const 1
+
+instance StaticByteSized Word8 where
+  staticByteSize = const 1
+
+newtype ViaStaticByteSized a = ViaStaticByteSized { unStaticByteSized :: a }
+
+instance StaticByteSized a => ByteSized (ViaStaticByteSized a) where
+  byteSize = const (staticByteSize (Proxy :: Proxy a))
+
 newtype BoolByte = BoolByte { unBoolByte :: Bool }
   deriving stock (Show)
   deriving newtype (Eq)
+  deriving (ByteSized) via (ViaStaticByteSized BoolByte)
 
 instance Binary BoolByte where
   get = fmap (BoolByte . (== 0)) getWord8
   put (BoolByte b) = putWord8 (if b then 1 else 0)
 
-instance ByteSized BoolByte where
-  byteSize = const 1
+instance StaticByteSized BoolByte where
+  staticByteSize = const 1
 
 instance Default BoolByte where
   def = BoolByte False
@@ -215,79 +240,86 @@ instance Default BoolByte where
 newtype FloatLE = FloatLE { unFloatLE :: Float }
   deriving stock (Show)
   deriving newtype (Eq, Ord, Num, Real, Fractional, Prim, Default)
+  deriving (ByteSized) via (ViaStaticByteSized FloatLE)
 
 instance Binary FloatLE where
   get = fmap FloatLE getFloatle
   put = putFloatle . unFloatLE
 
-instance ByteSized FloatLE where
-  byteSize = const 4
+instance StaticByteSized FloatLE where
+  staticByteSize = const 4
 
 newtype Word16LE = Word16LE { unWord16LE :: Word16 }
   deriving stock (Show)
   deriving newtype (Eq, Ord, Num, Enum, Real, Integral, Prim, Default)
+  deriving (ByteSized) via (ViaStaticByteSized Word16LE)
 
 instance Binary Word16LE where
   get = fmap Word16LE getWord16le
   put = putWord16le . unWord16LE
 
-instance ByteSized Word16LE where
-  byteSize = const 2
+instance StaticByteSized Word16LE where
+  staticByteSize = const 2
 
 newtype Int16LE = Int16LE { unInt16LE :: Int16 }
   deriving stock (Show)
   deriving newtype (Eq, Ord, Num, Enum, Real, Integral, Prim, Default)
+  deriving (ByteSized) via (ViaStaticByteSized Int16LE)
 
 instance Binary Int16LE where
   get = fmap Int16LE getInt16le
   put = putInt16le . unInt16LE
 
-instance ByteSized Int16LE where
-  byteSize = const 2
+instance StaticByteSized Int16LE where
+  staticByteSize = const 2
 
 newtype Word32LE = Word32LE { unWord32LE :: Word32 }
   deriving stock (Show)
   deriving newtype (Eq, Ord, Num, Enum, Real, Integral, Prim, Default)
+  deriving (ByteSized) via (ViaStaticByteSized Word32LE)
 
 instance Binary Word32LE where
   get = fmap Word32LE getWord32le
   put = putWord32le . unWord32LE
 
-instance ByteSized Word32LE where
-  byteSize = const 4
+instance StaticByteSized Word32LE where
+  staticByteSize = const 4
 
 newtype Int32LE = Int32LE { unInt32LE :: Int32 }
   deriving stock (Show)
   deriving newtype (Eq, Ord, Num, Enum, Real, Integral, Prim, Default)
+  deriving (ByteSized) via (ViaStaticByteSized Int32LE)
 
 instance Binary Int32LE where
   get = fmap Int32LE getInt32le
   put = putInt32le . unInt32LE
 
-instance ByteSized Int32LE where
-  byteSize = const 4
+instance StaticByteSized Int32LE where
+  staticByteSize = const 4
 
 newtype Word64LE = Word64LE { unWord64LE :: Word64 }
   deriving stock (Show)
   deriving newtype (Eq, Ord, Num, Enum, Real, Integral, Prim, Default)
+  deriving (ByteSized) via (ViaStaticByteSized Word64LE)
 
 instance Binary Word64LE where
   get = fmap Word64LE getWord64le
   put = putWord64le . unWord64LE
 
-instance ByteSized Word64LE where
-  byteSize = const 8
+instance StaticByteSized Word64LE where
+  staticByteSize = const 8
 
 newtype Int64LE = Int64LE { unInt64LE :: Int64 }
   deriving stock (Show)
   deriving newtype (Eq, Ord, Num, Enum, Real, Integral, Prim, Default)
+  deriving (ByteSized) via (ViaStaticByteSized Int64LE)
 
 instance Binary Int64LE where
   get = fmap Int64LE getInt64le
   put = putInt64le . unInt64LE
 
-instance ByteSized Int64LE where
-  byteSize = const 8
+instance StaticByteSized Int64LE where
+  staticByteSize = const 8
 
 getUntilNull :: Get ByteString
 getUntilNull = fmap (BS.pack . toList) (go Empty) where
@@ -337,6 +369,7 @@ putFixedText len t =
 newtype FixedText (n :: Nat) = FixedText { unFixedText :: Text }
   deriving stock (Show)
   deriving newtype (Eq, Ord, IsString)
+  deriving (ByteSized) via (ViaStaticByteSized (FixedText n))
 
 instance Default (FixedText n) where
   def = FixedText T.empty
@@ -345,8 +378,8 @@ instance KnownNat n => Binary (FixedText n) where
   get = fmap FixedText (getFixedText (fromIntegral (natVal (Proxy :: Proxy n))))
   put ft@(FixedText t) = putFixedText (fromIntegral (natVal ft)) t
 
-instance KnownNat n => ByteSized (FixedText n) where
-  byteSize = fromIntegral . natVal
+instance KnownNat n => StaticByteSized (FixedText n) where
+  staticByteSize = const (fromIntegral (natVal (Proxy :: Proxy n)))
 
 putFixedBytes :: ByteLength -> ByteString -> Put
 putFixedBytes len bs0 =
@@ -358,6 +391,7 @@ putFixedBytes len bs0 =
 newtype FixedBytes (n :: Nat) = FixedBytes { unFixedBytes :: ByteString }
   deriving stock (Show)
   deriving newtype (Eq, Ord, IsString)
+  deriving (ByteSized) via (ViaStaticByteSized (FixedBytes n))
 
 instance Default (FixedBytes n) where
   def = FixedBytes BS.empty
@@ -366,5 +400,23 @@ instance KnownNat n => Binary (FixedBytes n) where
   get = fmap FixedBytes (getByteString (fromIntegral (natVal (Proxy :: Proxy n))))
   put fb@(FixedBytes bs) = putFixedBytes (fromIntegral (natVal fb)) bs
 
-instance KnownNat n => ByteSized (FixedBytes n) where
-  byteSize = fromIntegral . natVal
+instance KnownNat n => StaticByteSized (FixedBytes n) where
+  staticByteSize = const (fromIntegral (natVal (Proxy :: Proxy n)))
+
+newtype FixedVec (n :: Nat) a = FixedVec { unFixedVec :: VP.Vector a }
+  deriving stock (Show)
+  deriving newtype (Eq)
+  deriving (ByteSized) via (ViaStaticByteSized (FixedVec n a))
+
+instance (KnownNat n, Prim a, Default a) => Default (FixedVec n a) where
+  def = FixedVec (VP.replicate (fromIntegral (natVal (Proxy :: Proxy n))) def)
+
+instance (KnownNat n, Prim a, Binary a) => Binary (FixedVec n a) where
+  get = fmap FixedVec (getVec (fromIntegral (natVal (Proxy :: Proxy n))))
+  put (FixedVec v0) =
+    let !intLen = fromIntegral (natVal (Proxy :: Proxy n))
+        !v1 = if VP.length v0 == intLen then v0 else VP.take intLen v0
+    in putVec v1
+
+instance (KnownNat n, StaticByteSized a) => StaticByteSized (FixedVec n a) where
+  staticByteSize = const (fromIntegral (natVal (Proxy :: Proxy n)) * staticByteSize (Proxy :: Proxy a))
