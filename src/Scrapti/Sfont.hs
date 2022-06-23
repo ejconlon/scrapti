@@ -1,5 +1,5 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Scrapti.Sfont
   ( Sfont (..)
@@ -29,12 +29,12 @@ import Data.Semigroup (Sum (..))
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
 import Data.Word (Word8)
+import GHC.Generics (Generic)
 import Scrapti.Binary (Binary (..), ByteLength, DecodeT, FixedText, Get, Int16LE, Put, SizedBinary (..), TermText,
                        Word16LE, Word32LE, decodeBounded, decodeGet, decodeRepeated, getByteString, getSeq, getVec,
-                       guardEnd, putSeq, putVec, runPut, skip)
+                       guardEnd, putByteString, putSeq, putVec, runPut, skip)
 import Scrapti.Riff (Label, expectLabel, getChunkSize, labelRiff, putChunkSize)
 import Scrapti.Wav (WavData (..), wavDataSamples)
-import GHC.Generics (Generic)
 
 newtype SampleCount = Samplecount { unSampleCount :: Word32LE }
   deriving stock (Show)
@@ -63,10 +63,89 @@ data Info =
   | InfoReserved !Label !ByteString
   deriving stock (Eq, Show)
 
+instance Binary Info where
+  get = do
+    label <- get
+    chunkSize <- getChunkSize
+    if
+      | label == labelIfil -> do
+        unless (chunkSize == 4) (fail "bad ifil chunk size")
+        w1 <- get
+        w2 <- get
+        pure $! InfoVersion w1 w2
+      | label == labelIver -> do
+        unless (chunkSize == 4) (fail "bad iver chunk size")
+        w1 <- get
+        w2 <- get
+        pure $! InfoRomVersion w1 w2
+      | label == labelIsng -> fmap InfoTargetSoundEngine get
+      | label == labelInam -> fmap InfoBankName get
+      | label == labelIrom -> fmap InfoRomName get
+      | label == labelIcrd -> fmap InfoCreationDate get
+      | label == labelIeng -> fmap InfoAuthors get
+      | label == labelIprd -> fmap InfoIntendedProduct get
+      | label == labelIcop -> fmap InfoCopyrightMessage get
+      | label == labelIcmt -> fmap InfoComments get
+      | label == labelIsft -> fmap InfoUsedTools get
+      | otherwise -> do
+        bs <- getByteString (fromIntegral chunkSize)
+        pure $! InfoReserved label bs
+  put info = do
+    put (whichLabelInfo info)
+    putChunkSize (sizeInfo info)
+    case info of
+      InfoVersion w1 w2 -> put w1 *> put w2
+      InfoTargetSoundEngine z -> put z
+      InfoBankName z -> put z
+      InfoRomName z -> put z
+      InfoRomVersion w1 w2 -> put w1 *> put w2
+      InfoCreationDate z -> put z
+      InfoAuthors z -> put z
+      InfoIntendedProduct z -> put z
+      InfoCopyrightMessage z -> put z
+      InfoComments z -> put z
+      InfoUsedTools z -> put z
+      InfoReserved _ bs -> putByteString bs
+
 data Sdta = Sdta
   { sdtaHighBits :: !(WavData Int16LE)
   , sdtaLowBits :: !(Maybe (WavData Word8))
   } deriving stock (Eq, Show)
+
+instance Binary Sdta where
+  get = do
+    expectLabel labelList
+    chunkSize <- getChunkSize
+    expectLabel labelSdta
+    expectLabel labelSmpl
+    highSize <- getChunkSize
+    let !numSamples = div (fromIntegral highSize) 2
+    highBits <- getHighBits numSamples
+    let !numExtra = chunkSize - highSize - 12
+    if
+      | numExtra > 0 -> do
+        expectLabel labelSm24
+        lowSize <- getChunkSize
+        let !expectedSize = if even numSamples then numSamples else numSamples + 1
+        unless (fromIntegral lowSize == expectedSize) (fail "invalid low sample size")
+        lowBits <- getLowBits numSamples
+        unless (even numSamples) (skip 1)
+        pure $! Sdta highBits (Just lowBits)
+      | numExtra == 0 -> pure $! Sdta highBits Nothing
+      | otherwise -> fail "invalid sdata chunk/sample sizes"
+  put sdta@(Sdta highBits mayLowBits) = do
+    put labelList
+    putChunkSize (sizeSdta sdta)
+    put labelSdta
+    put labelSmpl
+    putChunkSize (fromIntegral (wavDataSamples highBits * 2))
+    putVec put (unWavData highBits)
+    case mayLowBits of
+      Nothing -> pure ()
+      Just lowBits -> do
+        put labelSm24
+        putChunkSize (fromIntegral (wavDataSamples lowBits))
+        putVec put (unWavData lowBits)
 
 data PdtaCat =
     PdtaCatPreset
@@ -278,7 +357,7 @@ decodeSfont = do
   remainingSize <- decodeGet getSfontHeader
   sfont <- decodeBounded remainingSize $ do
     infos <- decodeInfos
-    sdta <- decodeGet getSdta
+    sdta <- decodeGet get
     pdtaBlocks <- decodePdtaBlocks
     pure $! Sfont infos sdta pdtaBlocks
   guardEnd
@@ -291,66 +370,16 @@ getInfosHeader = do
   expectLabel labelInfo
   pure $! chunkSize - 4
 
-getInfo :: Get Info
-getInfo = do
-  label <- get
-  chunkSize <- getChunkSize
-  if
-    | label == labelIfil -> do
-      unless (chunkSize == 4) (fail "bad ifil chunk size")
-      w1 <- get
-      w2 <- get
-      pure $! InfoVersion w1 w2
-    | label == labelIver -> do
-      unless (chunkSize == 4) (fail "bad iver chunk size")
-      w1 <- get
-      w2 <- get
-      pure $! InfoRomVersion w1 w2
-    | label == labelIsng -> fmap InfoTargetSoundEngine get
-    | label == labelInam -> fmap InfoBankName get
-    | label == labelIrom -> fmap InfoRomName get
-    | label == labelIcrd -> fmap InfoCreationDate get
-    | label == labelIeng -> fmap InfoAuthors get
-    | label == labelIprd -> fmap InfoIntendedProduct get
-    | label == labelIcop -> fmap InfoCopyrightMessage get
-    | label == labelIcmt -> fmap InfoComments get
-    | label == labelIsft -> fmap InfoUsedTools get
-    | otherwise -> do
-      bs <- getByteString (fromIntegral chunkSize)
-      pure $! InfoReserved label bs
-
 decodeInfos :: Monad m => DecodeT m (Seq Info)
 decodeInfos = do
   remainingSize <- decodeGet getInfosHeader
-  decodeRepeated remainingSize (decodeGet getInfo)
+  decodeRepeated remainingSize (decodeGet get)
 
 getHighBits :: SampleCount -> Get (WavData Int16LE)
 getHighBits numSamples = fmap WavData (getVec (fromIntegral numSamples) get)
 
 getLowBits :: SampleCount -> Get (WavData Word8)
 getLowBits numSamples = fmap WavData (getVec (fromIntegral numSamples) get)
-
-getSdta :: Get Sdta
-getSdta = do
-  expectLabel labelList
-  chunkSize <- getChunkSize
-  expectLabel labelSdta
-  expectLabel labelSmpl
-  highSize <- getChunkSize
-  let !numSamples = div (fromIntegral highSize) 2
-  highBits <- getHighBits numSamples
-  let !numExtra = chunkSize - highSize - 12
-  if
-    | numExtra > 0 -> do
-      expectLabel labelSm24
-      lowSize <- getChunkSize
-      let !expectedSize = if even numSamples then numSamples else numSamples + 1
-      unless (fromIntegral lowSize == expectedSize) (fail "invalid low sample size")
-      lowBits <- getLowBits numSamples
-      unless (even numSamples) (skip 1)
-      pure $! Sdta highBits (Just lowBits)
-    | numExtra == 0 -> pure $! Sdta highBits Nothing
-    | otherwise -> fail "invalid sdata chunk/sample sizes"
 
 getPdtaHeader :: Get ByteLength
 getPdtaHeader = do
@@ -605,7 +634,7 @@ putSfont sfont@(Sfont infos sdta pdtaBlocks) = result where
     putChunkSize (sizeSfont sfont)
     put labelSfbk
     putInfos infos
-    putSdta sdta
+    put sdta
     putPdtaBlocks pdtaBlocks
 
 sizeSfont :: Sfont -> ByteLength
@@ -651,7 +680,7 @@ putInfos infos = do
   put labelList
   putChunkSize (sizeInfos infos)
   put labelInfo
-  putSeq putInfo infos
+  putSeq put infos
 
 whichLabelInfo :: Info -> Label
 whichLabelInfo = \case
@@ -667,39 +696,6 @@ whichLabelInfo = \case
   InfoComments _ -> labelIcmt
   InfoUsedTools _ -> labelIsft
   InfoReserved l _ -> l
-
-putInfo :: Info -> Put
-putInfo info = do
-  put (whichLabelInfo info)
-  putChunkSize (sizeInfo info)
-  case info of
-    InfoVersion w1 w2 -> put w1 *> put w2
-    InfoTargetSoundEngine z -> put z
-    InfoBankName z -> put z
-    InfoRomName z -> put z
-    InfoRomVersion w1 w2 -> put w1 *> put w2
-    InfoCreationDate z -> put z
-    InfoAuthors z -> put z
-    InfoIntendedProduct z -> put z
-    InfoCopyrightMessage z -> put z
-    InfoComments z -> put z
-    InfoUsedTools z -> put z
-    InfoReserved _ bs -> put bs
-
-putSdta :: Sdta -> Put
-putSdta sdta@(Sdta highBits mayLowBits) = do
-  put labelList
-  putChunkSize (sizeSdta sdta)
-  put labelSdta
-  put labelSmpl
-  putChunkSize (fromIntegral (wavDataSamples highBits * 2))
-  putVec put (unWavData highBits)
-  case mayLowBits of
-    Nothing -> pure ()
-    Just lowBits -> do
-      put labelSm24
-      putChunkSize (fromIntegral (wavDataSamples lowBits))
-      putVec put (unWavData lowBits)
 
 putPdtaBlocks :: Seq PdtaBlock -> Put
 putPdtaBlocks pdtaBlocks = do
