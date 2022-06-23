@@ -29,7 +29,6 @@ library
       Scrapti.Main
       Scrapti.Pti
       Scrapti.Riff
-      Scrapti.Sample
       Scrapti.Sfont
       Scrapti.Wav
   other-modules:

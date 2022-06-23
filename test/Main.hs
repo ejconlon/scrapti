@@ -3,14 +3,12 @@ module Main (main) where
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.State.Strict (gets)
 import qualified Data.ByteString.Lazy as BSL
-import Data.Int (Int16)
 import qualified Data.Sequence as Seq
 import qualified Data.Vector.Primitive as VP
-import Scrapti.Binary (ByteLength, ByteOffset, DecodeState (..), Get, Int16LE, decodeFail, decodeGet, get, skip)
-import Scrapti.Sample (Sampled (..))
+import Scrapti.Binary (ByteLength, ByteOffset, DecodeState (..), Int16LE, decodeFail, decodeGet, get, skip)
 import Scrapti.Sfont (Sdta (..), Sfont (..), decodeSfont, encodeSfont)
-import Scrapti.Wav (Wav (..), WavChunk (..), WavData (..), WavFormat (..), WavHeader (..), decodeAnyWav, decodeWavChunk,
-                    decodeWavHeader, encodeAnyWav)
+import Scrapti.Wav (Sampled (..), Wav (..), WavChunk (..), WavData (..), WavFormat (..), WavHeader (..), decodeAnyWav,
+                    decodeWavChunk, decodeWavHeader, encodeAnyWav)
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (assertBool, testCase, (@?=))
 
@@ -24,7 +22,7 @@ drumFileSize :: ByteLength
 drumFileSize = 497896
 
 drumEndOffset :: ByteOffset
-drumEndOffset = drumFileSize + 8
+drumEndOffset = fromIntegral drumFileSize + 8
 
 drumHeader :: WavHeader
 drumHeader = WavHeader (drumFileSize - 28) drumFmt

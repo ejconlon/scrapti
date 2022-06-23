@@ -10,7 +10,7 @@ module Scrapti.Riff
   ) where
 
 import Data.ByteString (ByteString)
-import Scrapti.Binary (Get, getByteString, getExpect, ByteLength, Put, Word32LE, Binary (..))
+import Scrapti.Binary (Binary (..), ByteLength, Get, Put, Word32LE, getByteString, getExpect)
 
 labelRiff :: ByteString
 labelRiff = "RIFF"

@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Scrapti.Sfont
   ( Sfont (..)
@@ -21,23 +22,23 @@ module Scrapti.Sfont
 import Control.Monad (unless)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Char8 as BSC
 import qualified Data.ByteString.Lazy as BSL
 import Data.Foldable (foldMap', foldl')
-import Data.Int (Int16, Int8)
+import Data.Int (Int8)
 import Data.Semigroup (Sum (..))
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
 import Data.Text (Text)
-import qualified Data.Text as T
-import qualified Data.Text.Encoding as TE
-import Data.Word (Word16, Word32, Word8)
-import Scrapti.Binary (ByteLength, DecodeT, Get, Put, decodeBounded, decodeGet, decodeRepeated, getByteString,
-                       getFixedString, getInt16le, getInt8, getSeq, getVec, getWord16le, getWord32le, getWord8,
-                       guardEnd, putByteString, putFixedString, putInt16le, putInt8, putSeq, putVec, putWord16le,
-                       putWord32le, putWord8, runPut, skip)
-import Scrapti.Riff (expectLabel, getLabel, labelRiff)
+import Data.Word (Word8)
+import Scrapti.Binary (Binary (..), ByteLength, DecodeT, Get, Int16LE, Put, SizedBinary (..), TermText, Word16LE,
+                       Word32LE, decodeBounded, decodeGet, decodeRepeated, getByteString, getFixedString, getSeq,
+                       getVec, guardEnd, putByteString, putFixedString, putSeq, putVec, runPut, skip)
+import Scrapti.Riff (expectLabel, getChunkSize, getLabel, labelRiff, putChunkSize)
 import Scrapti.Wav (WavData (..), wavDataSamples)
+
+newtype SampleCount = Samplecount { unSampleCount :: Word32LE }
+  deriving stock (Show)
+  deriving newtype (Eq, Ord, Num, Enum, Real, Integral, Binary)
 
 data Sfont = Sfont
   { sfontInfos :: !(Seq Info)
@@ -46,22 +47,22 @@ data Sfont = Sfont
   } deriving stock (Eq, Show)
 
 data Info =
-    InfoVersion !Word16 !Word16
-  | InfoTargetSoundEngine !Text
-  | InfoBankName !Text
-  | InfoRomName !Text
-  | InfoRomVersion !Word16 !Word16
-  | InfoCreationDate !Text
-  | InfoAuthors !Text
-  | InfoIntendedProduct !Text
-  | InfoCopyrightMessage !Text
-  | InfoComments !Text
-  | InfoUsedTools !Text
+    InfoVersion !Word16LE !Word16LE
+  | InfoTargetSoundEngine !TermText
+  | InfoBankName !TermText
+  | InfoRomName !TermText
+  | InfoRomVersion !Word16LE !Word16LE
+  | InfoCreationDate !TermText
+  | InfoAuthors !TermText
+  | InfoIntendedProduct !TermText
+  | InfoCopyrightMessage !TermText
+  | InfoComments !TermText
+  | InfoUsedTools !TermText
   | InfoReserved !ByteString !ByteString
   deriving stock (Eq, Show)
 
 data Sdta = Sdta
-  { sdtaHighBits :: !(WavData Int16)
+  { sdtaHighBits :: !(WavData Int16LE)
   , sdtaLowBits :: !(Maybe (WavData Word8))
   } deriving stock (Eq, Show)
 
@@ -103,109 +104,109 @@ data Pdta = Pdta
 -- | Preset header
 data Phdr = Phdr
   { phdrPresetName :: !Text
-  , phdrPreset :: !Word16
-  , phdrBank :: !Word16
-  , phdrPresetBagIndex :: !Word16
-  , phdrLibrary :: !Word32
-  , phdrGenre :: !Word32
-  , phdrMorphology :: !Word32
+  , phdrPreset :: !Word16LE
+  , phdrBank :: !Word16LE
+  , phdrPresetBagIndex :: !Word16LE
+  , phdrLibrary :: !Word32LE
+  , phdrGenre :: !Word32LE
+  , phdrMorphology :: !Word32LE
   } deriving stock (Eq, Show)
 
 data Bag = Bag
-  { bagGenIndex :: !Word16
-  , bagModIndex :: !Word16
+  { bagGenIndex :: !Word16LE
+  , bagModIndex :: !Word16LE
   } deriving stock (Eq, Show)
 
 -- | Modulator
 data Mod = Mod
-  { modSrcOper :: !Word16
-  , modDestOper :: !Word16
-  , modAmount :: !Int16
-  , modAmtSrcOper :: !Word16
-  , modTransOper :: !Word16
+  { modSrcOper :: !Word16LE
+  , modDestOper :: !Word16LE
+  , modAmount :: !Int16LE
+  , modAmtSrcOper :: !Word16LE
+  , modTransOper :: !Word16LE
   } deriving stock (Eq, Show)
 
 data SampleMode =
-    SampleModeNoLoop !Int16
+    SampleModeNoLoop !Int16LE
   | SampleModeContLoop
   | SampleModePressLoop
   deriving stock (Eq, Show)
 
 -- | Generator
 data Gen =
-    GenStartAddressOffset !Int16
-  | GenEndAddressOffset !Int16
-  | GenLoopStartAddressOffset !Int16
-  | GenLoopEndAddressOffset !Int16
-  | GenStartAddressCoarseOffset !Int16
-  | GenModLfoToPitch !Int16
-  | GenVibLfoToPitch !Int16
-  | GenModEnvToPitch !Int16
-  | GenInitFc !Int16
-  | GenInitQ !Int16
-  | GenModLfoToFc !Int16
-  | GenModEnvToFc !Int16
-  | GenEndAddressCoarseOffset !Int16
-  | GenModLfoToVol !Int16
-  | GenChorus !Int16
-  | GenReverb !Int16
-  | GenPan !Int16
-  | GenDelayModLfo !Int16
-  | GenFreqModLfo !Int16
-  | GenDelayVibLfo !Int16
-  | GenFreqVibLfo !Int16
-  | GenDelayModEnv !Int16
-  | GenAttackModEnv !Int16
-  | GenHoldModEnv !Int16
-  | GenDecayModEnv !Int16
-  | GenSustainModEnv !Int16
-  | GenReleaseModEnv !Int16
-  | GenKeyToModEnvHold !Int16
-  | GenKeyToModEnvDecay !Int16
-  | GenDelayVolEnv !Int16
-  | GenAttackVolEnv !Int16
-  | GenHoldVolEnv !Int16
-  | GenDecayVolEnv !Int16
-  | GenSustainVolEnv !Int16
-  | GenReleaseVolEnv !Int16
-  | GenKeyToVolEnvHold !Int16
-  | GenKeyToVolEnvDecay !Int16
-  | GenInstIndex !Word16
+    GenStartAddressOffset !Int16LE
+  | GenEndAddressOffset !Int16LE
+  | GenLoopStartAddressOffset !Int16LE
+  | GenLoopEndAddressOffset !Int16LE
+  | GenStartAddressCoarseOffset !Int16LE
+  | GenModLfoToPitch !Int16LE
+  | GenVibLfoToPitch !Int16LE
+  | GenModEnvToPitch !Int16LE
+  | GenInitFc !Int16LE
+  | GenInitQ !Int16LE
+  | GenModLfoToFc !Int16LE
+  | GenModEnvToFc !Int16LE
+  | GenEndAddressCoarseOffset !Int16LE
+  | GenModLfoToVol !Int16LE
+  | GenChorus !Int16LE
+  | GenReverb !Int16LE
+  | GenPan !Int16LE
+  | GenDelayModLfo !Int16LE
+  | GenFreqModLfo !Int16LE
+  | GenDelayVibLfo !Int16LE
+  | GenFreqVibLfo !Int16LE
+  | GenDelayModEnv !Int16LE
+  | GenAttackModEnv !Int16LE
+  | GenHoldModEnv !Int16LE
+  | GenDecayModEnv !Int16LE
+  | GenSustainModEnv !Int16LE
+  | GenReleaseModEnv !Int16LE
+  | GenKeyToModEnvHold !Int16LE
+  | GenKeyToModEnvDecay !Int16LE
+  | GenDelayVolEnv !Int16LE
+  | GenAttackVolEnv !Int16LE
+  | GenHoldVolEnv !Int16LE
+  | GenDecayVolEnv !Int16LE
+  | GenSustainVolEnv !Int16LE
+  | GenReleaseVolEnv !Int16LE
+  | GenKeyToVolEnvHold !Int16LE
+  | GenKeyToVolEnvDecay !Int16LE
+  | GenInstIndex !Word16LE
   | GenKeyRange !Word8 !Word8
   | GenVelRange !Word8 !Word8
-  | GenLoopStartAddressCoarseOffset !Int16
-  | GenKey !Word16
-  | GenVel !Word16
-  | GenInitAtten !Int16
-  | GenLoopEndAddressCoarseOffset !Int16
-  | GenCoarseTune !Int16
-  | GenFineTune !Int16
-  | GenSampleIndex !Word16
+  | GenLoopStartAddressCoarseOffset !Int16LE
+  | GenKey !Word16LE
+  | GenVel !Word16LE
+  | GenInitAtten !Int16LE
+  | GenLoopEndAddressCoarseOffset !Int16LE
+  | GenCoarseTune !Int16LE
+  | GenFineTune !Int16LE
+  | GenSampleIndex !Word16LE
   | GenSampleMode !SampleMode
-  | GenScaleTuning !Int16
-  | GenExclusiveClass !Int16
-  | GenRootKey !Word16
-  | GenReserved !Int16 !Int16
+  | GenScaleTuning !Int16LE
+  | GenExclusiveClass !Int16LE
+  | GenRootKey !Word16LE
+  | GenReserved !Int16LE !Int16LE
   deriving stock (Eq, Show)
 
 -- | Instrument
 data Inst = Inst
   { instName :: !Text
-  , instBagIndex :: !Word16
+  , instBagIndex :: !Word16LE
   } deriving stock (Eq, Show)
 
 -- | Sample header
 data Shdr = Shdr
   { shdrSampleName :: !Text
-  , shdrStart :: !Word32
-  , shdrEnd :: !Word32
-  , shdrStartLoop :: !Word32
-  , shdrEndLoop :: !Word32
-  , shdrSampleRate :: !Word32
+  , shdrStart :: !Word32LE
+  , shdrEnd :: !Word32LE
+  , shdrStartLoop :: !Word32LE
+  , shdrEndLoop :: !Word32LE
+  , shdrSampleRate :: !Word32LE
   , shdrOriginalPitch :: !Word8
   , shdrPitchCorrection :: !Int8
-  , shdrSampleLink :: !Word16
-  , shdrSampleType :: !Word16
+  , shdrSampleLink :: !Word16LE
+  , shdrSampleType :: !Word16LE
   } deriving stock (Eq, Show)
 
 emptyPdta :: Pdta
@@ -261,9 +262,9 @@ labelShdr = "shdr"
 getSfontHeader :: Get ByteLength
 getSfontHeader = do
   expectLabel labelRiff
-  chunkSize <- getWord32le
+  chunkSize <- getChunkSize
   expectLabel labelSfbk
-  pure $! fromIntegral chunkSize - 4
+  pure $! chunkSize - 4
 
 decodeSfont :: Monad m => DecodeT m Sfont
 decodeSfont = do
@@ -279,54 +280,34 @@ decodeSfont = do
 getInfosHeader :: Get ByteLength
 getInfosHeader = do
   expectLabel labelList
-  chunkSize <- getWord32le
+  chunkSize <- getChunkSize
   expectLabel labelInfo
-  pure $! fromIntegral chunkSize - 4
-
-getZstr :: Word32 -> Get Text
-getZstr len = do
-  bs <- getByteString (fromIntegral len)
-  case BS.unsnoc bs of
-    Nothing -> fail "empty zstr"
-    Just (bs', nul) -> do
-      unless (nul == 0) (fail "bad null byte")
-      let !bs'' = if not (BS.null bs') && BS.last bs' == 0 then BS.init bs' else bs'
-      pure $! TE.decodeLatin1 bs''
-
-sizeZstr :: Text -> ByteLength
-sizeZstr t = let len = fromIntegral (T.length t + 1) in if even len then len else len + 1
-
-putZstr :: Text -> Put
-putZstr t =
-  let !bs0 = BSC.pack (T.unpack t)
-      !bs1 = BS.snoc bs0 0
-      !bs2 = if odd (BS.length bs1) then BS.snoc bs1 0 else bs1
-  in putByteString bs2
+  pure $! chunkSize - 4
 
 getInfo :: Get Info
 getInfo = do
   label <- getLabel
-  chunkSize <- getWord32le
+  chunkSize <- getChunkSize
   if
     | label == labelIfil -> do
       unless (chunkSize == 4) (fail "bad ifil chunk size")
-      w1 <- getWord16le
-      w2 <- getWord16le
+      w1 <- get
+      w2 <- get
       pure $! InfoVersion w1 w2
     | label == labelIver -> do
       unless (chunkSize == 4) (fail "bad iver chunk size")
-      w1 <- getWord16le
-      w2 <- getWord16le
+      w1 <- get
+      w2 <- get
       pure $! InfoRomVersion w1 w2
-    | label == labelIsng -> InfoTargetSoundEngine <$> getZstr chunkSize
-    | label == labelInam -> InfoBankName <$> getZstr chunkSize
-    | label == labelIrom -> InfoRomName <$> getZstr chunkSize
-    | label == labelIcrd -> InfoCreationDate <$> getZstr chunkSize
-    | label == labelIeng -> InfoAuthors <$> getZstr chunkSize
-    | label == labelIprd -> InfoIntendedProduct <$> getZstr chunkSize
-    | label == labelIcop -> InfoCopyrightMessage <$> getZstr chunkSize
-    | label == labelIcmt -> InfoComments <$> getZstr chunkSize
-    | label == labelIsft -> InfoUsedTools <$> getZstr chunkSize
+    | label == labelIsng -> fmap InfoTargetSoundEngine get
+    | label == labelInam -> fmap InfoBankName get
+    | label == labelIrom -> fmap InfoRomName get
+    | label == labelIcrd -> fmap InfoCreationDate get
+    | label == labelIeng -> fmap InfoAuthors get
+    | label == labelIprd -> fmap InfoIntendedProduct get
+    | label == labelIcop -> fmap InfoCopyrightMessage get
+    | label == labelIcmt -> fmap InfoComments get
+    | label == labelIsft -> fmap InfoUsedTools get
     | otherwise -> do
       bs <- getByteString (fromIntegral chunkSize)
       pure $! InfoReserved label bs
@@ -336,28 +317,28 @@ decodeInfos = do
   remainingSize <- decodeGet getInfosHeader
   decodeRepeated remainingSize (decodeGet getInfo)
 
-getHighBits :: Word32 -> Get (WavData Int16)
-getHighBits numSamples = WavData <$> getVec (fromIntegral numSamples) getInt16le
+getHighBits :: SampleCount -> Get (WavData Int16LE)
+getHighBits numSamples = fmap WavData (getVec (fromIntegral numSamples) get)
 
-getLowBits :: Word32 -> Get (WavData Word8)
-getLowBits numSamples = WavData <$> getVec (fromIntegral numSamples) getWord8
+getLowBits :: SampleCount -> Get (WavData Word8)
+getLowBits numSamples = fmap WavData (getVec (fromIntegral numSamples) get)
 
 getSdta :: Get Sdta
 getSdta = do
   expectLabel labelList
-  chunkSize <- getWord32le
+  chunkSize <- getChunkSize
   expectLabel labelSdta
   expectLabel labelSmpl
-  highSize <- getWord32le
-  let !numSamples = div highSize 2
+  highSize <- getChunkSize
+  let !numSamples = div (fromIntegral highSize) 2
   highBits <- getHighBits numSamples
   let !numExtra = chunkSize - highSize - 12
   if
     | numExtra > 0 -> do
       expectLabel labelSm24
-      lowSize <- getWord32le
+      lowSize <- getChunkSize
       let !expectedSize = if even numSamples then numSamples else numSamples + 1
-      unless (lowSize == expectedSize) (fail "invalid low sample size")
+      unless (fromIntegral lowSize == expectedSize) (fail "invalid low sample size")
       lowBits <- getLowBits numSamples
       unless (even numSamples) (skip 1)
       pure $! Sdta highBits (Just lowBits)
@@ -367,9 +348,9 @@ getSdta = do
 getPdtaHeader :: Get ByteLength
 getPdtaHeader = do
   expectLabel labelList
-  chunkSize <- getWord32le
+  chunkSize <- getChunkSize
   expectLabel labelPdta
-  pure $! fromIntegral chunkSize - 4
+  pure $! chunkSize - 4
 
 sizePhdr, sizeBag, sizeMod, sizeGen, sizeInst, sizeShdr :: ByteLength
 sizePhdr = 38
@@ -393,143 +374,126 @@ putShortString = putFixedString 20
 
 getPhdr :: Get Phdr
 getPhdr = do
-  presetName <- getShortString
-  preset <- getWord16le
-  bank <- getWord16le
-  presetBagIndex <- getWord16le
-  library <- getWord32le
-  genre <- getWord32le
-  morphology <- getWord32le
-  pure $! Phdr
-    { phdrPresetName = presetName
-    , phdrPreset = preset
-    , phdrBank = bank
-    , phdrPresetBagIndex = presetBagIndex
-    , phdrLibrary = library
-    , phdrGenre = genre
-    , phdrMorphology = morphology
-    }
+  phdrPresetName <- getShortString
+  phdrPreset <- get
+  phdrBank <- get
+  phdrPresetBagIndex <- get
+  phdrLibrary <- get
+  phdrGenre <- get
+  phdrMorphology <- get
+  pure $! Phdr {..}
 
 putPhdr :: Phdr -> Put
-putPhdr phdr = do
-  putShortString (phdrPresetName phdr)
-  putWord16le (phdrPreset phdr)
-  putWord16le (phdrBank phdr)
-  putWord16le (phdrPresetBagIndex phdr)
-  putWord32le (phdrLibrary phdr)
-  putWord32le (phdrGenre phdr)
-  putWord32le (phdrMorphology phdr)
+putPhdr (Phdr {..}) = do
+  putShortString phdrPresetName
+  put phdrPreset
+  put phdrBank
+  put phdrPresetBagIndex
+  put phdrLibrary
+  put phdrGenre
+  put phdrMorphology
 
 getBag :: Get Bag
 getBag = do
-  genIndex <- getWord16le
-  modIndex <- getWord16le
-  pure $! Bag
-    { bagGenIndex = genIndex
-    , bagModIndex = modIndex
-    }
+  bagGenIndex <- get
+  bagModIndex <- get
+  pure $! Bag {..}
 
 putBag :: Bag -> Put
-putBag bag = do
-  putWord16le (bagGenIndex bag)
-  putWord16le (bagModIndex bag)
+putBag (Bag {..})= do
+  put bagGenIndex
+  put bagModIndex
 
 getMod :: Get Mod
 getMod = do
-  srcOper <- getWord16le
-  destOper <- getWord16le
-  amount <- getInt16le
-  amtSrcOper <- getWord16le
-  transOper <- getWord16le
-  pure $! Mod
-    { modSrcOper = srcOper
-    , modDestOper = destOper
-    , modAmount = amount
-    , modAmtSrcOper = amtSrcOper
-    , modTransOper = transOper
-    }
+  modSrcOper <- get
+  modDestOper <- get
+  modAmount <- get
+  modAmtSrcOper <- get
+  modTransOper <- get
+  pure $! Mod {..}
 
 putMod :: Mod -> Put
-putMod modd = do
-  putWord16le (modSrcOper modd)
-  putWord16le (modDestOper modd)
-  putInt16le (modAmount modd)
-  putWord16le (modAmtSrcOper modd)
-  putWord16le (modTransOper modd)
+putMod (Mod {..}) = do
+  put modSrcOper
+  put modDestOper
+  put modAmount
+  put modAmtSrcOper
+  put modTransOper
 
 getGen :: Get Gen
 getGen = do
-  tag <- getInt16le
+  tag <- get
   if
-    | tag == 0 -> fmap GenStartAddressOffset getInt16le
-    | tag == 1 -> fmap GenEndAddressOffset getInt16le
-    | tag == 2 -> fmap GenLoopStartAddressOffset getInt16le
-    | tag == 3 -> fmap GenLoopEndAddressOffset getInt16le
-    | tag == 4 -> fmap GenStartAddressCoarseOffset getInt16le
-    | tag == 5 -> fmap GenModLfoToPitch getInt16le
-    | tag == 6 -> fmap GenVibLfoToPitch getInt16le
-    | tag == 7 -> fmap GenModEnvToPitch getInt16le
-    | tag == 8 -> fmap GenInitFc getInt16le
-    | tag == 9 -> fmap GenInitQ getInt16le
-    | tag == 10 -> fmap GenModLfoToFc getInt16le
-    | tag == 11 -> fmap GenModEnvToFc getInt16le
-    | tag == 12 -> fmap GenEndAddressCoarseOffset getInt16le
-    | tag == 13 -> fmap GenModLfoToVol getInt16le
-    | tag == 15 -> fmap GenChorus getInt16le
-    | tag == 16 -> fmap GenReverb getInt16le
-    | tag == 17 -> fmap GenPan getInt16le
-    | tag == 21 -> fmap GenDelayModLfo getInt16le
-    | tag == 22 -> fmap GenFreqModLfo getInt16le
-    | tag == 23 -> fmap GenDelayVibLfo getInt16le
-    | tag == 24 -> fmap GenFreqVibLfo getInt16le
-    | tag == 25 -> fmap GenDelayModEnv getInt16le
-    | tag == 26 -> fmap GenAttackModEnv getInt16le
-    | tag == 27 -> fmap GenHoldModEnv getInt16le
-    | tag == 28 -> fmap GenDecayModEnv getInt16le
-    | tag == 29 -> fmap GenSustainModEnv getInt16le
-    | tag == 30 -> fmap GenReleaseModEnv getInt16le
-    | tag == 31 -> fmap GenKeyToModEnvHold getInt16le
-    | tag == 32 -> fmap GenKeyToModEnvDecay getInt16le
-    | tag == 33 -> fmap GenDelayVolEnv getInt16le
-    | tag == 34 -> fmap GenAttackVolEnv getInt16le
-    | tag == 35 -> fmap GenHoldVolEnv getInt16le
-    | tag == 36 -> fmap GenDecayVolEnv getInt16le
-    | tag == 37 -> fmap GenSustainVolEnv getInt16le
-    | tag == 38 -> fmap GenReleaseVolEnv getInt16le
-    | tag == 39 -> fmap GenKeyToVolEnvHold getInt16le
-    | tag == 40 -> fmap GenKeyToVolEnvDecay getInt16le
-    | tag == 41 -> fmap GenInstIndex getWord16le
+    | tag == 0 -> fmap GenStartAddressOffset get
+    | tag == 1 -> fmap GenEndAddressOffset get
+    | tag == 2 -> fmap GenLoopStartAddressOffset get
+    | tag == 3 -> fmap GenLoopEndAddressOffset get
+    | tag == 4 -> fmap GenStartAddressCoarseOffset get
+    | tag == 5 -> fmap GenModLfoToPitch get
+    | tag == 6 -> fmap GenVibLfoToPitch get
+    | tag == 7 -> fmap GenModEnvToPitch get
+    | tag == 8 -> fmap GenInitFc get
+    | tag == 9 -> fmap GenInitQ get
+    | tag == 10 -> fmap GenModLfoToFc get
+    | tag == 11 -> fmap GenModEnvToFc get
+    | tag == 12 -> fmap GenEndAddressCoarseOffset get
+    | tag == 13 -> fmap GenModLfoToVol get
+    | tag == 15 -> fmap GenChorus get
+    | tag == 16 -> fmap GenReverb get
+    | tag == 17 -> fmap GenPan get
+    | tag == 21 -> fmap GenDelayModLfo get
+    | tag == 22 -> fmap GenFreqModLfo get
+    | tag == 23 -> fmap GenDelayVibLfo get
+    | tag == 24 -> fmap GenFreqVibLfo get
+    | tag == 25 -> fmap GenDelayModEnv get
+    | tag == 26 -> fmap GenAttackModEnv get
+    | tag == 27 -> fmap GenHoldModEnv get
+    | tag == 28 -> fmap GenDecayModEnv get
+    | tag == 29 -> fmap GenSustainModEnv get
+    | tag == 30 -> fmap GenReleaseModEnv get
+    | tag == 31 -> fmap GenKeyToModEnvHold get
+    | tag == 32 -> fmap GenKeyToModEnvDecay get
+    | tag == 33 -> fmap GenDelayVolEnv get
+    | tag == 34 -> fmap GenAttackVolEnv get
+    | tag == 35 -> fmap GenHoldVolEnv get
+    | tag == 36 -> fmap GenDecayVolEnv get
+    | tag == 37 -> fmap GenSustainVolEnv get
+    | tag == 38 -> fmap GenReleaseVolEnv get
+    | tag == 39 -> fmap GenKeyToVolEnvHold get
+    | tag == 40 -> fmap GenKeyToVolEnvDecay get
+    | tag == 41 -> fmap GenInstIndex get
     | tag == 43 -> do
-      a <- getWord8
-      b <- getWord8
+      a <- get
+      b <- get
       pure $! GenKeyRange a b
     | tag == 44 -> do
-      a <- getWord8
-      b <- getWord8
+      a <- get
+      b <- get
       pure $! GenVelRange a b
-    | tag == 45 -> fmap GenLoopStartAddressCoarseOffset getInt16le
-    | tag == 46 -> fmap GenKey getWord16le
-    | tag == 47 -> fmap GenVel getWord16le
-    | tag == 48 -> fmap GenInitAtten getInt16le
-    | tag == 50 -> fmap GenLoopEndAddressCoarseOffset getInt16le
-    | tag == 51 -> fmap GenCoarseTune getInt16le
-    | tag == 52 -> fmap GenFineTune getInt16le
-    | tag == 53 -> fmap GenSampleIndex getWord16le
+    | tag == 45 -> fmap GenLoopStartAddressCoarseOffset get
+    | tag == 46 -> fmap GenKey get
+    | tag == 47 -> fmap GenVel get
+    | tag == 48 -> fmap GenInitAtten get
+    | tag == 50 -> fmap GenLoopEndAddressCoarseOffset get
+    | tag == 51 -> fmap GenCoarseTune get
+    | tag == 52 -> fmap GenFineTune get
+    | tag == 53 -> fmap GenSampleIndex get
     | tag == 54 -> do
-      a <- getInt16le
+      a <- get
       let !sm = case a of
             1 -> SampleModeContLoop
             3 -> SampleModePressLoop
             _ -> SampleModeNoLoop a
       pure $! GenSampleMode sm
-    | tag == 56 -> fmap GenScaleTuning getInt16le
-    | tag == 57 -> fmap GenExclusiveClass getInt16le
-    | tag == 58 -> fmap GenRootKey getWord16le
+    | tag == 56 -> fmap GenScaleTuning get
+    | tag == 57 -> fmap GenExclusiveClass get
+    | tag == 58 -> fmap GenRootKey get
     | otherwise -> do
-      a <- getInt16le
+      a <- get
       pure $! GenReserved tag a
 
-whichTagGen :: Gen -> Int16
+whichTagGen :: Gen -> Int16LE
 whichTagGen = \case
   GenStartAddressOffset _ -> 0
   GenEndAddressOffset _ -> 1
@@ -587,143 +551,128 @@ whichTagGen = \case
 
 putGen :: Gen -> Put
 putGen gen = do
-  putInt16le (whichTagGen gen)
+  put (whichTagGen gen)
   case gen of
-    GenStartAddressOffset x -> putInt16le x
-    GenEndAddressOffset x -> putInt16le x
-    GenLoopStartAddressOffset x -> putInt16le x
-    GenLoopEndAddressOffset x -> putInt16le x
-    GenStartAddressCoarseOffset x -> putInt16le x
-    GenModLfoToPitch x -> putInt16le x
-    GenVibLfoToPitch x -> putInt16le x
-    GenModEnvToPitch x -> putInt16le x
-    GenInitFc x -> putInt16le x
-    GenInitQ x -> putInt16le x
-    GenModLfoToFc x -> putInt16le x
-    GenModEnvToFc x -> putInt16le x
-    GenEndAddressCoarseOffset x -> putInt16le x
-    GenModLfoToVol x -> putInt16le x
-    GenChorus x -> putInt16le x
-    GenReverb x -> putInt16le x
-    GenPan x -> putInt16le x
-    GenDelayModLfo x -> putInt16le x
-    GenFreqModLfo x -> putInt16le x
-    GenDelayVibLfo x -> putInt16le x
-    GenFreqVibLfo x -> putInt16le x
-    GenDelayModEnv x -> putInt16le x
-    GenAttackModEnv x -> putInt16le x
-    GenHoldModEnv x -> putInt16le x
-    GenDecayModEnv x -> putInt16le x
-    GenSustainModEnv x -> putInt16le x
-    GenReleaseModEnv x -> putInt16le x
-    GenKeyToModEnvHold x -> putInt16le x
-    GenKeyToModEnvDecay x -> putInt16le x
-    GenDelayVolEnv x -> putInt16le x
-    GenAttackVolEnv x -> putInt16le x
-    GenHoldVolEnv x -> putInt16le x
-    GenDecayVolEnv x -> putInt16le x
-    GenSustainVolEnv x -> putInt16le x
-    GenReleaseVolEnv x -> putInt16le x
-    GenKeyToVolEnvHold x -> putInt16le x
-    GenKeyToVolEnvDecay x -> putInt16le x
-    GenInstIndex x -> putWord16le x
-    GenKeyRange x y -> putWord8 x *> putWord8 y
-    GenVelRange x y -> putWord8 x *> putWord8 y
-    GenLoopStartAddressCoarseOffset x -> putInt16le x
-    GenKey x -> putWord16le x
-    GenVel x -> putWord16le x
-    GenInitAtten x -> putInt16le x
-    GenLoopEndAddressCoarseOffset x -> putInt16le x
-    GenCoarseTune x -> putInt16le x
-    GenFineTune x -> putInt16le x
-    GenSampleIndex x -> putWord16le x
+    GenStartAddressOffset x -> put x
+    GenEndAddressOffset x -> put x
+    GenLoopStartAddressOffset x -> put x
+    GenLoopEndAddressOffset x -> put x
+    GenStartAddressCoarseOffset x -> put x
+    GenModLfoToPitch x -> put x
+    GenVibLfoToPitch x -> put x
+    GenModEnvToPitch x -> put x
+    GenInitFc x -> put x
+    GenInitQ x -> put x
+    GenModLfoToFc x -> put x
+    GenModEnvToFc x -> put x
+    GenEndAddressCoarseOffset x -> put x
+    GenModLfoToVol x -> put x
+    GenChorus x -> put x
+    GenReverb x -> put x
+    GenPan x -> put x
+    GenDelayModLfo x -> put x
+    GenFreqModLfo x -> put x
+    GenDelayVibLfo x -> put x
+    GenFreqVibLfo x -> put x
+    GenDelayModEnv x -> put x
+    GenAttackModEnv x -> put x
+    GenHoldModEnv x -> put x
+    GenDecayModEnv x -> put x
+    GenSustainModEnv x -> put x
+    GenReleaseModEnv x -> put x
+    GenKeyToModEnvHold x -> put x
+    GenKeyToModEnvDecay x -> put x
+    GenDelayVolEnv x -> put x
+    GenAttackVolEnv x -> put x
+    GenHoldVolEnv x -> put x
+    GenDecayVolEnv x -> put x
+    GenSustainVolEnv x -> put x
+    GenReleaseVolEnv x -> put x
+    GenKeyToVolEnvHold x -> put x
+    GenKeyToVolEnvDecay x -> put x
+    GenInstIndex x -> put x
+    GenKeyRange x y -> put x *> put y
+    GenVelRange x y -> put x *> put y
+    GenLoopStartAddressCoarseOffset x -> put x
+    GenKey x -> put x
+    GenVel x -> put x
+    GenInitAtten x -> put x
+    GenLoopEndAddressCoarseOffset x -> put x
+    GenCoarseTune x -> put x
+    GenFineTune x -> put x
+    GenSampleIndex x -> put x
     GenSampleMode sm ->
       let !x = case sm of
             SampleModeContLoop -> 1
             SampleModePressLoop -> 3
             SampleModeNoLoop c -> c
-      in putInt16le x
-    GenScaleTuning x -> putInt16le x
-    GenExclusiveClass x -> putInt16le x
-    GenRootKey x -> putWord16le x
-    GenReserved _ x -> putInt16le x
+      in put x
+    GenScaleTuning x -> put x
+    GenExclusiveClass x -> put x
+    GenRootKey x -> put x
+    GenReserved _ x -> put x
 
 getInst :: Get Inst
 getInst = do
-  name <- getShortString
-  bagIndex <- getWord16le
-  pure $! Inst
-    { instName = name
-    , instBagIndex = bagIndex
-    }
+  instName <- getShortString
+  instBagIndex <- get
+  pure $! Inst {..}
 
 putInst :: Inst -> Put
-putInst inst = do
-  putShortString (instName inst)
-  putWord16le (instBagIndex inst)
+putInst (Inst {..}) = do
+  putShortString instName
+  put instBagIndex
 
 getShdr :: Get Shdr
 getShdr = do
-  name <- getShortString
-  start <- getWord32le
-  end <- getWord32le
-  startLoop <- getWord32le
-  endLoop <- getWord32le
-  sampleRate <- getWord32le
-  originalPitch <- getWord8
-  pitchCorrection <- getInt8
-  sampleLink <- getWord16le
-  sampleType <- getWord16le
-  pure $! Shdr
-    { shdrSampleName = name
-    , shdrStart = start
-    , shdrEnd = end
-    , shdrStartLoop = startLoop
-    , shdrEndLoop = endLoop
-    , shdrSampleRate = sampleRate
-    , shdrOriginalPitch = originalPitch
-    , shdrPitchCorrection = pitchCorrection
-    , shdrSampleLink = sampleLink
-    , shdrSampleType = sampleType
-    }
+  shdrSampleName <- getShortString
+  shdrStart <- get
+  shdrEnd <- get
+  shdrStartLoop <- get
+  shdrEndLoop <- get
+  shdrSampleRate <- get
+  shdrOriginalPitch <- get
+  shdrPitchCorrection <- get
+  shdrSampleLink <- get
+  shdrSampleType <- get
+  pure $! Shdr {..}
 
 putShdr :: Shdr -> Put
-putShdr shdr = do
-  putShortString (shdrSampleName shdr)
-  putWord32le (shdrStart shdr)
-  putWord32le (shdrEnd shdr)
-  putWord32le (shdrStartLoop shdr)
-  putWord32le (shdrEndLoop shdr)
-  putWord32le (shdrSampleRate shdr)
-  putWord8 (shdrOriginalPitch shdr)
-  putInt8 (shdrPitchCorrection shdr)
-  putWord16le (shdrSampleLink shdr)
-  putWord16le (shdrSampleType shdr)
+putShdr (Shdr {..}) = do
+  putShortString shdrSampleName
+  put shdrStart
+  put shdrEnd
+  put shdrStartLoop
+  put shdrEndLoop
+  put shdrSampleRate
+  put shdrOriginalPitch
+  put shdrPitchCorrection
+  put shdrSampleLink
+  put shdrSampleType
 
 getPdtaBlock :: Get PdtaBlock
 getPdtaBlock = do
   label <- getLabel
-  chunkSize <- getWord32le
-  let !chunkLen = fromIntegral chunkSize
+  chunkSize <- getChunkSize
   if
     | label == labelPhdr ->
-      fmap PdtaBlockPhdr (getPdtaElems label chunkLen sizePhdr getPhdr)
+      fmap PdtaBlockPhdr (getPdtaElems label chunkSize sizePhdr getPhdr)
     | label == labelPbag ->
-      fmap (PdtaBlockBag PdtaCatPreset) (getPdtaElems label chunkLen sizeBag getBag)
+      fmap (PdtaBlockBag PdtaCatPreset) (getPdtaElems label chunkSize sizeBag getBag)
     | label == labelPmod ->
-      fmap (PdtaBlockMod PdtaCatPreset) (getPdtaElems label chunkLen sizeMod getMod)
+      fmap (PdtaBlockMod PdtaCatPreset) (getPdtaElems label chunkSize sizeMod getMod)
     | label == labelPgen ->
-      fmap (PdtaBlockGen PdtaCatPreset) (getPdtaElems label chunkLen sizeGen getGen)
+      fmap (PdtaBlockGen PdtaCatPreset) (getPdtaElems label chunkSize sizeGen getGen)
     | label == labelInst ->
-      fmap PdtaBlockInst (getPdtaElems label chunkLen sizeInst getInst)
+      fmap PdtaBlockInst (getPdtaElems label chunkSize sizeInst getInst)
     | label == labelIbag ->
-      fmap (PdtaBlockBag PdtaCatInst) (getPdtaElems label chunkLen sizeBag getBag)
+      fmap (PdtaBlockBag PdtaCatInst) (getPdtaElems label chunkSize sizeBag getBag)
     | label == labelImod ->
-      fmap (PdtaBlockMod PdtaCatInst) (getPdtaElems label chunkLen sizeMod getMod)
+      fmap (PdtaBlockMod PdtaCatInst) (getPdtaElems label chunkSize sizeMod getMod)
     | label == labelIgen ->
-      fmap (PdtaBlockGen PdtaCatInst) (getPdtaElems label chunkLen sizeGen getGen)
+      fmap (PdtaBlockGen PdtaCatInst) (getPdtaElems label chunkSize sizeGen getGen)
     | label == labelShdr ->
-      fmap PdtaBlockShdr (getPdtaElems label chunkLen sizeShdr getShdr)
+      fmap PdtaBlockShdr (getPdtaElems label chunkSize sizeShdr getShdr)
     | otherwise ->
       fail ("unrecognized pdta elem: " ++ show label)
 
@@ -739,7 +688,7 @@ putSfont :: Sfont -> Put
 putSfont sfont@(Sfont infos sdta pdtaBlocks) = result where
   result = do
     putByteString labelRiff
-    putWord32le (fromIntegral (sizeSfont sfont))
+    putChunkSize (sizeSfont sfont)
     putByteString labelSfbk
     putInfos infos
     putSdta sdta
@@ -757,16 +706,16 @@ sizePdtaBlocks pdtaBlocks = 4 + getSum (foldMap' (\block -> Sum (sizePdtaBlock b
 sizeInfo :: Info -> ByteLength
 sizeInfo = \case
   InfoVersion _ _ -> 4
-  InfoTargetSoundEngine z -> sizeZstr z
-  InfoBankName z -> sizeZstr z
-  InfoRomName z -> sizeZstr z
+  InfoTargetSoundEngine z -> byteSize z
+  InfoBankName z -> byteSize z
+  InfoRomName z -> byteSize z
   InfoRomVersion _ _ -> 4
-  InfoCreationDate z -> sizeZstr z
-  InfoAuthors z -> sizeZstr z
-  InfoIntendedProduct z -> sizeZstr z
-  InfoCopyrightMessage z -> sizeZstr z
-  InfoComments z -> sizeZstr z
-  InfoUsedTools z -> sizeZstr z
+  InfoCreationDate z -> byteSize z
+  InfoAuthors z -> byteSize z
+  InfoIntendedProduct z -> byteSize z
+  InfoCopyrightMessage z -> byteSize z
+  InfoComments z -> byteSize z
+  InfoUsedTools z -> byteSize z
   InfoReserved _ bs -> fromIntegral (BS.length bs)
 
 sizeSdta :: Sdta -> ByteLength
@@ -786,7 +735,7 @@ sizePdtaBlock = \case
 putInfos :: Seq Info -> Put
 putInfos infos = do
   putByteString labelList
-  putWord32le (fromIntegral (sizeInfos infos))
+  putChunkSize (sizeInfos infos)
   putByteString labelInfo
   putSeq putInfo infos
 
@@ -808,40 +757,40 @@ whichLabelInfo = \case
 putInfo :: Info -> Put
 putInfo info = do
   putByteString (whichLabelInfo info)
-  putWord32le (fromIntegral (sizeInfo info))
+  putChunkSize (sizeInfo info)
   case info of
-    InfoVersion w1 w2 -> putWord16le w1 *> putWord16le w2
-    InfoTargetSoundEngine z -> putZstr z
-    InfoBankName z -> putZstr z
-    InfoRomName z -> putZstr z
-    InfoRomVersion w1 w2 -> putWord16le w1 *> putWord16le w2
-    InfoCreationDate z -> putZstr z
-    InfoAuthors z -> putZstr z
-    InfoIntendedProduct z -> putZstr z
-    InfoCopyrightMessage z -> putZstr z
-    InfoComments z -> putZstr z
-    InfoUsedTools z -> putZstr z
-    InfoReserved _ bs -> putByteString bs
+    InfoVersion w1 w2 -> put w1 *> put w2
+    InfoTargetSoundEngine z -> put z
+    InfoBankName z -> put z
+    InfoRomName z -> put z
+    InfoRomVersion w1 w2 -> put w1 *> put w2
+    InfoCreationDate z -> put z
+    InfoAuthors z -> put z
+    InfoIntendedProduct z -> put z
+    InfoCopyrightMessage z -> put z
+    InfoComments z -> put z
+    InfoUsedTools z -> put z
+    InfoReserved _ bs -> put bs
 
 putSdta :: Sdta -> Put
 putSdta sdta@(Sdta highBits mayLowBits) = do
   putByteString labelList
-  putWord32le (fromIntegral (sizeSdta sdta))
+  putChunkSize (sizeSdta sdta)
   putByteString labelSdta
   putByteString labelSmpl
-  putWord32le (fromIntegral (wavDataSamples highBits * 2))
-  putVec putInt16le (unWavData highBits)
+  putChunkSize (fromIntegral (wavDataSamples highBits * 2))
+  putVec put (unWavData highBits)
   case mayLowBits of
     Nothing -> pure ()
     Just lowBits -> do
       putByteString labelSm24
-      putWord32le (fromIntegral (wavDataSamples lowBits))
-      putVec putWord8 (unWavData lowBits)
+      putChunkSize (fromIntegral (wavDataSamples lowBits))
+      putVec put (unWavData lowBits)
 
 putPdtaBlocks :: Seq PdtaBlock -> Put
 putPdtaBlocks pdtaBlocks = do
   putByteString labelList
-  putWord32le (fromIntegral (sizePdtaBlocks pdtaBlocks))
+  putChunkSize (sizePdtaBlocks pdtaBlocks)
   putByteString labelPdta
   putSeq putPdtaBlock pdtaBlocks
 
@@ -863,7 +812,7 @@ whichLabelPdtaBlock = \case
 putPdtaBlock :: PdtaBlock -> Put
 putPdtaBlock block = do
   putByteString (whichLabelPdtaBlock block)
-  putWord32le (fromIntegral (sizePdtaBlock block))
+  putChunkSize (sizePdtaBlock block)
   case block of
     PdtaBlockPhdr phdrs -> putSeq putPhdr phdrs
     PdtaBlockBag _ bags -> putSeq putBag bags

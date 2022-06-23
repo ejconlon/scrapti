@@ -11,8 +11,8 @@ import Data.Proxy (Proxy (..))
 import Data.Text (Text)
 import qualified Data.Vector.Primitive as VP
 import Data.Word (Word8)
-import Scrapti.Binary (Binary (..), BoolByte (..), DecodeT, Get, decodeGet, getByteString, getFixedString, putByteString, putFixedString,
-  Int16LE, Word16LE, Word32LE, FloatLE)
+import Scrapti.Binary (Binary (..), BoolByte (..), DecodeT, FloatLE, Get, Int16LE, Word16LE, Word32LE, decodeGet,
+                       getByteString, getFixedString, putByteString, putFixedString)
 import Scrapti.Classes (BinaryRep (..), ViaBinaryRep (..), ViaBoundedEnum (..))
 import Scrapti.Wav (Wav, decodeSpecificWav)
 
