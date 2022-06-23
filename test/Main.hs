@@ -6,7 +6,7 @@ import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Sequence as Seq
 import qualified Data.Vector.Primitive as VP
 import Scrapti.Binary (ByteLength, ByteOffset, DecodeState (..), Int16LE, decodeFail, decodeGet, get, skip)
-import Scrapti.Sfont (Sdta (..), Sfont (..), decodeSfont, encodeSfont)
+import Scrapti.Sfont (InfoChunk (..), PdtaChunk (..), Sdta (..), Sfont (..), decodeSfont, encodeSfont)
 import Scrapti.Wav (Sampled (..), Wav (..), WavChunk (..), WavData (..), WavFormat (..), WavHeader (..), decodeAnyWav,
                     decodeWavChunk, decodeWavHeader, encodeAnyWav)
 import Test.Tasty (TestTree, defaultMain, testGroup)
@@ -80,7 +80,7 @@ testWav = testGroup "wav" [testWavHeader, testWavData, testWavWhole, testWavWrit
 testSfontWhole :: TestTree
 testSfontWhole = testCase "whole" $ do
   bs <- BSL.readFile "testdata/timpani.sf2"
-  Sfont infos sdta pdtaBlocks <- decodeFail bs decodeSfont
+  Sfont (InfoChunk infos) sdta (PdtaChunk pdtaBlocks) <- decodeFail bs decodeSfont
   Seq.length infos @?= 5
   VP.length (unWavData (sdtaHighBits sdta)) @?= 1365026
   sdtaLowBits sdta @?= Nothing

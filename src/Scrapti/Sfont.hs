@@ -3,6 +3,8 @@
 
 module Scrapti.Sfont
   ( Sfont (..)
+  , InfoChunk (..)
+  , PdtaChunk (..)
   , Info (..)
   , Sdta (..)
   , PdtaCat (..)
@@ -43,10 +45,18 @@ newtype SampleCount = Samplecount { unSampleCount :: Word32LE }
 type ShortText = FixedText 20
 
 data Sfont = Sfont
-  { sfontInfos :: !(Seq Info)
+  { sfontInfoChunk :: !InfoChunk
   , sfontSdta :: !Sdta
-  , sfontPdta :: !(Seq PdtaBlock)
+  , sfontPdtaChunk :: !PdtaChunk
   } deriving stock (Eq, Show)
+
+newtype InfoChunk = InfoChunk { unInfoChunk :: Seq Info }
+  deriving stock (Show)
+  deriving newtype (Eq)
+
+newtype PdtaChunk = PdtaChunk { unPdtaChunk :: Seq PdtaBlock }
+  deriving stock (Show)
+  deriving newtype (Eq)
 
 data Info =
     InfoVersion !Word16LE !Word16LE
@@ -489,10 +499,10 @@ decodeSfont :: Monad m => DecodeT m Sfont
 decodeSfont = do
   remainingSize <- decodeGet getSfontHeader
   sfont <- decodeBounded remainingSize $ do
-    infos <- decodeInfos
+    infoChunk <- decodeInfoChunk
     sdta <- decodeGet get
-    pdtaBlocks <- decodePdtaBlocks
-    pure $! Sfont infos sdta pdtaBlocks
+    pdtaChunk <- decodePdtaChunk
+    pure $! Sfont infoChunk sdta pdtaChunk
   guardEnd
   pure sfont
 
@@ -503,10 +513,10 @@ getInfosHeader = do
   expectLabel labelInfo
   pure $! chunkSize - 4
 
-decodeInfos :: Monad m => DecodeT m (Seq Info)
-decodeInfos = do
+decodeInfoChunk :: Monad m => DecodeT m InfoChunk
+decodeInfoChunk = do
   remainingSize <- decodeGet getInfosHeader
-  decodeRepeated remainingSize (decodeGet get)
+  fmap InfoChunk (decodeRepeated remainingSize (decodeGet get))
 
 getHighBits :: SampleCount -> Get (WavData Int16LE)
 getHighBits numSamples = fmap WavData (getVec (fromIntegral numSamples))
@@ -617,32 +627,32 @@ getPdtaBlock = do
     | otherwise ->
       fail ("unrecognized pdta elem: " ++ show label)
 
-decodePdtaBlocks :: Monad m => DecodeT m (Seq PdtaBlock)
-decodePdtaBlocks = do
+decodePdtaChunk :: Monad m => DecodeT m PdtaChunk
+decodePdtaChunk = do
   remainingBytes <- decodeGet getPdtaHeader
-  decodeRepeated remainingBytes (decodeGet getPdtaBlock)
+  fmap PdtaChunk (decodeRepeated remainingBytes (decodeGet getPdtaBlock))
 
 encodeSfont :: Sfont -> BSL.ByteString
 encodeSfont = runPut . putSfont
 
 putSfont :: Sfont -> Put
-putSfont sfont@(Sfont infos sdta pdtaBlocks) = result where
+putSfont sfont@(Sfont infoChunk sdta pdtaChunk) = result where
   result = do
     put labelRiff
     putChunkSize (sizeSfont sfont)
     put labelSfbk
-    putInfos infos
+    putInfoChunk infoChunk
     put sdta
-    putPdtaBlocks pdtaBlocks
+    putPdtaChunk pdtaChunk
 
 sizeSfont :: Sfont -> ByteLength
-sizeSfont (Sfont infos sdta pdtaBlocks) = 28 + sizeInfos infos + sizeSdta sdta + sizePdtaBlocks pdtaBlocks
+sizeSfont (Sfont infoChunk sdta pdtaChunk) = 28 + sizeInfoChunk infoChunk + sizeSdta sdta + sizePdtaChunk pdtaChunk
 
-sizeInfos :: Seq Info -> ByteLength
-sizeInfos infos = 4 + getSum (foldMap' (\info -> Sum (sizeInfo info) + 8) infos)
+sizeInfoChunk :: InfoChunk -> ByteLength
+sizeInfoChunk (InfoChunk infos) = 4 + getSum (foldMap' (\info -> Sum (sizeInfo info) + 8) infos)
 
-sizePdtaBlocks :: Seq PdtaBlock -> ByteLength
-sizePdtaBlocks pdtaBlocks = 4 + getSum (foldMap' (\block -> Sum (sizePdtaBlock block) + 8) pdtaBlocks)
+sizePdtaChunk :: PdtaChunk -> ByteLength
+sizePdtaChunk (PdtaChunk pdtaBlocks) = 4 + getSum (foldMap' (\block -> Sum (sizePdtaBlock block) + 8) pdtaBlocks)
 
 sizeInfo :: Info -> ByteLength
 sizeInfo = \case
@@ -673,12 +683,12 @@ sizePdtaBlock = \case
   PdtaBlockInst insts -> sizeInst * fromIntegral (Seq.length insts)
   PdtaBlockShdr shdrs -> sizeShdr * fromIntegral (Seq.length shdrs)
 
-putInfos :: Seq Info -> Put
-putInfos infos = do
+putInfoChunk :: InfoChunk -> Put
+putInfoChunk infoChunk = do
   put labelList
-  putChunkSize (sizeInfos infos)
+  putChunkSize (sizeInfoChunk infoChunk)
   put labelInfo
-  putSeq infos
+  putSeq (unInfoChunk infoChunk)
 
 whichLabelInfo :: Info -> Label
 whichLabelInfo = \case
@@ -695,12 +705,12 @@ whichLabelInfo = \case
   InfoUsedTools _ -> labelIsft
   InfoReserved l _ -> l
 
-putPdtaBlocks :: Seq PdtaBlock -> Put
-putPdtaBlocks pdtaBlocks = do
+putPdtaChunk :: PdtaChunk -> Put
+putPdtaChunk pdtaChunk = do
   put labelList
-  putChunkSize (sizePdtaBlocks pdtaBlocks)
+  putChunkSize (sizePdtaChunk pdtaChunk)
   put labelPdta
-  putSeqWith putPdtaBlock pdtaBlocks
+  putSeqWith putPdtaBlock (unPdtaChunk pdtaChunk)
 
 whichLabelPdtaBlock :: PdtaBlock -> Label
 whichLabelPdtaBlock = \case
