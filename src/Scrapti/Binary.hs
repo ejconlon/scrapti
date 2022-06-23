@@ -16,6 +16,10 @@ module Scrapti.Binary
   , decodeBounded
   , decodeFolded
   , decodeRepeated
+  , ParseM
+  , parseSized
+  , parseRepeated
+  , runParseM
   , ByteSized (..)
   , StaticByteSized (..)
   , WithByteSize (..)
@@ -39,7 +43,7 @@ module Scrapti.Binary
   , getVecWith
   , getSeq
   , getSeqWith
-  , getRepeated
+  -- , getRepeated
   , skip
   , putByteString
   , putVec
@@ -50,8 +54,9 @@ module Scrapti.Binary
 
 import Control.Monad (unless)
 import Control.Monad.Except (ExceptT, MonadError (..), runExceptT)
-import Control.Monad.State.Strict (MonadState, State, gets, runState)
+import Control.Monad.State.Strict (MonadState, State, StateT (..), gets, runState)
 import qualified Control.Monad.State.Strict as State
+import Control.Monad.Trans (lift)
 import Data.Binary (Binary (..))
 import Data.Binary.Get (ByteOffset, Get, getByteString, getFloatle, getInt16le, getInt32le, getInt64le, getWord16le,
                         getWord32le, getWord64le, getWord8, runGetOrFail, skip)
@@ -147,6 +152,34 @@ decodeGet getter = do
       State.put (DecodeState bs' (off + off'))
       pure value
 
+newtype ParseM a = ParseM { unParseM :: StateT ByteLength Get a }
+  deriving newtype (Functor, Applicative, Monad, MonadFail)
+
+parseSized :: BinarySized a => ParseM a
+parseSized = do
+  left <- ParseM State.get
+  WithByteSize size value <- ParseM (lift getSized)
+  let !newLeft = left - size
+  if newLeft < 0
+    then fail ("Consumed too much input: " ++ show newLeft)
+    else value <$ ParseM (State.put newLeft)
+
+parseRepeated :: BinarySized a => ParseM (Seq a)
+parseRepeated = go Empty where
+  go !acc = do
+    left <- ParseM State.get
+    if left == 0
+      then pure acc
+      else do
+        a <- parseSized
+        go (acc :|> a)
+
+runParseM :: ByteLength -> ParseM a -> Get (WithByteSize a)
+runParseM len pm = do
+  (!value, !left) <- runStateT (unParseM pm) len
+  unless (left == 0) (fail "Not end of input")
+  pure $! WithByteSize len value
+
 getExpect :: (Eq a, Show a) => String -> Get a -> a -> Get ()
 getExpect typ getter expec = do
   actual <- getter
@@ -183,15 +216,15 @@ putSeqWith = traverse_
 putSeq :: Binary a => Seq a -> Put
 putSeq = putSeqWith put
 
-getRepeated :: BinarySized a => ByteLength -> Get (Seq a)
-getRepeated = go Empty where
-  go !acc !left = do
-    if
-      | left == 0 -> pure acc
-      | left < 0 -> fail ("consumed too much input by: " ++ show left ++ " for number of elements: " ++ show (Seq.length acc))
-      | otherwise -> do
-        WithByteSize sz a <- getSized
-        go (acc :|> a) (left - sz)
+-- getRepeated :: BinarySized a => ByteLength -> Get (Seq a)
+-- getRepeated = go Empty where
+--   go !acc !left = do
+--     if
+--       | left == 0 -> pure acc
+--       | left < 0 -> fail ("consumed too much input by: " ++ show left ++ " for number of elements: " ++ show (Seq.length acc))
+--       | otherwise -> do
+--         WithByteSize sz a <- getSized
+--         go (acc :|> a) (left - sz)
 
 class ByteSized a where
   byteSize :: a -> ByteLength

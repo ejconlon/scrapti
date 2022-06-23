@@ -1,6 +1,5 @@
 module Main (main) where
 
-import Control.Monad.IO.Class (liftIO)
 import Control.Monad.State.Strict (gets)
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Sequence as Seq
