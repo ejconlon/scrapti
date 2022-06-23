@@ -6,8 +6,7 @@ module Scrapti.Sample
 
 import Data.Int (Int8)
 import Data.Proxy (Proxy)
-import Data.Word (Word16)
-import Scrapti.Binary (Get, Binary (..), Int16LE, Int32LE, Int64LE)
+import Scrapti.Binary (Get, Binary (..), Int16LE, Int32LE, Int64LE, Word16LE)
 import Data.Primitive (Prim)
 
 class (Prim a, Binary a) => Sample a where
@@ -34,7 +33,7 @@ instance Sample Int64LE where
 data Sampled f where
   Sampled :: Sample a => !(f a) -> Sampled f
 
-getSampled :: Word16 -> Maybe (Sampled Get)
+getSampled :: Word16LE -> Maybe (Sampled Get)
 getSampled = \case
   8 -> Just (Sampled (get :: Get Int8))
   16 -> Just (Sampled (get :: Get Int16LE))

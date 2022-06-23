@@ -209,7 +209,7 @@ instance Default BoolByte where
 
 newtype FloatLE = FloatLE { unFloatLE :: Float }
   deriving stock (Show)
-  deriving newtype (Eq, Ord, Num, Fractional, Prim, Default)
+  deriving newtype (Eq, Ord, Num, Real, Fractional, Prim, Default)
 
 instance Binary FloatLE where
   get = fmap FloatLE getFloatle
@@ -217,7 +217,7 @@ instance Binary FloatLE where
 
 newtype Word16LE = Word16LE { unWord16LE :: Word16 }
   deriving stock (Show)
-  deriving newtype (Eq, Ord, Num, Prim, Default)
+  deriving newtype (Eq, Ord, Num, Enum, Real, Integral, Prim, Default)
 
 instance Binary Word16LE where
   get = fmap Word16LE getWord16le
@@ -225,7 +225,7 @@ instance Binary Word16LE where
 
 newtype Int16LE = Int16LE { unInt16LE :: Int16 }
   deriving stock (Show)
-  deriving newtype (Eq, Ord, Num, Prim, Default)
+  deriving newtype (Eq, Ord, Num, Enum, Real, Integral, Prim, Default)
 
 instance Binary Int16LE where
   get = fmap Int16LE getInt16le
@@ -233,7 +233,7 @@ instance Binary Int16LE where
 
 newtype Word32LE = Word32LE { unWord32LE :: Word32 }
   deriving stock (Show)
-  deriving newtype (Eq, Ord, Num, Prim, Default)
+  deriving newtype (Eq, Ord, Num, Enum, Real, Integral, Prim, Default)
 
 instance Binary Word32LE where
   get = fmap Word32LE getWord32le
@@ -241,7 +241,7 @@ instance Binary Word32LE where
 
 newtype Int32LE = Int32LE { unInt32LE :: Int32 }
   deriving stock (Show)
-  deriving newtype (Eq, Ord, Num, Prim, Default)
+  deriving newtype (Eq, Ord, Num, Enum, Real, Integral, Prim, Default)
 
 instance Binary Int32LE where
   get = fmap Int32LE getInt32le
@@ -249,7 +249,7 @@ instance Binary Int32LE where
 
 newtype Word64LE = Word64LE { unWord64LE :: Word64 }
   deriving stock (Show)
-  deriving newtype (Eq, Ord, Num, Prim, Default)
+  deriving newtype (Eq, Ord, Num, Enum, Real, Integral, Prim, Default)
 
 instance Binary Word64LE where
   get = fmap Word64LE getWord64le
@@ -257,7 +257,7 @@ instance Binary Word64LE where
 
 newtype Int64LE = Int64LE { unInt64LE :: Int64 }
   deriving stock (Show)
-  deriving newtype (Eq, Ord, Num, Prim, Default)
+  deriving newtype (Eq, Ord, Num, Enum, Real, Integral, Prim, Default)
 
 instance Binary Int64LE where
   get = fmap Int64LE getInt64le
