@@ -32,7 +32,7 @@ import Data.Word (Word8)
 import GHC.Generics (Generic)
 import Scrapti.Binary (Binary (..), ByteLength, DecodeT, FixedText, Get, Int16LE, Put, SizedBinary (..), TermText,
                        Word16LE, Word32LE, decodeBounded, decodeGet, decodeRepeated, getByteString, getSeq, getVec,
-                       guardEnd, putByteString, putSeq, putVec, runPut, skip)
+                       guardEnd, putByteString, putSeq, putSeqWith, putVec, runPut, skip)
 import Scrapti.Riff (Label, expectLabel, getChunkSize, labelRiff, putChunkSize)
 import Scrapti.Wav (WavData (..), wavDataSamples)
 
@@ -139,13 +139,13 @@ instance Binary Sdta where
     put labelSdta
     put labelSmpl
     putChunkSize (fromIntegral (wavDataSamples highBits * 2))
-    putVec put (unWavData highBits)
+    putVec (unWavData highBits)
     case mayLowBits of
       Nothing -> pure ()
       Just lowBits -> do
         put labelSm24
         putChunkSize (fromIntegral (wavDataSamples lowBits))
-        putVec put (unWavData lowBits)
+        putVec (unWavData lowBits)
 
 data PdtaCat =
     PdtaCatPreset
@@ -273,6 +273,139 @@ data Gen =
   | GenReserved !Int16LE !Int16LE
   deriving stock (Eq, Show)
 
+instance Binary Gen where
+  get = do
+    tag <- get
+    if
+      | tag == 0 -> fmap GenStartAddressOffset get
+      | tag == 1 -> fmap GenEndAddressOffset get
+      | tag == 2 -> fmap GenLoopStartAddressOffset get
+      | tag == 3 -> fmap GenLoopEndAddressOffset get
+      | tag == 4 -> fmap GenStartAddressCoarseOffset get
+      | tag == 5 -> fmap GenModLfoToPitch get
+      | tag == 6 -> fmap GenVibLfoToPitch get
+      | tag == 7 -> fmap GenModEnvToPitch get
+      | tag == 8 -> fmap GenInitFc get
+      | tag == 9 -> fmap GenInitQ get
+      | tag == 10 -> fmap GenModLfoToFc get
+      | tag == 11 -> fmap GenModEnvToFc get
+      | tag == 12 -> fmap GenEndAddressCoarseOffset get
+      | tag == 13 -> fmap GenModLfoToVol get
+      | tag == 15 -> fmap GenChorus get
+      | tag == 16 -> fmap GenReverb get
+      | tag == 17 -> fmap GenPan get
+      | tag == 21 -> fmap GenDelayModLfo get
+      | tag == 22 -> fmap GenFreqModLfo get
+      | tag == 23 -> fmap GenDelayVibLfo get
+      | tag == 24 -> fmap GenFreqVibLfo get
+      | tag == 25 -> fmap GenDelayModEnv get
+      | tag == 26 -> fmap GenAttackModEnv get
+      | tag == 27 -> fmap GenHoldModEnv get
+      | tag == 28 -> fmap GenDecayModEnv get
+      | tag == 29 -> fmap GenSustainModEnv get
+      | tag == 30 -> fmap GenReleaseModEnv get
+      | tag == 31 -> fmap GenKeyToModEnvHold get
+      | tag == 32 -> fmap GenKeyToModEnvDecay get
+      | tag == 33 -> fmap GenDelayVolEnv get
+      | tag == 34 -> fmap GenAttackVolEnv get
+      | tag == 35 -> fmap GenHoldVolEnv get
+      | tag == 36 -> fmap GenDecayVolEnv get
+      | tag == 37 -> fmap GenSustainVolEnv get
+      | tag == 38 -> fmap GenReleaseVolEnv get
+      | tag == 39 -> fmap GenKeyToVolEnvHold get
+      | tag == 40 -> fmap GenKeyToVolEnvDecay get
+      | tag == 41 -> fmap GenInstIndex get
+      | tag == 43 -> do
+        a <- get
+        b <- get
+        pure $! GenKeyRange a b
+      | tag == 44 -> do
+        a <- get
+        b <- get
+        pure $! GenVelRange a b
+      | tag == 45 -> fmap GenLoopStartAddressCoarseOffset get
+      | tag == 46 -> fmap GenKey get
+      | tag == 47 -> fmap GenVel get
+      | tag == 48 -> fmap GenInitAtten get
+      | tag == 50 -> fmap GenLoopEndAddressCoarseOffset get
+      | tag == 51 -> fmap GenCoarseTune get
+      | tag == 52 -> fmap GenFineTune get
+      | tag == 53 -> fmap GenSampleIndex get
+      | tag == 54 -> do
+        a <- get
+        let !sm = case a of
+              1 -> SampleModeContLoop
+              3 -> SampleModePressLoop
+              _ -> SampleModeNoLoop a
+        pure $! GenSampleMode sm
+      | tag == 56 -> fmap GenScaleTuning get
+      | tag == 57 -> fmap GenExclusiveClass get
+      | tag == 58 -> fmap GenRootKey get
+      | otherwise -> do
+        a <- get
+        pure $! GenReserved tag a
+  put gen = do
+    put (whichTagGen gen)
+    case gen of
+      GenStartAddressOffset x -> put x
+      GenEndAddressOffset x -> put x
+      GenLoopStartAddressOffset x -> put x
+      GenLoopEndAddressOffset x -> put x
+      GenStartAddressCoarseOffset x -> put x
+      GenModLfoToPitch x -> put x
+      GenVibLfoToPitch x -> put x
+      GenModEnvToPitch x -> put x
+      GenInitFc x -> put x
+      GenInitQ x -> put x
+      GenModLfoToFc x -> put x
+      GenModEnvToFc x -> put x
+      GenEndAddressCoarseOffset x -> put x
+      GenModLfoToVol x -> put x
+      GenChorus x -> put x
+      GenReverb x -> put x
+      GenPan x -> put x
+      GenDelayModLfo x -> put x
+      GenFreqModLfo x -> put x
+      GenDelayVibLfo x -> put x
+      GenFreqVibLfo x -> put x
+      GenDelayModEnv x -> put x
+      GenAttackModEnv x -> put x
+      GenHoldModEnv x -> put x
+      GenDecayModEnv x -> put x
+      GenSustainModEnv x -> put x
+      GenReleaseModEnv x -> put x
+      GenKeyToModEnvHold x -> put x
+      GenKeyToModEnvDecay x -> put x
+      GenDelayVolEnv x -> put x
+      GenAttackVolEnv x -> put x
+      GenHoldVolEnv x -> put x
+      GenDecayVolEnv x -> put x
+      GenSustainVolEnv x -> put x
+      GenReleaseVolEnv x -> put x
+      GenKeyToVolEnvHold x -> put x
+      GenKeyToVolEnvDecay x -> put x
+      GenInstIndex x -> put x
+      GenKeyRange x y -> put x *> put y
+      GenVelRange x y -> put x *> put y
+      GenLoopStartAddressCoarseOffset x -> put x
+      GenKey x -> put x
+      GenVel x -> put x
+      GenInitAtten x -> put x
+      GenLoopEndAddressCoarseOffset x -> put x
+      GenCoarseTune x -> put x
+      GenFineTune x -> put x
+      GenSampleIndex x -> put x
+      GenSampleMode sm ->
+        let !x = case sm of
+              SampleModeContLoop -> 1
+              SampleModePressLoop -> 3
+              SampleModeNoLoop c -> c
+        in put x
+      GenScaleTuning x -> put x
+      GenExclusiveClass x -> put x
+      GenRootKey x -> put x
+      GenReserved _ x -> put x
+
 -- | Instrument
 data Inst = Inst
   { instName :: !ShortText
@@ -376,10 +509,10 @@ decodeInfos = do
   decodeRepeated remainingSize (decodeGet get)
 
 getHighBits :: SampleCount -> Get (WavData Int16LE)
-getHighBits numSamples = fmap WavData (getVec (fromIntegral numSamples) get)
+getHighBits numSamples = fmap WavData (getVec (fromIntegral numSamples))
 
 getLowBits :: SampleCount -> Get (WavData Word8)
-getLowBits numSamples = fmap WavData (getVec (fromIntegral numSamples) get)
+getLowBits numSamples = fmap WavData (getVec (fromIntegral numSamples))
 
 getPdtaHeader :: Get ByteLength
 getPdtaHeader = do
@@ -396,83 +529,11 @@ sizeGen = 4
 sizeInst = 22
 sizeShdr = 46
 
-getPdtaElems :: Label -> ByteLength -> ByteLength -> Get a -> Get (Seq a)
-getPdtaElems label chunkLen size getter = do
+getPdtaElems :: Binary a => Label -> ByteLength -> ByteLength -> Get (Seq a)
+getPdtaElems label chunkLen size = do
   unless (mod chunkLen size == 0) (fail ("invalid size for pdta elem: " ++ show label))
   let !numElems = div chunkLen size
-  getSeq (fromIntegral numElems) getter
-
-getGen :: Get Gen
-getGen = do
-  tag <- get
-  if
-    | tag == 0 -> fmap GenStartAddressOffset get
-    | tag == 1 -> fmap GenEndAddressOffset get
-    | tag == 2 -> fmap GenLoopStartAddressOffset get
-    | tag == 3 -> fmap GenLoopEndAddressOffset get
-    | tag == 4 -> fmap GenStartAddressCoarseOffset get
-    | tag == 5 -> fmap GenModLfoToPitch get
-    | tag == 6 -> fmap GenVibLfoToPitch get
-    | tag == 7 -> fmap GenModEnvToPitch get
-    | tag == 8 -> fmap GenInitFc get
-    | tag == 9 -> fmap GenInitQ get
-    | tag == 10 -> fmap GenModLfoToFc get
-    | tag == 11 -> fmap GenModEnvToFc get
-    | tag == 12 -> fmap GenEndAddressCoarseOffset get
-    | tag == 13 -> fmap GenModLfoToVol get
-    | tag == 15 -> fmap GenChorus get
-    | tag == 16 -> fmap GenReverb get
-    | tag == 17 -> fmap GenPan get
-    | tag == 21 -> fmap GenDelayModLfo get
-    | tag == 22 -> fmap GenFreqModLfo get
-    | tag == 23 -> fmap GenDelayVibLfo get
-    | tag == 24 -> fmap GenFreqVibLfo get
-    | tag == 25 -> fmap GenDelayModEnv get
-    | tag == 26 -> fmap GenAttackModEnv get
-    | tag == 27 -> fmap GenHoldModEnv get
-    | tag == 28 -> fmap GenDecayModEnv get
-    | tag == 29 -> fmap GenSustainModEnv get
-    | tag == 30 -> fmap GenReleaseModEnv get
-    | tag == 31 -> fmap GenKeyToModEnvHold get
-    | tag == 32 -> fmap GenKeyToModEnvDecay get
-    | tag == 33 -> fmap GenDelayVolEnv get
-    | tag == 34 -> fmap GenAttackVolEnv get
-    | tag == 35 -> fmap GenHoldVolEnv get
-    | tag == 36 -> fmap GenDecayVolEnv get
-    | tag == 37 -> fmap GenSustainVolEnv get
-    | tag == 38 -> fmap GenReleaseVolEnv get
-    | tag == 39 -> fmap GenKeyToVolEnvHold get
-    | tag == 40 -> fmap GenKeyToVolEnvDecay get
-    | tag == 41 -> fmap GenInstIndex get
-    | tag == 43 -> do
-      a <- get
-      b <- get
-      pure $! GenKeyRange a b
-    | tag == 44 -> do
-      a <- get
-      b <- get
-      pure $! GenVelRange a b
-    | tag == 45 -> fmap GenLoopStartAddressCoarseOffset get
-    | tag == 46 -> fmap GenKey get
-    | tag == 47 -> fmap GenVel get
-    | tag == 48 -> fmap GenInitAtten get
-    | tag == 50 -> fmap GenLoopEndAddressCoarseOffset get
-    | tag == 51 -> fmap GenCoarseTune get
-    | tag == 52 -> fmap GenFineTune get
-    | tag == 53 -> fmap GenSampleIndex get
-    | tag == 54 -> do
-      a <- get
-      let !sm = case a of
-            1 -> SampleModeContLoop
-            3 -> SampleModePressLoop
-            _ -> SampleModeNoLoop a
-      pure $! GenSampleMode sm
-    | tag == 56 -> fmap GenScaleTuning get
-    | tag == 57 -> fmap GenExclusiveClass get
-    | tag == 58 -> fmap GenRootKey get
-    | otherwise -> do
-      a <- get
-      pure $! GenReserved tag a
+  getSeq (fromIntegral numElems)
 
 whichTagGen :: Gen -> Int16LE
 whichTagGen = \case
@@ -530,92 +591,29 @@ whichTagGen = \case
   GenRootKey _ -> 58
   GenReserved t _ -> t
 
-putGen :: Gen -> Put
-putGen gen = do
-  put (whichTagGen gen)
-  case gen of
-    GenStartAddressOffset x -> put x
-    GenEndAddressOffset x -> put x
-    GenLoopStartAddressOffset x -> put x
-    GenLoopEndAddressOffset x -> put x
-    GenStartAddressCoarseOffset x -> put x
-    GenModLfoToPitch x -> put x
-    GenVibLfoToPitch x -> put x
-    GenModEnvToPitch x -> put x
-    GenInitFc x -> put x
-    GenInitQ x -> put x
-    GenModLfoToFc x -> put x
-    GenModEnvToFc x -> put x
-    GenEndAddressCoarseOffset x -> put x
-    GenModLfoToVol x -> put x
-    GenChorus x -> put x
-    GenReverb x -> put x
-    GenPan x -> put x
-    GenDelayModLfo x -> put x
-    GenFreqModLfo x -> put x
-    GenDelayVibLfo x -> put x
-    GenFreqVibLfo x -> put x
-    GenDelayModEnv x -> put x
-    GenAttackModEnv x -> put x
-    GenHoldModEnv x -> put x
-    GenDecayModEnv x -> put x
-    GenSustainModEnv x -> put x
-    GenReleaseModEnv x -> put x
-    GenKeyToModEnvHold x -> put x
-    GenKeyToModEnvDecay x -> put x
-    GenDelayVolEnv x -> put x
-    GenAttackVolEnv x -> put x
-    GenHoldVolEnv x -> put x
-    GenDecayVolEnv x -> put x
-    GenSustainVolEnv x -> put x
-    GenReleaseVolEnv x -> put x
-    GenKeyToVolEnvHold x -> put x
-    GenKeyToVolEnvDecay x -> put x
-    GenInstIndex x -> put x
-    GenKeyRange x y -> put x *> put y
-    GenVelRange x y -> put x *> put y
-    GenLoopStartAddressCoarseOffset x -> put x
-    GenKey x -> put x
-    GenVel x -> put x
-    GenInitAtten x -> put x
-    GenLoopEndAddressCoarseOffset x -> put x
-    GenCoarseTune x -> put x
-    GenFineTune x -> put x
-    GenSampleIndex x -> put x
-    GenSampleMode sm ->
-      let !x = case sm of
-            SampleModeContLoop -> 1
-            SampleModePressLoop -> 3
-            SampleModeNoLoop c -> c
-      in put x
-    GenScaleTuning x -> put x
-    GenExclusiveClass x -> put x
-    GenRootKey x -> put x
-    GenReserved _ x -> put x
-
 getPdtaBlock :: Get PdtaBlock
 getPdtaBlock = do
   label <- get
   chunkSize <- getChunkSize
   if
     | label == labelPhdr ->
-      fmap PdtaBlockPhdr (getPdtaElems label chunkSize sizePhdr (get @Phdr))
+      fmap PdtaBlockPhdr (getPdtaElems @Phdr label chunkSize sizePhdr)
     | label == labelPbag ->
-      fmap (PdtaBlockBag PdtaCatPreset) (getPdtaElems label chunkSize sizeBag (get @Bag))
+      fmap (PdtaBlockBag PdtaCatPreset) (getPdtaElems @Bag label chunkSize sizeBag)
     | label == labelPmod ->
-      fmap (PdtaBlockMod PdtaCatPreset) (getPdtaElems label chunkSize sizeMod (get @Mod))
+      fmap (PdtaBlockMod PdtaCatPreset) (getPdtaElems @Mod label chunkSize sizeMod)
     | label == labelPgen ->
-      fmap (PdtaBlockGen PdtaCatPreset) (getPdtaElems label chunkSize sizeGen getGen)
+      fmap (PdtaBlockGen PdtaCatPreset) (getPdtaElems @Gen label chunkSize sizeGen)
     | label == labelInst ->
-      fmap PdtaBlockInst (getPdtaElems label chunkSize sizeInst (get @Inst))
+      fmap PdtaBlockInst (getPdtaElems @Inst label chunkSize sizeInst)
     | label == labelIbag ->
-      fmap (PdtaBlockBag PdtaCatInst) (getPdtaElems label chunkSize sizeBag (get @Bag))
+      fmap (PdtaBlockBag PdtaCatInst) (getPdtaElems @Bag label chunkSize sizeBag)
     | label == labelImod ->
-      fmap (PdtaBlockMod PdtaCatInst) (getPdtaElems label chunkSize sizeMod (get @Mod))
+      fmap (PdtaBlockMod PdtaCatInst) (getPdtaElems @Mod label chunkSize sizeMod)
     | label == labelIgen ->
-      fmap (PdtaBlockGen PdtaCatInst) (getPdtaElems label chunkSize sizeGen getGen)
+      fmap (PdtaBlockGen PdtaCatInst) (getPdtaElems @Gen label chunkSize sizeGen)
     | label == labelShdr ->
-      fmap PdtaBlockShdr (getPdtaElems label chunkSize sizeShdr (get @Shdr))
+      fmap PdtaBlockShdr (getPdtaElems @Shdr label chunkSize sizeShdr)
     | otherwise ->
       fail ("unrecognized pdta elem: " ++ show label)
 
@@ -680,7 +678,7 @@ putInfos infos = do
   put labelList
   putChunkSize (sizeInfos infos)
   put labelInfo
-  putSeq put infos
+  putSeq infos
 
 whichLabelInfo :: Info -> Label
 whichLabelInfo = \case
@@ -702,7 +700,7 @@ putPdtaBlocks pdtaBlocks = do
   put labelList
   putChunkSize (sizePdtaBlocks pdtaBlocks)
   put labelPdta
-  putSeq putPdtaBlock pdtaBlocks
+  putSeqWith putPdtaBlock pdtaBlocks
 
 whichLabelPdtaBlock :: PdtaBlock -> Label
 whichLabelPdtaBlock = \case
@@ -724,9 +722,9 @@ putPdtaBlock block = do
   put (whichLabelPdtaBlock block)
   putChunkSize (sizePdtaBlock block)
   case block of
-    PdtaBlockPhdr phdrs -> putSeq put phdrs
-    PdtaBlockBag _ bags -> putSeq put bags
-    PdtaBlockMod _ mods -> putSeq put mods
-    PdtaBlockGen _ gens -> putSeq putGen gens
-    PdtaBlockInst insts -> putSeq put insts
-    PdtaBlockShdr shdrs -> putSeq put shdrs
+    PdtaBlockPhdr phdrs -> putSeq phdrs
+    PdtaBlockBag _ bags -> putSeq bags
+    PdtaBlockMod _ mods -> putSeq mods
+    PdtaBlockGen _ gens -> putSeq gens
+    PdtaBlockInst insts -> putSeq insts
+    PdtaBlockShdr shdrs -> putSeq shdrs

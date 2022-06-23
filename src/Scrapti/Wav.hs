@@ -32,8 +32,8 @@ import Data.Semigroup (Sum (..))
 import Data.Sequence (Seq (..))
 import qualified Data.Vector.Primitive as VP
 import Scrapti.Binary (Binary (..), ByteLength, DecodeState (..), DecodeT, Get, Int16LE, Int32LE, Int64LE, Put,
-                       SizedBinary, Word16LE, Word32LE (..), decodeBounded, decodeGet, getByteString, getExpect, getVec,
-                       guardEnd, putByteString, putVec, runPut, skip)
+                       SizedBinary, Word16LE, Word32LE (..), decodeBounded, decodeGet, getByteString, getExpect,
+                       getVecWith, guardEnd, putByteString, putVec, runPut, skip)
 import Scrapti.Riff (Label, expectLabel, getChunkSize, labelRiff, putChunkSize)
 
 newtype BitLength = BitLength { unBitLength :: Word16LE }
@@ -195,7 +195,7 @@ getWavData bps getter = do
   chunkSize <- getChunkSize
   unless (mod chunkSize bytesPer == 0) (fail "bad data chunk size")
   let !samples = fromIntegral (div chunkSize bytesPer)
-  vec <- getVec samples getter
+  vec <- getVecWith samples getter
   unless (VP.length vec == samples) (fail "bad samples")
   pure $! WavData vec
 
@@ -224,7 +224,7 @@ putSpecificWav (Wav (WavFormat nchan sr bps) mid (WavData vec) tra) = result whe
     for_ mid putUnp
     put labelData
     putChunkSize dataChunkSize
-    putVec put vec
+    putVec vec
     for_ tra putUnp
   putFmt = do
     putChunkSize fmtChunkSize

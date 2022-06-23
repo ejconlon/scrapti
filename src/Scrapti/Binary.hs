@@ -33,11 +33,15 @@ module Scrapti.Binary
   , getByteString
   , getExpect
   , getVec
+  , getVecWith
   , getSeq
+  , getSeqWith
   , skip
   , putByteString
   , putVec
+  , putVecWith
   , putSeq
+  , putSeqWith
   ) where
 
 import Control.Monad (unless)
@@ -161,17 +165,29 @@ getExpect typ getter expec = do
 -- putInt24le :: Int24 -> Put ()
 -- putInt24le = undefined
 
-getVec :: Prim a => Int -> Get a -> Get (VP.Vector a)
-getVec len getter = VP.generateM len (const getter)
+getVecWith :: Prim a => Int -> Get a -> Get (VP.Vector a)
+getVecWith len getter = VP.generateM len (const getter)
 
-putVec :: Prim a => (a -> Put) -> VP.Vector a -> Put
-putVec = VP.mapM_
+getVec :: (Prim a, Binary a) => Int -> Get (VP.Vector a)
+getVec len = getVecWith len get
 
-getSeq :: Int -> Get a -> Get (Seq a)
-getSeq = Seq.replicateA
+putVecWith :: Prim a => (a -> Put) -> VP.Vector a -> Put
+putVecWith = VP.mapM_
 
-putSeq :: (a -> Put) -> Seq a -> Put
-putSeq = traverse_
+putVec :: (Prim a, Binary a) => VP.Vector a -> Put
+putVec = putVecWith put
+
+getSeqWith :: Int -> Get a -> Get (Seq a)
+getSeqWith = Seq.replicateA
+
+getSeq :: Binary a => Int -> Get (Seq a)
+getSeq len = getSeqWith len get
+
+putSeqWith :: (a -> Put) -> Seq a -> Put
+putSeqWith = traverse_
+
+putSeq :: Binary a => Seq a -> Put
+putSeq = putSeqWith put
 
 class Binary a => SizedBinary a where
   byteSize :: a -> ByteLength
