@@ -34,7 +34,7 @@ import Data.Word (Word8)
 import GHC.Generics (Generic)
 import Scrapti.Binary (Binary (..), ByteLength, ByteSized (..), DecodeT, FixedText, Get, Int16LE, Put, TermText,
                        Word16LE, Word32LE, decodeBounded, decodeGet, decodeRepeated, getByteString, getSeq, getVec,
-                       guardEnd, putByteString, putSeq, putSeqWith, putVec, runPut, skip)
+                       guardEnd, putByteString, putSeq, putVec, runPut, skip)
 import Scrapti.Riff (Label, expectLabel, getChunkSize, labelRiff, putChunkSize)
 import Scrapti.Wav (WavData (..), wavDataSamples)
 
@@ -170,6 +170,42 @@ data PdtaBlock =
   | PdtaBlockInst !(Seq Inst)
   | PdtaBlockShdr !(Seq Shdr)
   deriving stock (Eq, Show)
+
+instance Binary PdtaBlock where
+  get = do
+    label <- get
+    chunkSize <- getChunkSize
+    if
+      | label == labelPhdr ->
+        fmap PdtaBlockPhdr (getPdtaElems @Phdr label chunkSize sizePhdr)
+      | label == labelPbag ->
+        fmap (PdtaBlockBag PdtaCatPreset) (getPdtaElems @Bag label chunkSize sizeBag)
+      | label == labelPmod ->
+        fmap (PdtaBlockMod PdtaCatPreset) (getPdtaElems @Mod label chunkSize sizeMod)
+      | label == labelPgen ->
+        fmap (PdtaBlockGen PdtaCatPreset) (getPdtaElems @Gen label chunkSize sizeGen)
+      | label == labelInst ->
+        fmap PdtaBlockInst (getPdtaElems @Inst label chunkSize sizeInst)
+      | label == labelIbag ->
+        fmap (PdtaBlockBag PdtaCatInst) (getPdtaElems @Bag label chunkSize sizeBag)
+      | label == labelImod ->
+        fmap (PdtaBlockMod PdtaCatInst) (getPdtaElems @Mod label chunkSize sizeMod)
+      | label == labelIgen ->
+        fmap (PdtaBlockGen PdtaCatInst) (getPdtaElems @Gen label chunkSize sizeGen)
+      | label == labelShdr ->
+        fmap PdtaBlockShdr (getPdtaElems @Shdr label chunkSize sizeShdr)
+      | otherwise ->
+        fail ("unrecognized pdta elem: " ++ show label)
+  put block = do
+    put (whichLabelPdtaBlock block)
+    putChunkSize (sizePdtaBlock block)
+    case block of
+      PdtaBlockPhdr phdrs -> putSeq phdrs
+      PdtaBlockBag _ bags -> putSeq bags
+      PdtaBlockMod _ mods -> putSeq mods
+      PdtaBlockGen _ gens -> putSeq gens
+      PdtaBlockInst insts -> putSeq insts
+      PdtaBlockShdr shdrs -> putSeq shdrs
 
 data Pdta = Pdta
   { pdtaPhdrs :: !(Seq Phdr)
@@ -601,36 +637,10 @@ whichTagGen = \case
   GenRootKey _ -> 58
   GenReserved t _ -> t
 
-getPdtaBlock :: Get PdtaBlock
-getPdtaBlock = do
-  label <- get
-  chunkSize <- getChunkSize
-  if
-    | label == labelPhdr ->
-      fmap PdtaBlockPhdr (getPdtaElems @Phdr label chunkSize sizePhdr)
-    | label == labelPbag ->
-      fmap (PdtaBlockBag PdtaCatPreset) (getPdtaElems @Bag label chunkSize sizeBag)
-    | label == labelPmod ->
-      fmap (PdtaBlockMod PdtaCatPreset) (getPdtaElems @Mod label chunkSize sizeMod)
-    | label == labelPgen ->
-      fmap (PdtaBlockGen PdtaCatPreset) (getPdtaElems @Gen label chunkSize sizeGen)
-    | label == labelInst ->
-      fmap PdtaBlockInst (getPdtaElems @Inst label chunkSize sizeInst)
-    | label == labelIbag ->
-      fmap (PdtaBlockBag PdtaCatInst) (getPdtaElems @Bag label chunkSize sizeBag)
-    | label == labelImod ->
-      fmap (PdtaBlockMod PdtaCatInst) (getPdtaElems @Mod label chunkSize sizeMod)
-    | label == labelIgen ->
-      fmap (PdtaBlockGen PdtaCatInst) (getPdtaElems @Gen label chunkSize sizeGen)
-    | label == labelShdr ->
-      fmap PdtaBlockShdr (getPdtaElems @Shdr label chunkSize sizeShdr)
-    | otherwise ->
-      fail ("unrecognized pdta elem: " ++ show label)
-
 decodePdtaChunk :: Monad m => DecodeT m PdtaChunk
 decodePdtaChunk = do
   remainingBytes <- decodeGet getPdtaHeader
-  fmap PdtaChunk (decodeRepeated remainingBytes (decodeGet getPdtaBlock))
+  fmap PdtaChunk (decodeRepeated remainingBytes (decodeGet get))
 
 encodeSfont :: Sfont -> BSL.ByteString
 encodeSfont = runPut . putSfont
@@ -710,7 +720,7 @@ putPdtaChunk pdtaChunk = do
   put labelList
   putChunkSize (sizePdtaChunk pdtaChunk)
   put labelPdta
-  putSeqWith putPdtaBlock (unPdtaChunk pdtaChunk)
+  putSeq (unPdtaChunk pdtaChunk)
 
 whichLabelPdtaBlock :: PdtaBlock -> Label
 whichLabelPdtaBlock = \case
@@ -727,14 +737,3 @@ whichLabelPdtaBlock = \case
   PdtaBlockInst _ -> labelInst
   PdtaBlockShdr _ -> labelShdr
 
-putPdtaBlock :: PdtaBlock -> Put
-putPdtaBlock block = do
-  put (whichLabelPdtaBlock block)
-  putChunkSize (sizePdtaBlock block)
-  case block of
-    PdtaBlockPhdr phdrs -> putSeq phdrs
-    PdtaBlockBag _ bags -> putSeq bags
-    PdtaBlockMod _ mods -> putSeq mods
-    PdtaBlockGen _ gens -> putSeq gens
-    PdtaBlockInst insts -> putSeq insts
-    PdtaBlockShdr shdrs -> putSeq shdrs

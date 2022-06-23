@@ -1,16 +1,34 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 module Scrapti.Classes
-  ( BinaryRep (..)
+  ( Pair (..)
+  , Equiv (..)
+  , BinaryRep (..)
   , BinaryEncoded (..)
   , BinaryTagged (..)
+  , ViaEquiv (..)
   , ViaBoundedEnum (..)
   , ViaBinaryRep (..)
   , ViaBinary (..)
   , ViaBinaryTagged (..)
   ) where
 
+import Data.Default (Default (..))
 import Scrapti.Binary (Binary (..), DecodeM, Get, Put, decodeGet)
+
+-- TODO remove in favor of explicit newtypes + equivs
+-- | Just a strict tuple
+data Pair x y = Pair
+  { pairFirst :: !x
+  , pairSecond :: !y
+  } deriving stock (Eq, Show, Functor, Foldable, Traversable)
+
+instance (Default x, Default y) => Default (Pair x y) where
+  def = Pair def def
+
+class Equiv z a | a -> z where
+  equivFwd :: z -> a
+  equivBwd :: a -> z
 
 class Binary x => BinaryRep x a | a -> x where
   parse :: x -> Either String a
@@ -24,6 +42,12 @@ class Binary x => BinaryTagged x a | a -> x where
   getTagged :: x -> Get a
   howTagged :: a -> x
   putTagged :: a -> Put
+
+newtype ViaEquiv a = ViaEquiv { unViaEquiv :: a }
+
+instance (Binary z, Equiv z a) => Binary (ViaEquiv a) where
+  get = fmap (ViaEquiv . equivFwd) get
+  put = put . equivBwd . unViaEquiv
 
 newtype ViaBoundedEnum x a = ViaBoundedEnum { unViaBoundedEnum :: a }
 

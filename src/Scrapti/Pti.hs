@@ -1,3 +1,5 @@
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
@@ -8,19 +10,11 @@ import Data.Int (Int8)
 import Data.Proxy (Proxy (..))
 import qualified Data.Vector.Primitive as VP
 import Data.Word (Word8)
+import GHC.Generics (Generic)
 import Scrapti.Binary (Binary (..), BoolByte (..), DecodeT, FixedBytes, FixedText, FloatLE, Get, Int16LE, Word16LE,
                        Word32LE, decodeGet)
-import Scrapti.Classes (BinaryRep (..), ViaBinaryRep (..), ViaBoundedEnum (..))
+import Scrapti.Classes (BinaryRep (..), Equiv (..), Pair (..), ViaBinaryRep (..), ViaBoundedEnum (..), ViaEquiv (..))
 import Scrapti.Wav (Wav, decodeSpecificWav)
-
--- | Just a strict tuple
-data Pair a b = Pair
-  { pairFirst :: !a
-  , pairSecond :: !b
-  } deriving stock (Eq, Show, Functor, Foldable, Traversable)
-
-instance (Default a, Default b) => Default (Pair a b) where
-  def = Pair def def
 
 data WavetableWindowSize =
     WWS32
@@ -98,89 +92,54 @@ data AuxPreamble = AuxPreamble
 instance Default AuxPreamble where
   def = AuxPreamble def def def def def def def
 
+data MixPreamble = MixPreamble
+  { auxPre0To19 :: !(FixedBytes 20)
+  -- ^ 0-19
+  , preIsWavetable :: !BoolByte
+  -- 20
+  , preName :: !(FixedText 30)
+  -- 21-51
+  , auxPre52To59 :: !(FixedBytes 8)
+  -- 52-59
+  , preSampleLength :: !Word32LE
+  -- 60-63
+  , preWavetableWindowSize :: !WavetableWindowSize
+  -- 64-65
+  , auxPre66To67 :: !Word16LE
+  -- 66-67
+  , preWavetableTotalPositions :: !Word16LE
+  -- 68-69
+  , auxPre70To75 :: !(FixedBytes 6)
+  -- 70-75
+  , preSamplePlayback :: !SamplePlayback
+  -- 76
+  , auxPre77 :: !Word8
+  -- 77
+  , prePlaybackStart :: !Word16LE
+  -- 78-79
+  , preLoopStart :: !Word16LE
+  -- 80-81
+  , preLoopEnd :: !Word16LE
+  -- 82-83
+  , prePlaybackEnd :: !Word16LE
+  -- 84-85
+  , auxPre86To87 :: !Word16LE
+  -- 86-87
+  , preWavetablePosition :: !Word16LE
+  -- 88-89
+  , auxPre90To91 :: !Word16LE
+  -- 90-91
+  } deriving stock (Eq, Show, Generic)
+    deriving anyclass (Binary)
+
 newtype PairPreamble = PairPreamble { unPairPreamble :: Pair AuxPreamble Preamble }
   deriving stock (Show)
   deriving newtype (Eq, Default)
+  deriving (Binary) via (ViaEquiv PairPreamble)
 
-instance Binary PairPreamble where
-  get = do
-    -- 0-19
-    auxPre0To19 <- get
-    -- 20
-    preIsWavetable <- get
-    -- 21-51
-    preName <- get
-    -- 52-59
-    auxPre52To59 <- get
-    -- 60-63
-    preSampleLength <- get
-    -- 64-65
-    preWavetableWindowSize <- get
-    -- 66-67
-    auxPre66To67 <- get
-    -- 68-69
-    preWavetableTotalPositions <- get
-    -- 70-75
-    auxPre70To75 <- get
-    -- 76
-    preSamplePlayback <- get
-    -- 77
-    auxPre77 <- get
-    -- 78-79
-    prePlaybackStart <- get
-    -- 80-81
-    preLoopStart <- get
-    -- 82-83
-    preLoopEnd <- get
-    -- 84-85
-    prePlaybackEnd <- get
-    -- 86-87
-    auxPre86To87 <- get
-    -- 88-89
-    preWavetablePosition <- get
-    -- 90-91
-    auxPre90To91 <- get
-    let !auxPre = AuxPreamble {..}
-        !pre = Preamble {..}
-        !pair = Pair auxPre pre
-    pure $! PairPreamble pair
-  put (PairPreamble (Pair (AuxPreamble {..}) (Preamble {..}))) = do
-    -- 0-19
-    put auxPre0To19
-    -- 20
-    put preIsWavetable
-    -- 21-51
-    put preName
-    -- 52-59
-    put auxPre52To59
-    -- 60-63
-    put preSampleLength
-    -- 64-65
-    put preWavetableWindowSize
-    -- 66-67
-    put auxPre66To67
-    -- 68-69
-    put preWavetableTotalPositions
-    -- 70-75
-    put auxPre70To75
-    -- 76
-    put preSamplePlayback
-    -- 77
-    put auxPre77
-    -- 78-79
-    put prePlaybackStart
-    -- 80-81
-    put preLoopStart
-    -- 82-83
-    put preLoopEnd
-    -- 84-85
-    put prePlaybackEnd
-    -- 86-87
-    put auxPre86To87
-    -- 88-89
-    put preWavetablePosition
-    -- 90-91
-    put auxPre90To91
+instance Equiv MixPreamble PairPreamble where
+  equivFwd (MixPreamble {..}) = PairPreamble (Pair (AuxPreamble {..}) (Preamble {..}))
+  equivBwd (PairPreamble (Pair (AuxPreamble {..}) (Preamble {..}))) = MixPreamble {..}
 
 data AutoEnvelope = AutoEnvelope
   { aeAmount :: !FloatLE
