@@ -1,5 +1,3 @@
-module Main
-  ( main
-  ) where
+module Main (main) where
 
 import Scrapti.Main (main)

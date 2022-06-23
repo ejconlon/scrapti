@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE DeriveAnyClass #-}
 
 module Scrapti.Sfont
   ( Sfont (..)
@@ -34,6 +34,7 @@ import Scrapti.Binary (Binary (..), ByteLength, DecodeT, FixedText, Get, Int16LE
                        guardEnd, putSeq, putVec, runPut, skip)
 import Scrapti.Riff (Label, expectLabel, getChunkSize, labelRiff, putChunkSize)
 import Scrapti.Wav (WavData (..), wavDataSamples)
+import GHC.Generics (Generic)
 
 newtype SampleCount = Samplecount { unSampleCount :: Word32LE }
   deriving stock (Show)
@@ -111,12 +112,14 @@ data Phdr = Phdr
   , phdrLibrary :: !Word32LE
   , phdrGenre :: !Word32LE
   , phdrMorphology :: !Word32LE
-  } deriving stock (Eq, Show)
+  } deriving stock (Eq, Show, Generic)
+    deriving anyclass (Binary)
 
 data Bag = Bag
   { bagGenIndex :: !Word16LE
   , bagModIndex :: !Word16LE
-  } deriving stock (Eq, Show)
+  } deriving stock (Eq, Show, Generic)
+    deriving anyclass (Binary)
 
 -- | Modulator
 data Mod = Mod
@@ -125,7 +128,8 @@ data Mod = Mod
   , modAmount :: !Int16LE
   , modAmtSrcOper :: !Word16LE
   , modTransOper :: !Word16LE
-  } deriving stock (Eq, Show)
+  } deriving stock (Eq, Show, Generic)
+    deriving anyclass (Binary)
 
 data SampleMode =
     SampleModeNoLoop !Int16LE
@@ -194,7 +198,8 @@ data Gen =
 data Inst = Inst
   { instName :: !ShortText
   , instBagIndex :: !Word16LE
-  } deriving stock (Eq, Show)
+  } deriving stock (Eq, Show, Generic)
+    deriving anyclass (Binary)
 
 -- | Sample header
 data Shdr = Shdr
@@ -208,7 +213,8 @@ data Shdr = Shdr
   , shdrPitchCorrection :: !Int8
   , shdrSampleLink :: !Word16LE
   , shdrSampleType :: !Word16LE
-  } deriving stock (Eq, Show)
+  } deriving stock (Eq, Show, Generic)
+    deriving anyclass (Binary)
 
 emptyPdta :: Pdta
 emptyPdta = Pdta Empty Empty Empty Empty Empty Empty Empty Empty Empty
@@ -366,55 +372,6 @@ getPdtaElems label chunkLen size getter = do
   unless (mod chunkLen size == 0) (fail ("invalid size for pdta elem: " ++ show label))
   let !numElems = div chunkLen size
   getSeq (fromIntegral numElems) getter
-
-getPhdr :: Get Phdr
-getPhdr = do
-  phdrPresetName <- get
-  phdrPreset <- get
-  phdrBank <- get
-  phdrPresetBagIndex <- get
-  phdrLibrary <- get
-  phdrGenre <- get
-  phdrMorphology <- get
-  pure $! Phdr {..}
-
-putPhdr :: Phdr -> Put
-putPhdr (Phdr {..}) = do
-  put phdrPresetName
-  put phdrPreset
-  put phdrBank
-  put phdrPresetBagIndex
-  put phdrLibrary
-  put phdrGenre
-  put phdrMorphology
-
-getBag :: Get Bag
-getBag = do
-  bagGenIndex <- get
-  bagModIndex <- get
-  pure $! Bag {..}
-
-putBag :: Bag -> Put
-putBag (Bag {..})= do
-  put bagGenIndex
-  put bagModIndex
-
-getMod :: Get Mod
-getMod = do
-  modSrcOper <- get
-  modDestOper <- get
-  modAmount <- get
-  modAmtSrcOper <- get
-  modTransOper <- get
-  pure $! Mod {..}
-
-putMod :: Mod -> Put
-putMod (Mod {..}) = do
-  put modSrcOper
-  put modDestOper
-  put modAmount
-  put modAmtSrcOper
-  put modTransOper
 
 getGen :: Get Gen
 getGen = do
@@ -607,67 +564,29 @@ putGen gen = do
     GenRootKey x -> put x
     GenReserved _ x -> put x
 
-getInst :: Get Inst
-getInst = do
-  instName <- get
-  instBagIndex <- get
-  pure $! Inst {..}
-
-putInst :: Inst -> Put
-putInst (Inst {..}) = do
-  put instName
-  put instBagIndex
-
-getShdr :: Get Shdr
-getShdr = do
-  shdrSampleName <- get
-  shdrStart <- get
-  shdrEnd <- get
-  shdrStartLoop <- get
-  shdrEndLoop <- get
-  shdrSampleRate <- get
-  shdrOriginalPitch <- get
-  shdrPitchCorrection <- get
-  shdrSampleLink <- get
-  shdrSampleType <- get
-  pure $! Shdr {..}
-
-putShdr :: Shdr -> Put
-putShdr (Shdr {..}) = do
-  put shdrSampleName
-  put shdrStart
-  put shdrEnd
-  put shdrStartLoop
-  put shdrEndLoop
-  put shdrSampleRate
-  put shdrOriginalPitch
-  put shdrPitchCorrection
-  put shdrSampleLink
-  put shdrSampleType
-
 getPdtaBlock :: Get PdtaBlock
 getPdtaBlock = do
   label <- get
   chunkSize <- getChunkSize
   if
     | label == labelPhdr ->
-      fmap PdtaBlockPhdr (getPdtaElems label chunkSize sizePhdr getPhdr)
+      fmap PdtaBlockPhdr (getPdtaElems label chunkSize sizePhdr (get @Phdr))
     | label == labelPbag ->
-      fmap (PdtaBlockBag PdtaCatPreset) (getPdtaElems label chunkSize sizeBag getBag)
+      fmap (PdtaBlockBag PdtaCatPreset) (getPdtaElems label chunkSize sizeBag (get @Bag))
     | label == labelPmod ->
-      fmap (PdtaBlockMod PdtaCatPreset) (getPdtaElems label chunkSize sizeMod getMod)
+      fmap (PdtaBlockMod PdtaCatPreset) (getPdtaElems label chunkSize sizeMod (get @Mod))
     | label == labelPgen ->
       fmap (PdtaBlockGen PdtaCatPreset) (getPdtaElems label chunkSize sizeGen getGen)
     | label == labelInst ->
-      fmap PdtaBlockInst (getPdtaElems label chunkSize sizeInst getInst)
+      fmap PdtaBlockInst (getPdtaElems label chunkSize sizeInst (get @Inst))
     | label == labelIbag ->
-      fmap (PdtaBlockBag PdtaCatInst) (getPdtaElems label chunkSize sizeBag getBag)
+      fmap (PdtaBlockBag PdtaCatInst) (getPdtaElems label chunkSize sizeBag (get @Bag))
     | label == labelImod ->
-      fmap (PdtaBlockMod PdtaCatInst) (getPdtaElems label chunkSize sizeMod getMod)
+      fmap (PdtaBlockMod PdtaCatInst) (getPdtaElems label chunkSize sizeMod (get @Mod))
     | label == labelIgen ->
       fmap (PdtaBlockGen PdtaCatInst) (getPdtaElems label chunkSize sizeGen getGen)
     | label == labelShdr ->
-      fmap PdtaBlockShdr (getPdtaElems label chunkSize sizeShdr getShdr)
+      fmap PdtaBlockShdr (getPdtaElems label chunkSize sizeShdr (get @Shdr))
     | otherwise ->
       fail ("unrecognized pdta elem: " ++ show label)
 
@@ -809,9 +728,9 @@ putPdtaBlock block = do
   put (whichLabelPdtaBlock block)
   putChunkSize (sizePdtaBlock block)
   case block of
-    PdtaBlockPhdr phdrs -> putSeq putPhdr phdrs
-    PdtaBlockBag _ bags -> putSeq putBag bags
-    PdtaBlockMod _ mods -> putSeq putMod mods
+    PdtaBlockPhdr phdrs -> putSeq put phdrs
+    PdtaBlockBag _ bags -> putSeq put bags
+    PdtaBlockMod _ mods -> putSeq put mods
     PdtaBlockGen _ gens -> putSeq putGen gens
-    PdtaBlockInst insts -> putSeq putInst insts
-    PdtaBlockShdr shdrs -> putSeq putShdr shdrs
+    PdtaBlockInst insts -> putSeq put insts
+    PdtaBlockShdr shdrs -> putSeq put shdrs
