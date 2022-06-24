@@ -135,6 +135,10 @@ newtype PairPreamble = PairPreamble { unPairPreamble :: Pair AuxPreamble Preambl
   deriving newtype (Eq, Default)
   deriving (Binary) via (ViaEquiv PairPreamble)
 
+instance Equiv PairPreamble (Pair AuxPreamble Preamble) where
+  equivFwd = unPairPreamble
+  equivBwd = PairPreamble
+
 instance Equiv MixPreamble PairPreamble where
   equivFwd (MixPreamble {..}) = PairPreamble (Pair (AuxPreamble {..}) (Preamble {..}))
   equivBwd (PairPreamble (Pair (AuxPreamble {..}) (Preamble {..}))) = MixPreamble {..}
@@ -181,6 +185,10 @@ newtype PairAutoEnvelope = PairAutoEnvelope { unPairAutoEnvelope :: Pair AuxAuto
   deriving newtype (Eq, Default)
   deriving (Binary) via (ViaEquiv PairAutoEnvelope)
 
+instance Equiv PairAutoEnvelope (Pair AuxAutoEnvelope AutoEnvelope) where
+  equivFwd = unPairAutoEnvelope
+  equivBwd = PairAutoEnvelope
+
 instance Equiv MixAutoEnvelope PairAutoEnvelope where
   equivFwd (MixAutoEnvelope {..}) = PairAutoEnvelope (Pair (AuxAutoEnvelope {..}) (AutoEnvelope {..}))
   equivBwd (PairAutoEnvelope (Pair (AuxAutoEnvelope {..}) (AutoEnvelope {..}))) = MixAutoEnvelope {..}
@@ -217,6 +225,10 @@ instance Default Auto where
 newtype PairAuto = PairAuto { unPairAuto :: Pair AuxAutoEnvelope Auto }
   deriving stock (Show)
   deriving newtype (Eq, Default)
+
+instance Equiv PairAuto (Pair AuxAutoEnvelope Auto) where
+  equivFwd = unPairAuto
+  equivBwd = PairAuto
 
 instance Binary PairAuto where
   get = do
@@ -307,6 +319,10 @@ newtype PairLfo = PairLfo { unPairLfo :: Pair AuxLfo Lfo }
   deriving newtype (Eq, Default)
   deriving (Binary) via (ViaEquiv PairLfo)
 
+instance Equiv PairLfo (Pair AuxLfo Lfo) where
+  equivFwd = unPairLfo
+  equivBwd = PairLfo
+
 instance Equiv MixLfo PairLfo where
   equivFwd (MixLfo {..}) = PairLfo (Pair (AuxLfo {..}) (Lfo {..}))
   equivBwd (PairLfo (Pair (AuxLfo {..}) (Lfo {..}))) = MixLfo {..}
@@ -389,6 +405,10 @@ newtype PairInstParams = PairInstParams { unPairInstParams :: Pair AuxInstParams
   deriving stock (Show)
   deriving newtype (Eq, Default)
   deriving (Binary) via (ViaEquiv PairInstParams)
+
+instance Equiv PairInstParams (Pair AuxInstParams InstParams) where
+  equivFwd = unPairInstParams
+  equivBwd = PairInstParams
 
 instance Equiv MixInstParams PairInstParams where
   equivFwd (MixInstParams {..}) = PairInstParams (Pair (AuxInstParams {..}) (InstParams {..}))
@@ -476,6 +496,10 @@ newtype PairEffects = PairEffects { unPairEffects :: Pair AuxEffects Effects }
   deriving newtype (Eq, Default)
   deriving (Binary) via (ViaEquiv PairEffects)
 
+instance Equiv PairEffects (Pair AuxEffects Effects) where
+  equivFwd = unPairEffects
+  equivBwd = PairEffects
+
 instance Equiv MixEffects PairEffects where
   equivFwd (MixEffects {..}) = PairEffects (Pair (AuxEffects {..}) (Effects {..}))
   equivBwd (PairEffects (Pair (AuxEffects {..}) (Effects {..}))) = MixEffects {..}
@@ -487,10 +511,33 @@ data Block a = Block
   , blockWavetablePosition :: !a
   , blockGranularPosition :: !a
   , blockFinetune :: !a
-  } deriving stock (Eq, Show)
+  } deriving stock (Eq, Show, Generic)
+    deriving anyclass (Binary)
 
 instance Default a => Default (Block a) where
   def = let a = def in Block a a a a a a
+
+splitBlock :: Equiv a (Pair x y) => Block a -> Pair (Block x) (Block y)
+splitBlock (Block a b c d e f) =
+  let Pair a1 a2 = equivFwd a
+      Pair b1 b2 = equivFwd b
+      Pair c1 c2 = equivFwd c
+      Pair d1 d2 = equivFwd d
+      Pair e1 e2 = equivFwd e
+      Pair f1 f2 = equivFwd f
+      z1 = Block a1 b1 c1 d1 e1 f1
+      z2 = Block a2 b2 c2 d2 e2 f2
+  in Pair z1 z2
+
+joinBlock :: Equiv a (Pair x y) => Pair (Block x) (Block y) -> Block a
+joinBlock (Pair (Block a1 b1 c1 d1 e1 f1) (Block a2 b2 c2 d2 e2 f2)) =
+  Block
+    (equivBwd (Pair a1 a2))
+    (equivBwd (Pair b1 b2))
+    (equivBwd (Pair c1 c2))
+    (equivBwd (Pair d1 d2))
+    (equivBwd (Pair e1 e2))
+    (equivBwd (Pair f1 f2))
 
 data Header = Header
   { headPreamble :: !Preamble
@@ -517,6 +564,51 @@ data AuxHeader = AuxHeader
 instance Default AuxHeader where
   def = AuxHeader def def def def def
 
+data MixHeader = MixHeader
+  { mhPreamble :: !PairPreamble
+  , mhAutoBlock :: !(Block PairAuto)
+  , mhLfoBlock :: !(Block PairLfo)
+  , mhFilter :: !Filter
+  , mhInstParams :: !PairInstParams
+  , mhSlices :: !Slices
+  , mhGranular :: !Granular
+  , mhEffects :: !PairEffects
+  } deriving stock (Eq, Show, Generic)
+    deriving anyclass (Binary)
+
+newtype PairHeader = PairHeader { unPairHeader :: Pair AuxHeader Header }
+  deriving stock (Show)
+  deriving newtype (Eq, Default)
+  deriving (Binary) via (ViaEquiv PairHeader)
+
+instance Equiv PairHeader (Pair AuxHeader Header) where
+  equivFwd = unPairHeader
+  equivBwd = PairHeader
+
+instance Equiv MixHeader PairHeader where
+  equivFwd (MixHeader {..}) =
+    let Pair ahPreamble headPreamble = equivFwd mhPreamble
+        Pair ahAutoBlock headAutoBlock = splitBlock mhAutoBlock
+        Pair ahLfoBlock headLfoBlock = splitBlock mhLfoBlock
+        headFilter = mhFilter
+        Pair ahInstParams headInstParams = equivFwd mhInstParams
+        headSlices = mhSlices
+        headGranular = mhGranular
+        Pair ahEffects headEffects = equivFwd mhEffects
+        ahd = AuxHeader {..}
+        hd = Header {..}
+    in PairHeader (Pair ahd hd)
+  equivBwd (PairHeader (Pair (AuxHeader {..}) (Header {..}))) =
+    let mhPreamble = equivBwd (Pair ahPreamble headPreamble)
+        mhAutoBlock = joinBlock (Pair ahAutoBlock headAutoBlock)
+        mhLfoBlock = joinBlock (Pair ahLfoBlock headLfoBlock)
+        mhFilter = headFilter
+        mhInstParams = equivBwd (Pair ahInstParams headInstParams)
+        mhSlices = headSlices
+        mhGranular = headGranular
+        mhEffects = equivBwd (Pair ahEffects headEffects)
+    in MixHeader {..}
+
 data Pti = Pti
   { ptiHeader :: !Header
   , ptiWav :: !(Wav Int16LE)
@@ -525,11 +617,20 @@ data Pti = Pti
 instance Default Pti where
   def = Pti def def
 
--- getPairHeader :: Get (Pair AuxHeader Header)
--- getPairHeader = undefined
+newtype PairPti = PairPti { unPairPti :: Pair AuxHeader Pti }
+  deriving stock (Show)
+  deriving newtype (Eq, Default)
 
--- decodePairPti :: DecodeM (Pair AuxHeader Pti)
--- decodePairPti = do
---   Pair auxHd hd <- decodeGet getPairHeader
---   wav <- decodeSpecificWav Proxy
---   pure $! Pair auxHd (Pti hd wav)
+instance Equiv PairPti (Pair AuxHeader Pti) where
+  equivFwd = unPairPti
+  equivBwd = PairPti
+
+instance Binary PairPti where
+  get = do
+    PairHeader (Pair ahd hd) <- get
+    wav <- get
+    let !pair = Pair ahd (Pti hd wav)
+    pure $! PairPti pair
+  put (PairPti (Pair ahd (Pti hd wav))) = do
+    put (PairHeader (Pair ahd hd))
+    put wav
