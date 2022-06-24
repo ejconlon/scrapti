@@ -11,6 +11,8 @@ import Scrapti.Wav (Sampled (..), SampledWav (..), Wav (..), WavBody (..), WavCh
                     WavFormatChunk (..), WavHeader (..), WavSampleChunk (..))
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (testCase, (@?=))
+import Scrapti.Pti (PairPti (..))
+import Scrapti.Classes (Pair(..))
 
 dataOffset :: ByteLength
 dataOffset = 36
@@ -88,5 +90,16 @@ testSfontWrite = testCase "write" $ do
 testSfont :: TestTree
 testSfont = testGroup "sfont" [testSfontWhole, testSfontWrite]
 
+testPtiManual :: TestTree
+testPtiManual = testCase "manual" $ do
+  putStrLn "TODO"
+  -- bs <- BSL.readFile "testdata/testproj/instruments/1 drums.pti"
+  -- PairPti (Pair ah pti) <- runParseM bs (parseWithoutSize @PairPti)
+  -- print ah
+  -- print pti
+
+testPti :: TestTree
+testPti = testGroup "pti" [testPtiManual]
+
 main :: IO ()
-main = defaultMain (testGroup "Scrapti" [testWav, testSfont])
+main = defaultMain (testGroup "Scrapti" [testWav, testSfont, testPti])

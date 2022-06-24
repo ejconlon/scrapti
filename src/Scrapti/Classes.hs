@@ -4,17 +4,17 @@ module Scrapti.Classes
   ( Pair (..)
   , Equiv (..)
   , BinaryRep (..)
-  , BinaryTagged (..)
+  -- , BinaryTagged (..)
   , ViaEquiv (..)
   , ViaBoundedEnum (..)
   , ViaBinaryRep (..)
-  , ViaBinaryTagged (..)
+  -- , ViaBinaryTagged (..)
   ) where
 
 import Data.Default (Default (..))
-import Scrapti.Binary (Binary (..), Get, Put)
+import Scrapti.Binary (Binary (..), BinaryParser (parseWithoutSize), ByteSized (..), StaticByteSized (..), getWithoutSize)
+import Data.Proxy (Proxy (..))
 
--- TODO remove in favor of explicit newtypes + equivs
 -- | Just a strict tuple
 data Pair x y = Pair
   { pairFirst :: !x
@@ -32,10 +32,10 @@ class Binary x => BinaryRep x a | a -> x where
   parse :: x -> Either String a
   rep :: a -> x
 
-class Binary x => BinaryTagged x a | a -> x where
-  getTagged :: x -> Get a
-  howTagged :: a -> x
-  putTagged :: a -> Put
+-- class Binary x => BinaryTagged x a | a -> x where
+--   getTagged :: x -> Get a
+--   howTagged :: a -> x
+--   putTagged :: a -> Put
 
 newtype ViaEquiv a = ViaEquiv { unViaEquiv :: a }
 
@@ -55,16 +55,25 @@ instance (Binary x, Integral x, Bounded a, Enum a) => BinaryRep x (ViaBoundedEnu
 
 newtype ViaBinaryRep a = ViaBinaryRep { unViaBinaryRep :: a }
 
-instance BinaryRep x a => Binary (ViaBinaryRep a) where
-  get = get >>= either fail (pure . ViaBinaryRep) . parse
+instance (ByteSized x, BinaryRep x a) => ByteSized (ViaBinaryRep a) where
+  byteSize = byteSize . rep . unViaBinaryRep
+
+instance (StaticByteSized x, BinaryRep x a) => StaticByteSized (ViaBinaryRep a) where
+  staticByteSize = const (staticByteSize (Proxy :: Proxy x))
+
+instance (BinaryRep x a, BinaryParser x) => Binary (ViaBinaryRep a) where
+  get = getWithoutSize
   put = put . rep . unViaBinaryRep
 
-newtype ViaBinaryTagged a = ViaBinaryTagged { unViaBinaryTagged :: a }
+instance (BinaryRep x a, BinaryParser x) => BinaryParser (ViaBinaryRep a) where
+  parseWithoutSize = parseWithoutSize >>= either fail (pure . ViaBinaryRep) . parse
 
-instance BinaryTagged x a => Binary (ViaBinaryTagged a) where
-  get = do
-    x <- get
-    fmap ViaBinaryTagged (getTagged x)
-  put (ViaBinaryTagged a) = do
-    put (howTagged a)
-    putTagged a
+-- newtype ViaBinaryTagged a = ViaBinaryTagged { unViaBinaryTagged :: a }
+
+-- instance BinaryTagged x a => Binary (ViaBinaryTagged a) where
+--   get = do
+--     x <- get
+--     fmap ViaBinaryTagged (getTagged x)
+--   put (ViaBinaryTagged a) = do
+--     put (howTagged a)
+--     putTagged a

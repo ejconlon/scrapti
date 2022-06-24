@@ -10,7 +10,7 @@ import Data.Int (Int8)
 import Data.Word (Word8)
 import GHC.Generics (Generic)
 import Scrapti.Binary (Binary (..), BoolByte (..), FixedBytes, FixedText, FixedVec, FloatLE, Int16LE, Word16LE,
-                       Word32LE)
+                       Word32LE, BinaryParser, StaticByteSized, ByteSized)
 import Scrapti.Classes (BinaryRep (..), Equiv (..), Pair (..), ViaBinaryRep (..), ViaBoundedEnum (..), ViaEquiv (..))
 import Scrapti.Wav (Wav)
 
@@ -22,7 +22,7 @@ data WavetableWindowSize =
   | WWS1024
   | WWS2048
   deriving stock (Eq, Ord, Show, Enum, Bounded)
-  deriving Binary via (ViaBinaryRep WavetableWindowSize)
+  deriving (ByteSized, StaticByteSized, Binary) via (ViaBinaryRep WavetableWindowSize)
 
 instance Default WavetableWindowSize where
   def = WWS2048
