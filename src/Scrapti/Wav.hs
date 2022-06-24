@@ -2,249 +2,302 @@
 
 module Scrapti.Wav
   ( Sampled (..)
-  , WavFormat (..)
-  , WavData (..)
+  , WavFormatData (..)
+  , WavFormatChunk (..)
   , WavHeader (..)
-  , WavUnparsed (..)
+  , WavSampleChunk (..)
+  , WavUnparsedChunk (..)
   , WavChunk (..)
+  , WavBody (..)
   , Wav (..)
-  , wavDataSamples
-  , decodeWavHeader
-  , decodeWavChunk
-  , decodeWavTrailers
-  , decodeAnyWav
-  , decodeSpecificWav
-  , encodeAnyWav
-  , encodeSpecificWav
+  , SampledWav (..)
   ) where
 
 import Control.Monad (unless)
-import Control.Monad.State.Strict (gets)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Lazy as BSL
 import Data.Default (Default (..))
-import Data.Foldable (foldMap', for_)
 import Data.Int (Int8)
 import Data.Primitive (Prim)
-import Data.Proxy (Proxy)
-import Data.Semigroup (Sum (..))
+import Data.Proxy (Proxy (..))
 import Data.Sequence (Seq (..))
 import qualified Data.Vector.Primitive as VP
-import Scrapti.Binary (Binary (..), ByteLength, ByteSized, DecodeM, DecodeState (..), Get, Int16LE, Int32LE, Int64LE,
-                       Put, Word16LE, Word32LE (..), decodeBounded, decodeGet, getByteString, getExpect, getVecWith,
-                       guardEnd, putByteString, putVec, runPut, skip)
-import Scrapti.Riff (Label, expectLabel, getChunkSize, labelRiff, putChunkSize)
-
-newtype BitLength = BitLength { unBitLength :: Word16LE }
-  deriving stock (Show)
-  deriving newtype (Eq, Ord, Num, Enum, Real, Integral, Default, Binary, ByteSized)
-
-data Sampled f where
-  Sampled :: (Prim a, Binary a) => !(f a) -> Sampled f
-
-getSampled :: BitLength -> Maybe (Sampled Get)
-getSampled = \case
-  8 -> Just (Sampled (get :: Get Int8))
-  16 -> Just (Sampled (get :: Get Int16LE))
-  -- 24 -> Just (Sampled (get :: Get Int24LE))
-  32 -> Just (Sampled (get :: Get Int32LE))
-  64 -> Just (Sampled (get :: Get Int64LE))
-  _ -> Nothing
-
-data WavFormat = WavFormat
-  { wfNumChannels :: !Word16LE
-  , wfSampleRate :: !Word32LE
-  , wfBitsPerSample :: !BitLength
-  } deriving stock (Eq, Show)
-
-instance Default WavFormat where
-  def = WavFormat 2 44100 16
-
-newtype WavData a = WavData { unWavData :: VP.Vector a }
-  deriving stock (Show)
-  deriving newtype (Eq)
-
-instance Prim a => Default (WavData a) where
-  def = WavData VP.empty
-
-data WavHeader = WavHeader
-  { wavHeaderRemainingSize :: !ByteLength
-  , wavHeaderFormat :: !WavFormat
-  } deriving stock (Eq, Show)
-
-data WavUnparsed = WavUnparsed
-  { wavUnparsedLabel :: !Label
-  , wavUnparsedContents :: !ByteString
-  } deriving stock (Eq, Show)
-
-data WavBody a = WavBody
-  { wbMiddle :: !(Seq WavUnparsed)
-  , wbData :: !(WavData a)
-  } deriving stock (Eq, Show)
-
-data Wav a = Wav
-  { wavFormat :: !WavFormat
-  , wavMiddle :: !(Seq WavUnparsed)
-  , wavData :: !(WavData a)
-  , wavTrailer :: !(Seq WavUnparsed)
-  } deriving stock (Eq, Show)
-
-instance Prim a => Default (Wav a) where
-  def = Wav def Empty def Empty
-
-data WavChunk a =
-    WavChunkUnparsed !WavUnparsed
-  | WavChunkData !(WavData a)
-  deriving stock (Eq, Show)
-
-wavDataSamples :: Prim a => WavData a -> Int
-wavDataSamples = VP.length . unWavData
-
-decodeWavHeader :: DecodeM WavHeader
-decodeWavHeader = decodeGet getWavHeader
-
-decodeWavChunk :: Prim a => BitLength -> Get a -> DecodeM (WavChunk a)
-decodeWavChunk bps getter = decodeGet (getWavChunk bps getter)
-
-decodeWavTrailers :: DecodeM (Seq WavUnparsed)
-decodeWavTrailers = go Empty where
-  go !acc = do
-    bs <- gets decStateInput
-    if BSL.null bs
-      then pure acc
-      else do
-        unp <- decodeGet (get >>= getWavUnparsed)
-        go (acc :|> unp)
-
-decodeAnyWav :: DecodeM (Sampled Wav)
-decodeAnyWav = do
-  WavHeader remainingSize fmt <- decodeWavHeader
-  case getSampled (wfBitsPerSample fmt) of
-    Nothing -> fail "bad bps"
-    Just (Sampled getter) -> fmap Sampled (decodeRestOfWav remainingSize fmt getter)
-
-decodeSpecificWav :: (Prim a, Binary a) => Proxy a -> DecodeM (Wav a)
-decodeSpecificWav _ = do
-  WavHeader remainingSize fmt <- decodeWavHeader
-  decodeRestOfWav remainingSize fmt get
-
-decodeRestOfWav :: Prim a => ByteLength -> WavFormat -> Get a -> DecodeM (Wav a)
-decodeRestOfWav remainingSize fmt getter = do
-  decodeBounded remainingSize $ do
-    WavBody mid dat <- decodeGet (getWavBody (wfBitsPerSample fmt) getter)
-    tra <- decodeWavTrailers
-    guardEnd
-    pure $! Wav fmt mid dat tra
-
-encodeAnyWav :: Sampled Wav -> BSL.ByteString
-encodeAnyWav (Sampled wav) = encodeSpecificWav wav
-
-encodeSpecificWav :: (Prim a, Binary a) => Wav a -> BSL.ByteString
-encodeSpecificWav = runPut . putSpecificWav
+import Scrapti.Binary (Binary (..), BinaryParser (..), ByteLength, ByteSized (..), Int16LE, Int32LE, Int64LE, ParseM,
+                       StaticByteSized (..), WithByteSize (..), Word16LE, Word32LE (..), getWithoutSize, parseBound,
+                       parseByteString, parseRemaining, parseRepeated, parseUnfold, parseVecRemaining, parseWithSize,
+                       putByteString, putSeq, putVec)
+import Scrapti.Riff (Chunk (..), Label, StaticLabel (..), labelRiff, parseChunkSize, parseExpectLabel, putChunkSize)
 
 labelWave, labelFmt, labelData :: Label
 labelWave = "WAVE"
 labelFmt = "fmt "
 labelData = "data"
 
-getWavHeader :: Get WavHeader
-getWavHeader = do
-  expectLabel labelRiff
-  fileSize <- getChunkSize
-  expectLabel labelWave
-  expectLabel labelFmt
-  (format, formatSize) <- getWavFormat
-  let remainingSize = fileSize - formatSize - 12
-  pure $! WavHeader remainingSize format
+newtype BitLength = BitLength { unBitLength :: Word16LE }
+  deriving stock (Show)
+  deriving newtype (Eq, Ord, Num, Enum, Real, Integral, Default, Binary, ByteSized)
 
-isSupportedBPS :: BitLength -> Bool
-isSupportedBPS w = mod w 8 == 0 && w <= 64
+instance BinaryParser BitLength
 
-isSupportedFmtChunkSize :: ByteLength -> Bool
-isSupportedFmtChunkSize x = x == 16 || x == 18 || x == 40
+data Sampled f where
+  Sampled :: (Prim a, Binary a, StaticByteSized a) => !(f a) -> Sampled f
 
-getWavFormat :: Get (WavFormat, ByteLength)
-getWavFormat = do
-  chunkSize <- getChunkSize
-  unless (isSupportedFmtChunkSize chunkSize) (fail "bad fmt chunk size")
-  _ <- getExpect "compression code" (get @Word16LE) 1
-  numChannels <- get
-  sampleRate <- get
-  bpsAvg <- get
-  bpsSlice <- get
-  bps <- get
-  unless (bpsAvg == sampleRate * fromIntegral bpsSlice) (fail "bad average bps")
-  unless (isSupportedBPS bps) (fail "bad bps")
-  unless (bpsSlice == div (fromIntegral bps) 8 * numChannels) (fail "bad bps slice")
-  skip (fromIntegral (chunkSize - 16))
-  let !format = WavFormat numChannels sampleRate bps
-  pure (format, chunkSize)
+getSampled :: BitLength -> Maybe (Sampled Proxy)
+getSampled = \case
+  8 -> Just (Sampled (Proxy :: Proxy Int8))
+  16 -> Just (Sampled (Proxy :: Proxy Int16LE))
+  -- 24 -> Just (Sampled (Proxy :: Proxy Int24LE))
+  32 -> Just (Sampled (Proxy :: Proxy Int32LE))
+  64 -> Just (Sampled (Proxy :: Proxy Int64LE))
+  _ -> Nothing
 
-getWavChunk :: Prim a => BitLength -> Get a -> Get (WavChunk a)
-getWavChunk bps getter = go where
-  go = do
-    lab <- get
-    if lab == labelData
-      then fmap WavChunkData (getWavData bps getter)
-      else fmap WavChunkUnparsed (getWavUnparsed lab)
+data WavFormatData = WavFormatData
+  { wfdFormatType :: !Word16LE
+  , wfdNumChannels :: !Word16LE
+  , wfdSampleRate :: !Word32LE
+  , wfdBitsPerSample :: !BitLength
+  , wfdExtra :: !ByteString
+  } deriving stock (Eq, Show)
 
-getWavData :: Prim a => BitLength -> Get a -> Get (WavData a)
-getWavData bps getter = do
-  let !bytesPer = div (fromIntegral bps) 8
-  chunkSize <- getChunkSize
-  unless (mod chunkSize bytesPer == 0) (fail "bad data chunk size")
-  let !samples = fromIntegral (div chunkSize bytesPer)
-  vec <- getVecWith samples getter
-  unless (VP.length vec == samples) (fail "bad samples")
-  pure $! WavData vec
+instance Default WavFormatData where
+  def = WavFormatData 1 2 44100 16 BS.empty
 
-getWavUnparsed :: Label -> Get WavUnparsed
-getWavUnparsed lab = do
-  chunkSize <- getChunkSize
-  contents <- getByteString (fromIntegral chunkSize)
-  pure $! WavUnparsed lab contents
-
-getWavBody :: Prim a => BitLength -> Get a -> Get (WavBody a)
-getWavBody bps getter = go Empty where
-  go !unps = do
-    chunk <- getWavChunk bps getter
-    case chunk of
-      WavChunkData dat -> pure $! WavBody unps dat
-      WavChunkUnparsed unp -> go (unps :|> unp)
-
-putSpecificWav :: (Prim a, Binary a) => Wav a -> Put
-putSpecificWav (Wav (WavFormat nchan sr bps) mid (WavData vec) tra) = result where
-  result = do
-    put labelRiff
-    putChunkSize fileSize
-    put labelWave
-    put labelFmt
-    putFmt
-    for_ mid putUnp
-    put labelData
-    putChunkSize dataChunkSize
-    putVec vec
-    for_ tra putUnp
-  putFmt = do
-    putChunkSize fmtChunkSize
-    put @Word16LE 1
+instance Binary WavFormatData where
+  get = getWithoutSize
+  put (WavFormatData fty nchan sr bps extra) = do
+    let !bpsSlice = div (fromIntegral bps) 8 * nchan
+    let !bpsAvg = sr * fromIntegral bpsSlice
+    put fty
     put nchan
     put sr
     put bpsAvg
     put bpsSlice
     put bps
-  putUnp (WavUnparsed lab con) = do
-    put lab
-    putChunkSize (fromIntegral (BS.length con))
-    putByteString con
-  unpSize unps = getSum (foldMap' (\(WavUnparsed _ con) -> Sum (8 + fromIntegral (BS.length con))) unps)
-  midSize = unpSize mid
-  traSize = unpSize tra
-  framingSize = 20
-  fmtChunkSize = 16
-  bytesPer = fromIntegral (div bps 8)
-  dataChunkSize = bytesPer * fromIntegral (VP.length vec)
-  fileSize = framingSize + fmtChunkSize + midSize + dataChunkSize + traSize
-  bpsAvg = sr * fromIntegral bpsSlice
-  bpsSlice = div (fromIntegral bps) 8 * nchan
+    putByteString extra
+
+instance ByteSized WavFormatData where
+  byteSize wfd = 16 + fromIntegral (BS.length (wfdExtra wfd))
+
+isSupportedBPS :: BitLength -> Bool
+isSupportedBPS w = mod w 8 == 0 && w <= 64
+
+isSupportedFmtExtraSize :: ByteLength -> Bool
+isSupportedFmtExtraSize x = x == 0 || x == 2 || x == 24
+
+instance BinaryParser WavFormatData where
+  parseWithoutSize = do
+    formatType <- parseWithoutSize
+    numChannels <- parseWithoutSize
+    sampleRate <- parseWithoutSize
+    bpsAvg <- parseWithoutSize
+    bpsSlice <- parseWithoutSize
+    bps <- parseWithoutSize
+    unless (isSupportedBPS bps) (fail ("bad bps: " ++ show bps))
+    unless (bpsSlice == div (fromIntegral bps) 8 * numChannels) (fail ("bad bps slice: " ++ show bpsSlice))
+    unless (bpsAvg == sampleRate * fromIntegral bpsSlice) (fail ("bad average bps: " ++ show bpsAvg))
+    extra <- parseRemaining
+    let !extraLen = fromIntegral (BS.length extra)
+    unless (isSupportedFmtExtraSize extraLen) (fail ("bad extra length: " ++ show extraLen))
+    pure $! WavFormatData formatType numChannels sampleRate bps extra
+
+instance StaticLabel WavFormatData where
+  staticLabel = const labelFmt
+
+newtype WavFormatChunk = WavFormatChunk { unWavFormatChunk :: Chunk WavFormatData }
+  deriving stock (Show)
+  deriving newtype (Eq, Binary, ByteSized, Default)
+
+instance BinaryParser WavFormatChunk
+
+newtype WavSampleChunk a = WavSampleChunk { unWavSampleChunk :: VP.Vector a }
+  deriving stock (Show)
+  deriving newtype (Eq)
+
+instance (Prim a, StaticByteSized a) => ByteSized (WavSampleChunk a) where
+  byteSize (WavSampleChunk vec) = 8 + byteSize vec
+
+instance (Prim a, StaticByteSized a, Binary a) => Binary (WavSampleChunk a) where
+  get = getWithoutSize
+  put (WavSampleChunk vec) = do
+    put labelData
+    let !chunkSize = byteSize vec
+    putChunkSize chunkSize
+    putVec vec
+
+parseSampleChunkPostLabel :: (Prim a, StaticByteSized a, Binary a) => ParseM (WavSampleChunk a)
+parseSampleChunkPostLabel = do
+  chunkSize <- parseChunkSize
+  vec <- parseBound chunkSize (parseVecRemaining (Proxy :: Proxy a))
+  pure $! WavSampleChunk vec
+
+instance (Prim a, StaticByteSized a, Binary a) => BinaryParser (WavSampleChunk a) where
+  parseWithoutSize = do
+    parseExpectLabel labelData
+    parseSampleChunkPostLabel
+
+instance Prim a => Default (WavSampleChunk a) where
+  def = WavSampleChunk VP.empty
+
+data WavHeader = WavHeader
+  { wavHeaderRemainingSize :: !ByteLength
+  , wavHeaderFormat :: !WavFormatChunk
+  } deriving stock (Eq, Show)
+
+instance Binary WavHeader where
+  get = getWithoutSize
+  put (WavHeader remainingSize format) = do
+    let !formatSize = byteSize format
+        !fileSize = remainingSize + formatSize + 4
+    put labelRiff
+    putChunkSize fileSize
+    put labelWave
+    put format
+
+instance ByteSized WavHeader where
+  byteSize (WavHeader _ format) = 12 + byteSize format
+
+instance BinaryParser WavHeader where
+  parseWithoutSize = do
+    parseExpectLabel labelRiff
+    fileSize <- parseChunkSize
+    parseExpectLabel labelWave
+    WithByteSize formatSize format <- parseWithSize
+    let !remainingSize = fileSize - formatSize - 4
+    pure $! WavHeader remainingSize format
+
+data WavUnparsedChunk = WavUnparsedChunk
+  { wavUnparsedLabel :: !Label
+  , wavUnparsedContents :: !ByteString
+  } deriving stock (Eq, Show)
+
+instance ByteSized WavUnparsedChunk where
+  byteSize (WavUnparsedChunk _ bs) = 8 + fromIntegral (BS.length bs)
+
+parseUnparsedChunkPostLabel :: Label -> ParseM WavUnparsedChunk
+parseUnparsedChunkPostLabel label = do
+  chunkSize <- parseChunkSize
+  bs <- parseByteString chunkSize
+  pure $! WavUnparsedChunk label bs
+
+instance Binary WavUnparsedChunk where
+  get = getWithoutSize
+  put (WavUnparsedChunk label bs) = do
+    put label
+    putChunkSize (fromIntegral (BS.length bs))
+    putByteString bs
+
+instance BinaryParser WavUnparsedChunk where
+  parseWithoutSize = do
+    label <- parseWithoutSize
+    parseUnparsedChunkPostLabel label
+
+data WavChunk a =
+    WavChunkUnparsed !WavUnparsedChunk
+  | WavChunkSample !(WavSampleChunk a)
+  deriving stock (Eq, Show)
+
+instance (Prim a, StaticByteSized a) => ByteSized (WavChunk a) where
+  byteSize = \case
+    WavChunkUnparsed wuc -> byteSize wuc
+    WavChunkSample wsc -> byteSize wsc
+
+instance (Prim a, StaticByteSized a, Binary a) => Binary (WavChunk a) where
+  get = getWithoutSize
+  put = \case
+    WavChunkUnparsed wuc -> put wuc
+    WavChunkSample wsc -> put wsc
+
+instance (Prim a, StaticByteSized a, Binary a) => BinaryParser (WavChunk a) where
+  parseWithoutSize = do
+    label <- parseWithoutSize @Label
+    if label == labelData
+      then fmap WavChunkSample parseSampleChunkPostLabel
+      else fmap WavChunkUnparsed (parseUnparsedChunkPostLabel label)
+
+data WavBody a = WavBody
+  { wbUnparsedPre :: !(Seq WavUnparsedChunk)
+  , wbSample :: !(WavSampleChunk a)
+  , wbUnparsedPost :: !(Seq WavUnparsedChunk)
+  } deriving stock (Eq, Show)
+
+instance Prim a => Default (WavBody a) where
+  def = WavBody Empty def Empty
+
+instance (Prim a, StaticByteSized a) => ByteSized (WavBody a) where
+  byteSize (WavBody pre sam post) = byteSize pre + byteSize sam + byteSize post
+
+instance (Prim a, StaticByteSized a, Binary a) => Binary (WavBody a) where
+  get = getWithoutSize
+  put (WavBody pre sam post) = do
+    putSeq pre
+    put sam
+    putSeq post
+
+instance (Prim a, StaticByteSized a, Binary a) => BinaryParser (WavBody a) where
+  parseWithoutSize = do
+    (!pre, !sam) <- parseUnfold Empty $ \pre -> do
+      chunk <- parseWithoutSize
+      pure $! case chunk of
+        WavChunkUnparsed wuc -> Left (pre :|> wuc)
+        WavChunkSample wsc -> Right (pre, wsc)
+    post <- parseRepeated @WavUnparsedChunk
+    pure $! WavBody pre sam post
+
+data Wav a = Wav
+  { wavFormat :: !WavFormatChunk
+  , wavBody :: !(WavBody a)
+  } deriving stock (Eq, Show)
+
+instance Prim a => Default (Wav a) where
+  def = Wav def def
+
+instance (Prim a, StaticByteSized a) => ByteSized (Wav a) where
+  byteSize (Wav fmt body) = byteSize fmt + byteSize body
+
+instance (Prim a, StaticByteSized a, Binary a) => Binary (Wav a) where
+  get = getWithoutSize
+  put (Wav fmtChunk body) = do
+    let !remainingSize = byteSize body
+        !header = WavHeader remainingSize fmtChunk
+    put header
+    put body
+
+parseRestOfWav :: (Prim a, Binary a, StaticByteSized a) => Proxy a -> ByteLength -> WavFormatChunk -> ParseM (Wav a)
+parseRestOfWav _ remainingSize fmtChunk = do
+  parseBound remainingSize $ do
+    (!pre, !sam) <- parseUnfold Empty $ \pre -> do
+      chunk <- parseWithoutSize
+      pure $! case chunk of
+        WavChunkUnparsed wuc -> Left (pre :|> wuc)
+        WavChunkSample wsc -> Right (pre, wsc)
+    post <- parseRepeated @WavUnparsedChunk
+    let body = WavBody pre sam post
+    pure $! Wav fmtChunk body
+
+instance (Prim a, StaticByteSized a, Binary a) => BinaryParser (Wav a) where
+  parseWithoutSize = do
+    WavHeader remainingSize fmtChunk <- parseWithoutSize
+    let !fmtData = chunkValue (unWavFormatChunk fmtChunk)
+        !fmtBps = fromIntegral (wfdBitsPerSample fmtData)
+        !prox = Proxy :: Proxy a
+        !parseBps = staticByteSize prox
+    unless (fmtBps == parseBps) (fail ("bad bps: in header: " ++ show fmtBps ++ " required: " ++ show parseBps))
+    parseRestOfWav prox remainingSize fmtChunk
+
+newtype SampledWav = SampledWav { unSampledWav :: Sampled Wav }
+
+instance ByteSized SampledWav where
+  byteSize (SampledWav (Sampled wd)) = byteSize wd
+
+instance Binary SampledWav where
+  get = getWithoutSize
+  put (SampledWav (Sampled wd)) = put wd
+
+instance BinaryParser SampledWav where
+  parseWithoutSize = do
+    WavHeader remainingSize fmtChunk <- parseWithoutSize
+    let !fmtData = chunkValue (unWavFormatChunk fmtChunk)
+        !bps = wfdBitsPerSample fmtData
+    case getSampled bps of
+      Nothing -> fail ("bad bps: " ++ show bps)
+      Just (Sampled prox) -> fmap (SampledWav . Sampled) (parseRestOfWav prox remainingSize fmtChunk)

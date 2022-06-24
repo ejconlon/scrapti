@@ -7,13 +7,12 @@ module Scrapti.Pti where
 
 import Data.Default (Default (..))
 import Data.Int (Int8)
-import Data.Proxy (Proxy (..))
 import Data.Word (Word8)
 import GHC.Generics (Generic)
-import Scrapti.Binary (Binary (..), BoolByte (..), DecodeM, FixedBytes, FixedText, FixedVec, FloatLE, Get, Int16LE,
-                       Word16LE, Word32LE, decodeGet)
+import Scrapti.Binary (Binary (..), BoolByte (..), FixedBytes, FixedText, FixedVec, FloatLE, Int16LE, Word16LE,
+                       Word32LE)
 import Scrapti.Classes (BinaryRep (..), Equiv (..), Pair (..), ViaBinaryRep (..), ViaBoundedEnum (..), ViaEquiv (..))
-import Scrapti.Wav (Wav, decodeSpecificWav)
+import Scrapti.Wav (Wav)
 
 data WavetableWindowSize =
     WWS32
@@ -526,11 +525,11 @@ data Pti = Pti
 instance Default Pti where
   def = Pti def def
 
-getPairHeader :: Get (Pair AuxHeader Header)
-getPairHeader = undefined
+-- getPairHeader :: Get (Pair AuxHeader Header)
+-- getPairHeader = undefined
 
-decodePairPti :: DecodeM (Pair AuxHeader Pti)
-decodePairPti = do
-  Pair auxHd hd <- decodeGet getPairHeader
-  wav <- decodeSpecificWav Proxy
-  pure $! Pair auxHd (Pti hd wav)
+-- decodePairPti :: DecodeM (Pair AuxHeader Pti)
+-- decodePairPti = do
+--   Pair auxHd hd <- decodeGet getPairHeader
+--   wav <- decodeSpecificWav Proxy
+--   pure $! Pair auxHd (Pti hd wav)

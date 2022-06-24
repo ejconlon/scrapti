@@ -30,13 +30,13 @@ import Data.Int (Int8)
 import Data.Semigroup (Sum (..))
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
+import qualified Data.Vector.Primitive as VP
 import Data.Word (Word8)
 import GHC.Generics (Generic)
 import Scrapti.Binary (Binary (..), ByteLength, ByteSized (..), DecodeM, FixedText, Get, Int16LE, Put, TermText,
                        Word16LE, Word32LE, decodeBounded, decodeGet, decodeRepeated, getByteString, getSeq, getVec,
                        guardEnd, putByteString, putSeq, putVec, runPut, skip)
 import Scrapti.Riff (Label, expectLabel, getChunkSize, labelRiff, putChunkSize)
-import Scrapti.Wav (WavData (..), wavDataSamples)
 
 newtype SampleCount = Samplecount { unSampleCount :: Word32LE }
   deriving stock (Show)
@@ -118,8 +118,8 @@ instance Binary Info where
       InfoReserved _ bs -> putByteString bs
 
 data Sdta = Sdta
-  { sdtaHighBits :: !(WavData Int16LE)
-  , sdtaLowBits :: !(Maybe (WavData Word8))
+  { sdtaHighBits :: !(VP.Vector Int16LE)
+  , sdtaLowBits :: !(Maybe (VP.Vector Word8))
   } deriving stock (Eq, Show)
 
 instance Binary Sdta where
@@ -148,14 +148,14 @@ instance Binary Sdta where
     putChunkSize (sizeSdta sdta)
     put labelSdta
     put labelSmpl
-    putChunkSize (fromIntegral (wavDataSamples highBits * 2))
-    putVec (unWavData highBits)
+    putChunkSize (fromIntegral (VP.length highBits * 2))
+    putVec highBits
     case mayLowBits of
       Nothing -> pure ()
       Just lowBits -> do
         put labelSm24
-        putChunkSize (fromIntegral (wavDataSamples lowBits))
-        putVec (unWavData lowBits)
+        putChunkSize (fromIntegral (VP.length lowBits))
+        putVec lowBits
 
 data PdtaCat =
     PdtaCatPreset
@@ -554,11 +554,11 @@ decodeInfoChunk = do
   remainingSize <- decodeGet getInfosHeader
   fmap InfoChunk (decodeRepeated remainingSize (decodeGet get))
 
-getHighBits :: SampleCount -> Get (WavData Int16LE)
-getHighBits numSamples = fmap WavData (getVec (fromIntegral numSamples))
+getHighBits :: SampleCount -> Get (VP.Vector Int16LE)
+getHighBits numSamples = getVec (fromIntegral numSamples)
 
-getLowBits :: SampleCount -> Get (WavData Word8)
-getLowBits numSamples = fmap WavData (getVec (fromIntegral numSamples))
+getLowBits :: SampleCount -> Get (VP.Vector Word8)
+getLowBits numSamples = getVec (fromIntegral numSamples)
 
 getPdtaHeader :: Get ByteLength
 getPdtaHeader = do
@@ -681,8 +681,8 @@ sizeInfo = \case
 
 sizeSdta :: Sdta -> ByteLength
 sizeSdta (Sdta high mlow) = sizeHigh + sizeLow where
-  sizeHigh = 12 + 2 * fromIntegral (wavDataSamples high)
-  sizeLow = maybe 0 (\low -> 8 + fromIntegral (wavDataSamples low)) mlow
+  sizeHigh = 12 + 2 * fromIntegral (VP.length high)
+  sizeLow = maybe 0 (\low -> 8 + fromIntegral (VP.length low)) mlow
 
 sizePdtaBlock :: PdtaBlock -> ByteLength
 sizePdtaBlock = \case
