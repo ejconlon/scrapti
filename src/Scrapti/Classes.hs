@@ -4,17 +4,15 @@ module Scrapti.Classes
   ( Pair (..)
   , Equiv (..)
   , BinaryRep (..)
-  , BinaryEncoded (..)
   , BinaryTagged (..)
   , ViaEquiv (..)
   , ViaBoundedEnum (..)
   , ViaBinaryRep (..)
-  , ViaBinary (..)
   , ViaBinaryTagged (..)
   ) where
 
 import Data.Default (Default (..))
-import Scrapti.Binary (Binary (..), DecodeM, Get, Put, decodeGet)
+import Scrapti.Binary (Binary (..), Get, Put)
 
 -- TODO remove in favor of explicit newtypes + equivs
 -- | Just a strict tuple
@@ -33,10 +31,6 @@ class Equiv z a | a -> z where
 class Binary x => BinaryRep x a | a -> x where
   parse :: x -> Either String a
   rep :: a -> x
-
-class BinaryEncoded a where
-  decode :: DecodeM a
-  encode :: a -> Put
 
 class Binary x => BinaryTagged x a | a -> x where
   getTagged :: x -> Get a
@@ -64,12 +58,6 @@ newtype ViaBinaryRep a = ViaBinaryRep { unViaBinaryRep :: a }
 instance BinaryRep x a => Binary (ViaBinaryRep a) where
   get = get >>= either fail (pure . ViaBinaryRep) . parse
   put = put . rep . unViaBinaryRep
-
-newtype ViaBinary a = ViaBinary { unViaBinary :: a }
-
-instance Binary a => BinaryEncoded (ViaBinary a) where
-  decode = decodeGet (fmap ViaBinary get)
-  encode = put . unViaBinary
 
 newtype ViaBinaryTagged a = ViaBinaryTagged { unViaBinaryTagged :: a }
 

@@ -1,23 +1,22 @@
 module Main (main) where
 
-import Control.Monad.State.Strict (gets)
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Sequence as Seq
 import qualified Data.Vector.Primitive as VP
-import Scrapti.Binary (BinaryParser (..), ByteLength, ByteOffset, DecodeState (..), Int16LE, ParseM, WithByteSize (..),
-                       decodeFail, decodeGet, get, parseSkip, parseWithSize, put, runParseM, runPut, skip)
+import Scrapti.Binary (BinaryParser (..), ByteLength, Int16LE, ParseM, WithByteSize (..), parseSkip, parseWithSize, put,
+                       runParseM, runPut)
 import Scrapti.Riff (Chunk (..))
-import Scrapti.Sfont (InfoChunk (..), PdtaChunk (..), Sdta (..), Sfont (..), decodeSfont, encodeSfont)
-import Scrapti.Wav (Sampled (..), SampledWav (..), Wav (..), WavBody (..), WavChunk (..), WavFormatChunk (..),
-                    WavFormatData (..), WavHeader (..), WavSampleChunk (..))
+import Scrapti.Sfont (InfoChunk (..), ListChunk (..), PdtaChunk (..), SdtaChunk (..), Sfont (..))
+import Scrapti.Wav (Sampled (..), SampledWav (..), Wav (..), WavBody (..), WavChunk (..), WavFormat (..),
+                    WavFormatChunk (..), WavHeader (..), WavSampleChunk (..))
 import Test.Tasty (TestTree, defaultMain, testGroup)
-import Test.Tasty.HUnit (assertBool, testCase, (@?=))
+import Test.Tasty.HUnit (testCase, (@?=))
 
 dataOffset :: ByteLength
 dataOffset = 36
 
 drumFmt :: WavFormatChunk
-drumFmt = WavFormatChunk (Chunk (WavFormatData 1 2 44100 16 mempty))
+drumFmt = WavFormatChunk (Chunk (WavFormat 1 2 44100 16 mempty))
 
 drumFileSize :: ByteLength
 drumFileSize = 497896
@@ -70,24 +69,24 @@ testWavWrite = testCase "write" $ do
 testWav :: TestTree
 testWav = testGroup "wav" [testWavHeader, testWavData, testWavWhole, testWavWrite]
 
--- testSfontWhole :: TestTree
--- testSfontWhole = testCase "whole" $ do
---   bs <- BSL.readFile "testdata/timpani.sf2"
---   Sfont (InfoChunk infos) sdta (PdtaChunk pdtaBlocks) <- decodeFail bs decodeSfont
---   Seq.length infos @?= 5
---   VP.length (unWavData (sdtaHighBits sdta)) @?= 1365026
---   sdtaLowBits sdta @?= Nothing
---   Seq.length pdtaBlocks @?= 9
+testSfontWhole :: TestTree
+testSfontWhole = testCase "whole" $ do
+  bs <- BSL.readFile "testdata/timpani.sf2"
+  Sfont (InfoChunk (ListChunk infos)) sdta (PdtaChunk (ListChunk pdtaBlocks)) <- runParseM bs (parseWithoutSize @Sfont)
+  Seq.length infos @?= 5
+  VP.length (sdtaHighBits sdta) @?= 1365026
+  sdtaLowBits sdta @?= Nothing
+  Seq.length pdtaBlocks @?= 9
 
--- testSfontWrite :: TestTree
--- testSfontWrite = testCase "write" $ do
---   bs <- BSL.readFile "testdata/timpani.sf2"
---   sfont <- decodeFail bs decodeSfont
---   let bs' = encodeSfont sfont
---   bs' @?= bs
+testSfontWrite :: TestTree
+testSfontWrite = testCase "write" $ do
+  bs <- BSL.readFile "testdata/timpani.sf2"
+  sfont <- runParseM bs (parseWithoutSize @Sfont)
+  let bs' = runPut (put sfont)
+  bs' @?= bs
 
--- testSfont :: TestTree
--- testSfont = testGroup "sfont" [testSfontWhole, testSfontWrite]
+testSfont :: TestTree
+testSfont = testGroup "sfont" [testSfontWhole, testSfontWrite]
 
 main :: IO ()
-main = defaultMain (testGroup "Scrapti" [testWav]) --, testSfont])
+main = defaultMain (testGroup "Scrapti" [testWav, testSfont])

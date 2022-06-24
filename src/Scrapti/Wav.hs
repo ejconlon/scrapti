@@ -2,7 +2,7 @@
 
 module Scrapti.Wav
   ( Sampled (..)
-  , WavFormatData (..)
+  , WavFormat (..)
   , WavFormatChunk (..)
   , WavHeader (..)
   , WavSampleChunk (..)
@@ -51,20 +51,20 @@ getSampled = \case
   64 -> Just (Sampled (Proxy :: Proxy Int64LE))
   _ -> Nothing
 
-data WavFormatData = WavFormatData
-  { wfdFormatType :: !Word16LE
-  , wfdNumChannels :: !Word16LE
-  , wfdSampleRate :: !Word32LE
-  , wfdBitsPerSample :: !BitLength
-  , wfdExtra :: !ByteString
+data WavFormat = WavFormat
+  { wfFormatType :: !Word16LE
+  , wfNumChannels :: !Word16LE
+  , wfSampleRate :: !Word32LE
+  , wfBitsPerSample :: !BitLength
+  , wfExtra :: !ByteString
   } deriving stock (Eq, Show)
 
-instance Default WavFormatData where
-  def = WavFormatData 1 2 44100 16 BS.empty
+instance Default WavFormat where
+  def = WavFormat 1 2 44100 16 BS.empty
 
-instance Binary WavFormatData where
+instance Binary WavFormat where
   get = getWithoutSize
-  put (WavFormatData fty nchan sr bps extra) = do
+  put (WavFormat fty nchan sr bps extra) = do
     let !bpsSlice = div (fromIntegral bps) 8 * nchan
     let !bpsAvg = sr * fromIntegral bpsSlice
     put fty
@@ -75,8 +75,8 @@ instance Binary WavFormatData where
     put bps
     putByteString extra
 
-instance ByteSized WavFormatData where
-  byteSize wfd = 16 + fromIntegral (BS.length (wfdExtra wfd))
+instance ByteSized WavFormat where
+  byteSize wf = 16 + fromIntegral (BS.length (wfExtra wf))
 
 isSupportedBPS :: BitLength -> Bool
 isSupportedBPS w = mod w 8 == 0 && w <= 64
@@ -84,7 +84,7 @@ isSupportedBPS w = mod w 8 == 0 && w <= 64
 isSupportedFmtExtraSize :: ByteLength -> Bool
 isSupportedFmtExtraSize x = x == 0 || x == 2 || x == 24
 
-instance BinaryParser WavFormatData where
+instance BinaryParser WavFormat where
   parseWithoutSize = do
     formatType <- parseWithoutSize
     numChannels <- parseWithoutSize
@@ -98,12 +98,12 @@ instance BinaryParser WavFormatData where
     extra <- parseRemaining
     let !extraLen = fromIntegral (BS.length extra)
     unless (isSupportedFmtExtraSize extraLen) (fail ("bad extra length: " ++ show extraLen))
-    pure $! WavFormatData formatType numChannels sampleRate bps extra
+    pure $! WavFormat formatType numChannels sampleRate bps extra
 
-instance StaticLabel WavFormatData where
+instance StaticLabel WavFormat where
   staticLabel = const labelFmt
 
-newtype WavFormatChunk = WavFormatChunk { unWavFormatChunk :: Chunk WavFormatData }
+newtype WavFormatChunk = WavFormatChunk { unWavFormatChunk :: Chunk WavFormat }
   deriving stock (Show)
   deriving newtype (Eq, Binary, ByteSized, Default)
 
@@ -252,7 +252,10 @@ instance Prim a => Default (Wav a) where
   def = Wav def def
 
 instance (Prim a, StaticByteSized a) => ByteSized (Wav a) where
-  byteSize (Wav fmt body) = byteSize fmt + byteSize body
+  byteSize (Wav fmt body) =
+    let !remainingSize = byteSize body
+        !header = WavHeader remainingSize fmt
+    in byteSize header + byteSize body
 
 instance (Prim a, StaticByteSized a, Binary a) => Binary (Wav a) where
   get = getWithoutSize
@@ -277,8 +280,8 @@ parseRestOfWav _ remainingSize fmtChunk = do
 instance (Prim a, StaticByteSized a, Binary a) => BinaryParser (Wav a) where
   parseWithoutSize = do
     WavHeader remainingSize fmtChunk <- parseWithoutSize
-    let !fmtData = chunkValue (unWavFormatChunk fmtChunk)
-        !fmtBps = fromIntegral (wfdBitsPerSample fmtData)
+    let !fmt = chunkValue (unWavFormatChunk fmtChunk)
+        !fmtBps = fromIntegral (wfBitsPerSample fmt)
         !prox = Proxy :: Proxy a
         !parseBps = staticByteSize prox
     unless (fmtBps == parseBps) (fail ("bad bps: in header: " ++ show fmtBps ++ " required: " ++ show parseBps))
@@ -296,8 +299,8 @@ instance Binary SampledWav where
 instance BinaryParser SampledWav where
   parseWithoutSize = do
     WavHeader remainingSize fmtChunk <- parseWithoutSize
-    let !fmtData = chunkValue (unWavFormatChunk fmtChunk)
-        !bps = wfdBitsPerSample fmtData
+    let !fmt = chunkValue (unWavFormatChunk fmtChunk)
+        !bps = wfBitsPerSample fmt
     case getSampled bps of
       Nothing -> fail ("bad bps: " ++ show bps)
       Just (Sampled prox) -> fmap (SampledWav . Sampled) (parseRestOfWav prox remainingSize fmtChunk)

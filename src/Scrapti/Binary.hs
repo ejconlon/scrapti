@@ -7,15 +7,6 @@ module Scrapti.Binary
   , runPut
   , ByteLength (..)
   , ByteOffset
-  , DecodeState (..)
-  , DecodeM
-  , runDecodeM
-  , decodeFail
-  , decodeGet
-  , guardEnd
-  , decodeBounded
-  , decodeFolded
-  , decodeRepeated
   , ParseM
   , parseEnd
   , parseUsingSize
@@ -29,9 +20,6 @@ module Scrapti.Binary
   , parseSkip
   , parseRemaining
   , parseVecRemaining
-  , boundParseM
-  , withinParseM
-  , unrestrictedParseM
   , runParseM
   , getBounded
   , getExpect
@@ -61,7 +49,6 @@ module Scrapti.Binary
   , getVecWith
   , getSeq
   , getSeqWith
-  -- , getRepeated
   , skip
   , putByteString
   , putVec
@@ -71,8 +58,7 @@ module Scrapti.Binary
   ) where
 
 import Control.Monad (unless)
-import Control.Monad.Except (ExceptT, MonadError (..), runExceptT)
-import Control.Monad.State.Strict (MonadState, State, StateT (..), gets, runState)
+import Control.Monad.State.Strict (StateT (..))
 import qualified Control.Monad.State.Strict as State
 import Control.Monad.Trans (lift)
 import Data.Binary (Binary (..))
@@ -103,72 +89,6 @@ import GHC.TypeNats (KnownNat, Nat, natVal)
 newtype ByteLength = ByteLength { unByteLength :: Int64 }
   deriving stock (Show)
   deriving newtype (Eq, Ord, Num, Enum, Real, Integral, Bounded, Default)
-
-data DecodeState = DecodeState
-  { decStateInput :: !BSL.ByteString
-  , decStateOffset :: !ByteOffset
-  } deriving stock (Eq, Show)
-
-newtype DecodeM a = DecodeM { unDecodeM :: ExceptT String (State DecodeState) a }
-  deriving newtype (Functor, Applicative, Monad, MonadState DecodeState)
-
-instance MonadFail DecodeM where
-  fail = DecodeM . throwError
-
-runDecodeM :: DecodeM a -> DecodeState -> (Either String a, DecodeState)
-runDecodeM dm = runState (runExceptT (unDecodeM dm))
-
-decodeFail :: MonadFail m => BSL.ByteString -> DecodeM a -> m a
-decodeFail bs act =
-  let (ea, _) = runDecodeM act (DecodeState bs 0)
-  in either fail pure ea
-
-guardEnd :: DecodeM ()
-guardEnd = do
-  bs <- gets decStateInput
-  unless (BSL.null bs) (fail "not end of input")
-
-decodeBounded :: ByteLength -> DecodeM a -> DecodeM a
-decodeBounded len dec = do
-  off <- gets decStateOffset
-  let !end = off + unByteLength len
-  elt <- dec
-  off' <- gets decStateOffset
-  if
-    | off' > end -> fail ("consumed too much input: " ++ show (off' - end))
-    | off' == end -> pure elt
-    | otherwise -> fail ("consumed too little input: " ++ show (end - off'))
-
-decodeFolded :: ByteLength -> b -> (b -> DecodeM b) -> DecodeM b
-decodeFolded len acc fdec = do
-  off <- gets decStateOffset
-  let !end = off + unByteLength len
-  decodeFoldedUntil end acc fdec
-
-decodeFoldedUntil :: ByteOffset -> b -> (b -> DecodeM b) -> DecodeM b
-decodeFoldedUntil end acc0 fdec = go acc0 where
-  go !acc = do
-    off' <- gets decStateOffset
-    if
-      | off' > end -> fail ("consumed too much input: " ++ show (off' - end))
-      | off' == end -> pure acc
-      | otherwise -> do
-        acc' <- fdec acc
-        go acc'
-
-decodeRepeated :: ByteLength -> DecodeM a -> DecodeM (Seq a)
-decodeRepeated len dec = decodeFolded len Empty (\acc -> fmap (acc :|>) dec)
-
-decodeGet :: Get a -> DecodeM a
-decodeGet getter = do
-  DecodeState bs off <- State.get
-  case runGetOrFail getter bs of
-    Left (bs', off', reason) -> do
-      State.put (DecodeState bs' (off + off'))
-      fail reason
-    Right (bs', off', value) -> do
-      State.put (DecodeState bs' (off + off'))
-      pure value
 
 newtype ParseM a = ParseM { unParseM :: StateT ByteLength Get a }
   deriving newtype (Functor, Applicative, Monad, MonadFail)
@@ -327,16 +247,6 @@ putSeqWith = traverse_
 putSeq :: Binary a => Seq a -> Put
 putSeq = putSeqWith put
 
--- getRepeated :: BinaryParser a => ByteLength -> Get (Seq a)
--- getRepeated = go Empty where
---   go !acc !left = do
---     if
---       | left == 0 -> pure acc
---       | left < 0 -> fail ("consumed too much input by: " ++ show left ++ " for number of elements: " ++ show (Seq.length acc))
---       | otherwise -> do
---         WithByteSize sz a <- getWithSize
---         go (acc :|> a) (left - sz)
-
 class ByteSized a where
   byteSize :: a -> ByteLength
 
@@ -376,6 +286,10 @@ instance (ByteSized a, Default a) => Default (WithByteSize a) where
 class (ByteSized a, Binary a) => BinaryParser a where
   parseWithoutSize :: ParseM a
   parseWithoutSize = parseUsingSize (fmap withByteSize get)
+
+instance BinaryParser Int8
+
+instance BinaryParser Word8
 
 parseWithSize :: BinaryParser a => ParseM (WithByteSize a)
 parseWithSize = do

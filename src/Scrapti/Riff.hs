@@ -22,10 +22,6 @@ import Scrapti.Binary (Binary (..), BinaryParser (..), ByteLength, ByteSized (..
 
 type Label = FixedBytes 4
 
--- newtype ChunkSize = ChunkSize { unChunkSize :: Word32LE }
---   deriving stock (Show)
---   deriving newtype (Eq, Ord, Num, Enum, Real, Integral, Binary, ByteSized, StaticByteSized)
-
 labelRiff :: Label
 labelRiff = "RIFF"
 
