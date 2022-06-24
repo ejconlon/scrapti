@@ -27,6 +27,13 @@ library
       Scrapti.Binary
       Scrapti.Classes
       Scrapti.Main
+      Scrapti.Parser.Binary
+      Scrapti.Parser.Free
+      Scrapti.Parser.Funs
+      Scrapti.Parser.Interface
+      Scrapti.Parser.Nums
+      Scrapti.Parser.Run
+      Scrapti.Parser.Sizes
       Scrapti.Pti
       Scrapti.Riff
       Scrapti.Sfont
@@ -68,6 +75,7 @@ library
     , bytestring
     , containers
     , data-default
+    , free
     , mtl
     , primitive
     , resourcet
@@ -115,6 +123,7 @@ executable scrapti-exe
     , bytestring
     , containers
     , data-default
+    , free
     , mtl
     , primitive
     , resourcet
@@ -164,6 +173,7 @@ test-suite scrapti-test
     , bytestring
     , containers
     , data-default
+    , free
     , mtl
     , primitive
     , resourcet

@@ -5,14 +5,14 @@ import qualified Data.Sequence as Seq
 import qualified Data.Vector.Primitive as VP
 import Scrapti.Binary (BinaryParser (..), ByteLength, Int16LE, ParseM, WithByteSize (..), parseSkip, parseWithSize, put,
                        runParseM, runPut)
+import Scrapti.Classes (Pair (..))
+import Scrapti.Pti (PairPti (..))
 import Scrapti.Riff (Chunk (..))
 import Scrapti.Sfont (InfoChunk (..), ListChunk (..), PdtaChunk (..), SdtaChunk (..), Sfont (..))
 import Scrapti.Wav (Sampled (..), SampledWav (..), Wav (..), WavBody (..), WavChunk (..), WavFormat (..),
                     WavFormatChunk (..), WavHeader (..), WavSampleChunk (..))
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (testCase, (@?=))
-import Scrapti.Pti (PairPti (..))
-import Scrapti.Classes (Pair(..))
 
 dataOffset :: ByteLength
 dataOffset = 36

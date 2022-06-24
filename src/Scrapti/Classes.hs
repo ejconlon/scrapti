@@ -12,8 +12,9 @@ module Scrapti.Classes
   ) where
 
 import Data.Default (Default (..))
-import Scrapti.Binary (Binary (..), BinaryParser (parseWithoutSize), ByteSized (..), StaticByteSized (..), getWithoutSize)
 import Data.Proxy (Proxy (..))
+import Scrapti.Binary (Binary (..), BinaryParser (parseWithoutSize), ByteSized (..), StaticByteSized (..),
+                       getWithoutSize)
 
 -- | Just a strict tuple
 data Pair x y = Pair

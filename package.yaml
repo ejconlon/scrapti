@@ -25,6 +25,7 @@ dependencies:
 - containers
 - text
 - primitive
+- free
 # - yaml
 # - sdl2
 # - sdl2-mixer
