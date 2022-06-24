@@ -10,16 +10,26 @@ module Scrapti.Parser.Funs
   , getSeq
   , getFixedSeq
   , getFixedVector
+  , putWord8
+  , putInt8
+  , putWord16LE
+  , putInt16LE
+  , putByteString
+  , putSeq
+  , putFixedSeq
+  , putFixedVector
   ) where
 
 import Control.Monad.Free.Church (F (..))
 import Data.ByteString (ByteString)
+import Data.Foldable (traverse_)
 import Data.Int (Int8)
 import Data.Primitive (Prim)
 import Data.Sequence (Seq (..))
 import qualified Data.Vector.Primitive as VP
 import Data.Word (Word8)
-import Scrapti.Parser.Free (Get (..), GetF (..), GetFixedSeqF (..), GetFixedVectorF (..), ScopeMode (..))
+import Scrapti.Parser.Free (Get (..), GetF (..), GetFixedSeqF (..), GetFixedVectorF (..), Put, PutF (..),
+                            PutFixedSeqF (..), PutFixedVectorF (..), PutM (..), ScopeMode (..))
 import Scrapti.Parser.Nums (Int16LE, Word16LE)
 import Scrapti.Parser.Sizes (ByteCount, ElementCount, StaticByteSized)
 
@@ -64,3 +74,30 @@ getFixedSeq n g = Get (F (\x y -> y (GetFFixedSeq (GetFixedSeqF n g x))))
 -- | Get Vector of statically-sized elements
 getFixedVector :: (StaticByteSized a, Prim a) => ElementCount -> Get a -> Get (VP.Vector a)
 getFixedVector n g = Get (F (\x y -> y (GetFFixedVector (GetFixedVectorF n g x))))
+
+putWord8 :: Word8 -> Put
+putWord8 d = PutM (F (\x y -> y (PutFWord8 d (x ()))))
+
+putInt8 :: Int8 -> Put
+putInt8 d = PutM (F (\x y -> y (PutFInt8 d (x ()))))
+
+putWord16LE :: Word16LE -> Put
+putWord16LE d = PutM (F (\x y -> y (PutFWord16LE d (x ()))))
+
+putInt16LE :: Int16LE -> Put
+putInt16LE d = PutM (F (\x y -> y (PutFInt16LE d (x ()))))
+
+putByteString :: ByteString -> Put
+putByteString bs = PutM (F (\x y -> y (PutFByteString bs (x ()))))
+
+-- | Put Seq of dynamically-sized elements
+putSeq :: (a -> Put) -> Seq a -> Put
+putSeq = traverse_
+
+-- | Put Seq of statically-sized elements
+putFixedSeq :: StaticByteSized a => (a -> Put) -> Seq a -> Put
+putFixedSeq p s = PutM (F (\x y -> y (PutFFixedSeq (PutFixedSeqF s p (x ())))))
+
+-- | Put Vector of statically-sized elements
+putFixedVector :: (StaticByteSized a, Prim a) => (a -> Put) -> VP.Vector a -> Put
+putFixedVector p v = PutM (F (\x y -> y (PutFFixedVector (PutFixedVectorF v p (x ())))))
