@@ -4,12 +4,14 @@ module Scrapti.Parser.Run
   , runCount
   ) where
 
+import Control.Applicative (Alternative (..))
 import Control.Monad.Except (ExceptT, runExceptT, throwError)
 import Control.Monad.Free.Church (F (..))
 import Control.Monad.Reader (MonadReader, ReaderT (..))
 import Control.Monad.State.Strict (MonadState, State, runState)
 import qualified Control.Monad.State.Strict as State
 import Control.Monad.Trans.Free (FreeT (..), iterT, wrap)
+import Control.Monad.Trans.Maybe (MaybeT (..))
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.ByteString.Builder (Builder)
@@ -18,12 +20,11 @@ import qualified Data.ByteString.Lazy as BSL
 import Data.Foldable (for_)
 import qualified Data.Sequence as Seq
 import qualified Data.Vector.Primitive as VP
-import Scrapti.Parser.Free (Get (..), GetF (..), GetStaticSeqF (..), GetStaticVectorF (..), Put, PutF (..),
-                            PutStaticSeqF (..), PutStaticVectorF (..), PutM (..))
+import Scrapti.Parser.Free (Get (..), GetF (..), GetStaticSeqF (..), GetStaticVectorF (..), Put, PutF (..), PutM (..),
+                            PutStaticSeqF (..), PutStaticVectorF (..))
 import Scrapti.Parser.Nums (Int16LE (..), Word16LE (..))
+import Scrapti.Parser.Proxy (proxyForF)
 import Scrapti.Parser.Sizes (ByteCount (..), staticByteSize)
-import Control.Monad.Trans.Maybe (MaybeT (..))
-import Control.Applicative (Alternative (..))
 
 data GetState = GetState
   { gsOffset :: !ByteCount
@@ -152,12 +153,12 @@ execCountRun = \case
     let !bc = fromIntegral (BS.length bs)
     in State.modify' (bc+) *> k
   PutFStaticSeq (PutStaticSeqF s _ k) ->
-    let !z = staticByteSize s
+    let !z = staticByteSize (proxyForF s)
         !ec = fromIntegral (Seq.length s)
         !bc = z * ec
     in State.modify' (bc+) *> k
   PutFStaticVector (PutStaticVectorF v _ k) ->
-    let !z = staticByteSize v
+    let !z = staticByteSize (proxyForF v)
         !ec = fromIntegral (VP.length v)
         !bc = z * ec
     in State.modify' (bc+) *> k

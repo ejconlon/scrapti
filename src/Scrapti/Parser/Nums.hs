@@ -16,17 +16,17 @@ newtype Word16LE = Word16LE { unWord16LE :: Word16 }
   deriving newtype (Eq, Ord, Num, Enum, Real, Integral, Prim, Default)
 
 instance ByteSized Word16LE where
-  byteSize = const 2
+  byteSize _ = 2
 
 instance StaticByteSized Word16LE where
-  staticByteSize = const 2
+  staticByteSize _ = 2
 
 newtype Int16LE = Int16LE { unInt16LE :: Int16 }
   deriving stock (Show)
   deriving newtype (Eq, Ord, Num, Enum, Real, Integral, Prim, Default)
 
 instance ByteSized Int16LE where
-  byteSize = const 2
+  byteSize _ = 2
 
 instance StaticByteSized Int16LE where
-  staticByteSize = const 2
+  staticByteSize _ = 2

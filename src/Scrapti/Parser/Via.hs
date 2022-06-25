@@ -2,15 +2,23 @@
 
 module Scrapti.Parser.Via
   ( ViaGeneric (..)
-  -- , ViaStaticGeneric (..)
+  , ViaStaticGeneric (..)
   ) where
 
-import GHC.Generics (Generic (..), V1, U1, type (:*:) (..), K1 (..), M1 (..))
-import Scrapti.Parser.Sizes (ByteCount, ByteSized (..), StaticByteSized (..))
-import Data.Proxy (Proxy (..))
+import Control.Applicative (liftA2)
 import Data.Kind (Type)
+import GHC.Generics ((:*:) (..), Generic (..), K1 (..), M1 (..), U1 (..), V1)
+import Scrapti.Parser.Binary (Binary (..))
+import Scrapti.Parser.Free (Get, Put)
+import Scrapti.Parser.Funs (putStaticHint)
+import Scrapti.Parser.Proxy (Proxy (..))
+import Scrapti.Parser.Sizes (ByteCount, ByteSized (..), StaticByteSized (..))
 
+-- Use: deriving (ByteSized, Binary) via (Generic Foo)
 newtype ViaGeneric a = ViaGeneric { unViaGeneric :: a }
+
+-- Use: deriving (ByteSized, StaticByteSized, Binary) via (StaticGeneric Foo)
+newtype ViaStaticGeneric a = ViaStaticGeneric { unViaStaticGeneric :: a }
 
 -- ByteSized:
 
@@ -40,6 +48,9 @@ instance ByteSized a => GByteSized (K1 i a) where
 instance (Generic t, GByteSized (Rep t)) => ByteSized (ViaGeneric t) where
   byteSize = gbyteSize . from . unViaGeneric
 
+instance (Generic t, GByteSized (Rep t)) => ByteSized (ViaStaticGeneric t) where
+  byteSize = gbyteSize . from . unViaStaticGeneric
+
 -- StaticByteSized:
 
 class GByteSized f => GStaticByteSized (f :: Type -> Type) where
@@ -60,5 +71,35 @@ instance GStaticByteSized a => GStaticByteSized (M1 i c a) where
 instance StaticByteSized a => GStaticByteSized (K1 i a) where
   gstaticByteSize _ = staticByteSize (Proxy :: Proxy a)
 
-instance (Generic t, GStaticByteSized (Rep t)) => StaticByteSized (ViaGeneric t) where
+instance (Generic t, GStaticByteSized (Rep t)) => StaticByteSized (ViaStaticGeneric t) where
   staticByteSize _ = gstaticByteSize (Proxy :: Proxy (Rep t))
+
+-- Binary:
+
+class GByteSized f => GBinary (f :: Type -> Type) where
+  gget :: Get (f a)
+  gput :: f a -> Put
+
+instance GBinary U1 where
+  gget = pure U1
+  gput _ = pure ()
+
+instance (GBinary a, GBinary b) => GBinary (a :*: b) where
+  gget = liftA2 (:*:) gget gget
+  gput (x :*: y) = gput x *> gput y
+
+instance GBinary a => GBinary (M1 i c a) where
+  gget = fmap M1 gget
+  gput = gput . unM1
+
+instance Binary a => GBinary (K1 i a) where
+  gget = fmap K1 get
+  gput = put . unK1
+
+instance (Generic t, GBinary (Rep t)) => Binary (ViaGeneric t) where
+  get = undefined
+  put = gput . from . unViaGeneric
+
+instance (Generic t, GStaticByteSized (Rep t), GBinary (Rep t)) => Binary (ViaStaticGeneric t) where
+  get = undefined
+  put = putStaticHint (gput . from . unViaStaticGeneric)

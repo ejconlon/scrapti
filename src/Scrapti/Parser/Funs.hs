@@ -29,11 +29,11 @@ import Data.Primitive (Prim)
 import Data.Sequence (Seq (..))
 import qualified Data.Vector.Primitive as VP
 import Data.Word (Word8)
-import Scrapti.Parser.Free (Get (..), GetF (..), GetStaticSeqF (..), GetStaticVectorF (..), Put, PutF (..),
-                            PutStaticSeqF (..), PutStaticVectorF (..), PutM (..), ScopeMode (..))
+import Scrapti.Parser.Free (Get (..), GetF (..), GetStaticSeqF (..), GetStaticVectorF (..), Put, PutF (..), PutM (..),
+                            PutStaticSeqF (..), PutStaticVectorF (..), ScopeMode (..))
 import Scrapti.Parser.Nums (Int16LE, Word16LE)
+import Scrapti.Parser.Proxy (proxyForFun)
 import Scrapti.Parser.Sizes (ByteCount, ElementCount, StaticByteSized (..))
-import Data.Proxy (Proxy (..))
 
 getWord8 :: Get Word8
 getWord8 = Get (F (\x y -> y (GetFWord8 x)))
@@ -103,9 +103,6 @@ putStaticSeq p s = PutM (F (\x y -> y (PutFStaticSeq (PutStaticSeqF s p (x ())))
 -- | Put Vector of statically-sized elements
 putStaticVector :: (StaticByteSized a, Prim a) => (a -> Put) -> VP.Vector a -> Put
 putStaticVector p v = PutM (F (\x y -> y (PutFStaticVector (PutStaticVectorF v p (x ())))))
-
-proxyForFun :: (a -> Put) -> Proxy a
-proxyForFun _ = Proxy
 
 putStaticHint :: StaticByteSized a => (a -> Put) -> a -> Put
 putStaticHint p =

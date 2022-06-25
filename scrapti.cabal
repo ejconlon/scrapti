@@ -28,10 +28,12 @@ library
       Scrapti.Classes
       Scrapti.Main
       Scrapti.Parser.Binary
+      Scrapti.Parser.Example
       Scrapti.Parser.Free
       Scrapti.Parser.Funs
       Scrapti.Parser.Interface
       Scrapti.Parser.Nums
+      Scrapti.Parser.Proxy
       Scrapti.Parser.Run
       Scrapti.Parser.Sizes
       Scrapti.Parser.Via
