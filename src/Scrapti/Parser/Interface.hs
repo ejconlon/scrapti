@@ -6,7 +6,9 @@ module Scrapti.Parser.Interface
   , Int8
   , ByteString
   , Seq (..)
+  , Vector
   , Generic
+  , Storable
   , module Scrapti.Parser.Binary
   , module Scrapti.Parser.Funs
   , module Scrapti.Parser.Nums
@@ -19,7 +21,9 @@ module Scrapti.Parser.Interface
 import Data.ByteString (ByteString)
 import Data.Int (Int8)
 import Data.Sequence (Seq (..))
+import Data.Vector.Storable (Vector)
 import Data.Word (Word8)
+import Foreign.Storable (Storable)
 import GHC.Generics (Generic)
 import Scrapti.Parser.Binary
 import Scrapti.Parser.Free (Get, Put, PutM)

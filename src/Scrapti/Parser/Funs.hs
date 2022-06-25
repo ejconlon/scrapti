@@ -25,10 +25,10 @@ import Control.Monad.Free.Church (F (..))
 import Data.ByteString (ByteString)
 import Data.Foldable (traverse_)
 import Data.Int (Int8)
-import Data.Primitive (Prim)
 import Data.Sequence (Seq (..))
-import qualified Data.Vector.Primitive as VP
+import qualified Data.Vector.Storable as VS
 import Data.Word (Word8)
+import Foreign.Storable (Storable)
 import Scrapti.Parser.Free (Get (..), GetF (..), GetStaticSeqF (..), GetStaticVectorF (..), Put, PutF (..), PutM (..),
                             PutStaticSeqF (..), PutStaticVectorF (..), ScopeMode (..))
 import Scrapti.Parser.Nums (Int16LE, Word16LE)
@@ -74,7 +74,7 @@ getStaticSeq :: StaticByteSized a => ElementCount -> Get a -> Get (Seq a)
 getStaticSeq n g = Get (F (\x y -> y (GetFStaticSeq (GetStaticSeqF n g x))))
 
 -- | Get Vector of statically-sized elements
-getStaticVector :: (StaticByteSized a, Prim a) => ElementCount -> Get a -> Get (VP.Vector a)
+getStaticVector :: (StaticByteSized a, Storable a) => ElementCount -> Get a -> Get (VS.Vector a)
 getStaticVector n g = Get (F (\x y -> y (GetFStaticVector (GetStaticVectorF n g x))))
 
 putWord8 :: Word8 -> Put
@@ -101,7 +101,7 @@ putStaticSeq :: StaticByteSized a => (a -> Put) -> Seq a -> Put
 putStaticSeq p s = PutM (F (\x y -> y (PutFStaticSeq (PutStaticSeqF s p (x ())))))
 
 -- | Put Vector of statically-sized elements
-putStaticVector :: (StaticByteSized a, Prim a) => (a -> Put) -> VP.Vector a -> Put
+putStaticVector :: (StaticByteSized a, Storable a) => (a -> Put) -> VS.Vector a -> Put
 putStaticVector p v = PutM (F (\x y -> y (PutFStaticVector (PutStaticVectorF v p (x ())))))
 
 putStaticHint :: StaticByteSized a => (a -> Put) -> a -> Put

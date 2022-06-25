@@ -14,10 +14,10 @@ module Scrapti.Parser.Free
 import Control.Monad.Free.Church (F (..))
 import Data.ByteString (ByteString)
 import Data.Int (Int8)
-import Data.Primitive (Prim)
 import Data.Sequence (Seq)
-import qualified Data.Vector.Primitive as VP
+import qualified Data.Vector.Storable as VS
 import Data.Word (Word8)
+import Foreign.Storable (Storable)
 import Scrapti.Parser.Nums (Int16LE, Word16LE)
 import Scrapti.Parser.Sizes (ByteCount, ElementCount, StaticByteSized)
 
@@ -28,7 +28,7 @@ instance Functor GetStaticSeqF where
   fmap f (GetStaticSeqF ec g k) = GetStaticSeqF ec g (f . k)
 
 data GetStaticVectorF a where
-  GetStaticVectorF :: (StaticByteSized z, Prim z) => !ElementCount -> Get z -> (VP.Vector z -> a) -> GetStaticVectorF a
+  GetStaticVectorF :: (StaticByteSized z, Storable z) => !ElementCount -> Get z -> (VS.Vector z -> a) -> GetStaticVectorF a
 
 instance Functor GetStaticVectorF where
   fmap f (GetStaticVectorF ec g k) = GetStaticVectorF ec g (f . k)
@@ -64,7 +64,7 @@ instance Functor PutStaticSeqF where
   fmap f (PutStaticSeqF s p k) = PutStaticSeqF s p (f k)
 
 data PutStaticVectorF a where
-  PutStaticVectorF :: (StaticByteSized z, Prim z) => !(VP.Vector z) -> (z -> Put) -> a -> PutStaticVectorF a
+  PutStaticVectorF :: (StaticByteSized z, Storable z) => !(VS.Vector z) -> (z -> Put) -> a -> PutStaticVectorF a
 
 instance Functor PutStaticVectorF where
   fmap f (PutStaticVectorF n g k) = PutStaticVectorF n g (f k)

@@ -19,7 +19,7 @@ import qualified Data.ByteString.Builder as BSB
 import qualified Data.ByteString.Lazy as BSL
 import Data.Foldable (for_)
 import qualified Data.Sequence as Seq
-import qualified Data.Vector.Primitive as VP
+import qualified Data.Vector.Storable as VS
 import Scrapti.Parser.Free (Get (..), GetF (..), GetStaticSeqF (..), GetStaticVectorF (..), Put, PutF (..), PutM (..),
                             PutStaticSeqF (..), PutStaticVectorF (..))
 import Scrapti.Parser.Nums (Int16LE (..), Word16LE (..))
@@ -108,7 +108,8 @@ execPutRun = \case
       mkPutEff x
     k
   PutFStaticVector (PutStaticVectorF v p k) -> do
-    VP.forM_ v $ \a -> do
+    -- TODO exploit storable
+    VS.forM_ v $ \a -> do
       let !x = p a
       mkPutEff x
     k
@@ -158,8 +159,9 @@ execCountRun = \case
         !bc = z * ec
     in State.modify' (bc+) *> k
   PutFStaticVector (PutStaticVectorF v _ k) ->
+    -- TODO exploit storable
     let !z = staticByteSize (proxyForF v)
-        !ec = fromIntegral (VP.length v)
+        !ec = fromIntegral (VS.length v)
         !bc = z * ec
     in State.modify' (bc+) *> k
   PutFStaticHint bc _ -> State.modify' (bc+) *> empty
