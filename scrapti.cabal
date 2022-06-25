@@ -34,6 +34,7 @@ library
       Scrapti.Parser.Nums
       Scrapti.Parser.Run
       Scrapti.Parser.Sizes
+      Scrapti.Parser.Via
       Scrapti.Pti
       Scrapti.Riff
       Scrapti.Sfont

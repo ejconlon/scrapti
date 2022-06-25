@@ -8,16 +8,17 @@ module Scrapti.Parser.Funs
   , getExact
   , getWithin
   , getSeq
-  , getFixedSeq
-  , getFixedVector
+  , getStaticSeq
+  , getStaticVector
   , putWord8
   , putInt8
   , putWord16LE
   , putInt16LE
   , putByteString
   , putSeq
-  , putFixedSeq
-  , putFixedVector
+  , putStaticSeq
+  , putStaticVector
+  , putStaticHint
   ) where
 
 import Control.Monad.Free.Church (F (..))
@@ -28,10 +29,11 @@ import Data.Primitive (Prim)
 import Data.Sequence (Seq (..))
 import qualified Data.Vector.Primitive as VP
 import Data.Word (Word8)
-import Scrapti.Parser.Free (Get (..), GetF (..), GetFixedSeqF (..), GetFixedVectorF (..), Put, PutF (..),
-                            PutFixedSeqF (..), PutFixedVectorF (..), PutM (..), ScopeMode (..))
+import Scrapti.Parser.Free (Get (..), GetF (..), GetStaticSeqF (..), GetStaticVectorF (..), Put, PutF (..),
+                            PutStaticSeqF (..), PutStaticVectorF (..), PutM (..), ScopeMode (..))
 import Scrapti.Parser.Nums (Int16LE, Word16LE)
-import Scrapti.Parser.Sizes (ByteCount, ElementCount, StaticByteSized)
+import Scrapti.Parser.Sizes (ByteCount, ElementCount, StaticByteSized (..))
+import Data.Proxy (Proxy (..))
 
 getWord8 :: Get Word8
 getWord8 = Get (F (\x y -> y (GetFWord8 x)))
@@ -68,12 +70,12 @@ getSeq n g = go Empty 0 where
         x `seq` go (acc :|> x) (i + 1)
 
 -- | Get Seq of statically-sized elements
-getFixedSeq :: StaticByteSized a => ElementCount -> Get a -> Get (Seq a)
-getFixedSeq n g = Get (F (\x y -> y (GetFFixedSeq (GetFixedSeqF n g x))))
+getStaticSeq :: StaticByteSized a => ElementCount -> Get a -> Get (Seq a)
+getStaticSeq n g = Get (F (\x y -> y (GetFStaticSeq (GetStaticSeqF n g x))))
 
 -- | Get Vector of statically-sized elements
-getFixedVector :: (StaticByteSized a, Prim a) => ElementCount -> Get a -> Get (VP.Vector a)
-getFixedVector n g = Get (F (\x y -> y (GetFFixedVector (GetFixedVectorF n g x))))
+getStaticVector :: (StaticByteSized a, Prim a) => ElementCount -> Get a -> Get (VP.Vector a)
+getStaticVector n g = Get (F (\x y -> y (GetFStaticVector (GetStaticVectorF n g x))))
 
 putWord8 :: Word8 -> Put
 putWord8 d = PutM (F (\x y -> y (PutFWord8 d (x ()))))
@@ -95,9 +97,17 @@ putSeq :: (a -> Put) -> Seq a -> Put
 putSeq = traverse_
 
 -- | Put Seq of statically-sized elements
-putFixedSeq :: StaticByteSized a => (a -> Put) -> Seq a -> Put
-putFixedSeq p s = PutM (F (\x y -> y (PutFFixedSeq (PutFixedSeqF s p (x ())))))
+putStaticSeq :: StaticByteSized a => (a -> Put) -> Seq a -> Put
+putStaticSeq p s = PutM (F (\x y -> y (PutFStaticSeq (PutStaticSeqF s p (x ())))))
 
 -- | Put Vector of statically-sized elements
-putFixedVector :: (StaticByteSized a, Prim a) => (a -> Put) -> VP.Vector a -> Put
-putFixedVector p v = PutM (F (\x y -> y (PutFFixedVector (PutFixedVectorF v p (x ())))))
+putStaticVector :: (StaticByteSized a, Prim a) => (a -> Put) -> VP.Vector a -> Put
+putStaticVector p v = PutM (F (\x y -> y (PutFStaticVector (PutStaticVectorF v p (x ())))))
+
+proxyForFun :: (a -> Put) -> Proxy a
+proxyForFun _ = Proxy
+
+putStaticHint :: StaticByteSized a => (a -> Put) -> a -> Put
+putStaticHint p =
+  let !bc = staticByteSize (proxyForFun p)
+  in \a -> PutM (F (\x y -> y (PutFStaticHint bc (x ())))) *> p a

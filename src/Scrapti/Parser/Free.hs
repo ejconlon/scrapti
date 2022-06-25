@@ -1,11 +1,11 @@
 module Scrapti.Parser.Free
-  ( GetFixedSeqF (..)
-  , GetFixedVectorF (..)
+  ( GetStaticSeqF (..)
+  , GetStaticVectorF (..)
   , ScopeMode (..)
   , GetF (..)
   , Get (..)
-  , PutFixedSeqF (..)
-  , PutFixedVectorF (..)
+  , PutStaticSeqF (..)
+  , PutStaticVectorF (..)
   , PutF (..)
   , PutM (..)
   , Put
@@ -21,17 +21,17 @@ import Data.Word (Word8)
 import Scrapti.Parser.Nums (Int16LE, Word16LE)
 import Scrapti.Parser.Sizes (ByteCount, ElementCount, StaticByteSized)
 
-data GetFixedSeqF a where
-  GetFixedSeqF :: StaticByteSized z => !ElementCount -> Get z -> (Seq z -> a) -> GetFixedSeqF a
+data GetStaticSeqF a where
+  GetStaticSeqF :: StaticByteSized z => !ElementCount -> Get z -> (Seq z -> a) -> GetStaticSeqF a
 
-instance Functor GetFixedSeqF where
-  fmap f (GetFixedSeqF ec g k) = GetFixedSeqF ec g (f . k)
+instance Functor GetStaticSeqF where
+  fmap f (GetStaticSeqF ec g k) = GetStaticSeqF ec g (f . k)
 
-data GetFixedVectorF a where
-  GetFixedVectorF :: (StaticByteSized z, Prim z) => !ElementCount -> Get z -> (VP.Vector z -> a) -> GetFixedVectorF a
+data GetStaticVectorF a where
+  GetStaticVectorF :: (StaticByteSized z, Prim z) => !ElementCount -> Get z -> (VP.Vector z -> a) -> GetStaticVectorF a
 
-instance Functor GetFixedVectorF where
-  fmap f (GetFixedVectorF ec g k) = GetFixedVectorF ec g (f . k)
+instance Functor GetStaticVectorF where
+  fmap f (GetStaticVectorF ec g k) = GetStaticVectorF ec g (f . k)
 
 data ScopeMode =
     ScopeModeExact
@@ -44,8 +44,8 @@ data GetF a =
   | GetFWord16LE (Word16LE -> a)
   | GetFInt16LE (Int16LE -> a)
   | GetFByteString !ByteCount (ByteString -> a)
-  | GetFFixedSeq !(GetFixedSeqF a)
-  | GetFFixedVector !(GetFixedVectorF a)
+  | GetFStaticSeq !(GetStaticSeqF a)
+  | GetFStaticVector !(GetStaticVectorF a)
   | GetFScope !ScopeMode !ByteCount a
   | GetFSkip !ByteCount a
   | GetFFail !String
@@ -57,17 +57,17 @@ newtype Get a = Get { unGet :: F GetF a }
 instance MonadFail Get where
   fail msg = Get (F (\_ y -> y (GetFFail msg)))
 
-data PutFixedSeqF a where
-  PutFixedSeqF :: StaticByteSized z => !(Seq z) -> (z -> Put) -> a -> PutFixedSeqF a
+data PutStaticSeqF a where
+  PutStaticSeqF :: StaticByteSized z => !(Seq z) -> (z -> Put) -> a -> PutStaticSeqF a
 
-instance Functor PutFixedSeqF where
-  fmap f (PutFixedSeqF s p k) = PutFixedSeqF s p (f k)
+instance Functor PutStaticSeqF where
+  fmap f (PutStaticSeqF s p k) = PutStaticSeqF s p (f k)
 
-data PutFixedVectorF a where
-  PutFixedVectorF :: (StaticByteSized z, Prim z) => !(VP.Vector z) -> (z -> Put) -> a -> PutFixedVectorF a
+data PutStaticVectorF a where
+  PutStaticVectorF :: (StaticByteSized z, Prim z) => !(VP.Vector z) -> (z -> Put) -> a -> PutStaticVectorF a
 
-instance Functor PutFixedVectorF where
-  fmap f (PutFixedVectorF n g k) = PutFixedVectorF n g (f k)
+instance Functor PutStaticVectorF where
+  fmap f (PutStaticVectorF n g k) = PutStaticVectorF n g (f k)
 
 data PutF a =
     PutFWord8 !Word8 a
@@ -75,8 +75,9 @@ data PutF a =
   | PutFWord16LE !Word16LE a
   | PutFInt16LE !Int16LE a
   | PutFByteString !ByteString a
-  | PutFFixedSeq !(PutFixedSeqF a)
-  | PutFFixedVector !(PutFixedVectorF a)
+  | PutFStaticSeq !(PutStaticSeqF a)
+  | PutFStaticVector !(PutStaticVectorF a)
+  | PutFStaticHint !ByteCount a
   deriving stock (Functor)
 
 newtype PutM a = PutM { unPutM :: F PutF a }

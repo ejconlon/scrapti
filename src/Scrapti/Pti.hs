@@ -9,7 +9,7 @@ import Data.Default (Default (..))
 import Data.Int (Int8)
 import Data.Word (Word8)
 import GHC.Generics (Generic)
-import Scrapti.Binary (Binary (..), BinaryParser, BoolByte (..), ByteSized, FixedBytes, FixedText, FixedVec, FloatLE,
+import Scrapti.Binary (Binary (..), BoolByte (..), ByteSized, FixedBytes, FixedText, FixedVec, FloatLE,
                        Int16LE, StaticByteSized, Word16LE, Word32LE)
 import Scrapti.Classes (BinaryRep (..), Equiv (..), Pair (..), ViaBinaryRep (..), ViaBoundedEnum (..), ViaEquiv (..))
 import Scrapti.Wav (Wav)

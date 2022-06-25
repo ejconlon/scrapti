@@ -18,10 +18,12 @@ import qualified Data.ByteString.Lazy as BSL
 import Data.Foldable (for_)
 import qualified Data.Sequence as Seq
 import qualified Data.Vector.Primitive as VP
-import Scrapti.Parser.Free (Get (..), GetF (..), GetFixedSeqF (..), GetFixedVectorF (..), Put, PutF (..),
-                            PutFixedSeqF (..), PutFixedVectorF (..), PutM (..))
+import Scrapti.Parser.Free (Get (..), GetF (..), GetStaticSeqF (..), GetStaticVectorF (..), Put, PutF (..),
+                            PutStaticSeqF (..), PutStaticVectorF (..), PutM (..))
 import Scrapti.Parser.Nums (Int16LE (..), Word16LE (..))
 import Scrapti.Parser.Sizes (ByteCount (..), staticByteSize)
+import Control.Monad.Trans.Maybe (MaybeT (..))
+import Control.Applicative (Alternative (..))
 
 data GetState = GetState
   { gsOffset :: !ByteCount
@@ -57,8 +59,8 @@ execGetRun = \case
   GetFWord16LE k -> undefined
   GetFInt16LE k -> undefined
   GetFByteString bc k -> undefined
-  GetFFixedSeq (GetFixedSeqF ec g k) -> undefined
-  GetFFixedVector (GetFixedVectorF ec g k) -> undefined
+  GetFStaticSeq (GetStaticSeqF ec g k) -> undefined
+  GetFStaticVector (GetStaticVectorF ec g k) -> undefined
   GetFScope sm bc k -> undefined
   GetFSkip bc k -> undefined
   GetFFail msg -> fail msg
@@ -99,16 +101,17 @@ execPutRun = \case
   PutFWord16LE x k -> State.modify' (<> BSB.word16LE (unWord16LE x)) *> k
   PutFInt16LE x k -> State.modify' (<> BSB.int16LE (unInt16LE x)) *> k
   PutFByteString bs k -> State.modify' (<> BSB.byteString bs) *> k
-  PutFFixedSeq (PutFixedSeqF s p k) -> do
+  PutFStaticSeq (PutStaticSeqF s p k) -> do
     for_ s $ \a -> do
       let !x = p a
       mkPutEff x
     k
-  PutFFixedVector (PutFixedVectorF v p k) -> do
+  PutFStaticVector (PutStaticVectorF v p k) -> do
     VP.forM_ v $ \a -> do
       let !x = p a
       mkPutEff x
     k
+  PutFStaticHint _ k -> k
 
 runPutRun :: PutRun a -> Builder -> (a, Builder)
 runPutRun = runPutEff . iterPutRun
@@ -130,11 +133,11 @@ runPut m =
 
 -- Count:
 
-newtype CountEff a = CountEff { unCountEff :: State ByteCount a }
-  deriving newtype (Functor, Applicative, Monad, MonadState ByteCount)
+newtype CountEff a = CountEff { unCountEff :: MaybeT (State ByteCount) a }
+  deriving newtype (Functor, Applicative, Monad, Alternative, MonadState ByteCount)
 
-runCountEff :: CountEff a -> ByteCount -> (a, ByteCount)
-runCountEff m = runState (unCountEff m)
+runCountEff :: CountEff a -> ByteCount -> (Maybe a, ByteCount)
+runCountEff m = runState (runMaybeT (unCountEff m))
 
 newtype CountRun a = CountRun { unCountRun :: FreeT PutF CountEff a }
   deriving newtype (Functor, Applicative, Monad)
@@ -148,18 +151,19 @@ execCountRun = \case
   PutFByteString bs k ->
     let !bc = fromIntegral (BS.length bs)
     in State.modify' (bc+) *> k
-  PutFFixedSeq (PutFixedSeqF s _ k) ->
+  PutFStaticSeq (PutStaticSeqF s _ k) ->
     let !z = staticByteSize s
         !ec = fromIntegral (Seq.length s)
         !bc = z * ec
     in State.modify' (bc+) *> k
-  PutFFixedVector (PutFixedVectorF v _ k) ->
+  PutFStaticVector (PutStaticVectorF v _ k) ->
     let !z = staticByteSize v
         !ec = fromIntegral (VP.length v)
         !bc = z * ec
     in State.modify' (bc+) *> k
+  PutFStaticHint bc _ -> State.modify' (bc+) *> empty
 
-runCountRun :: CountRun a -> ByteCount -> (a, ByteCount)
+runCountRun :: CountRun a -> ByteCount -> (Maybe a, ByteCount)
 runCountRun = runCountEff . iterCountRun
 
 iterCountRun :: CountRun a -> CountEff a
@@ -174,5 +178,5 @@ mkCountEff = iterCountRun . mkCountRun
 runCount :: Put -> ByteCount
 runCount m =
   let n = mkCountRun m
-      ((), !bs) = runCountRun n 0
+      (_, !bs) = runCountRun n 0
   in bs
