@@ -5,10 +5,11 @@ module Dahdit.Prelude
   , Word8
   , Int8
   , ByteString
+  , ShortByteString
   , Seq (..)
-  , Vector
+  , PrimArray
   , Generic
-  , Storable
+  , Prim
   , module Dahdit.Binary
   , module Dahdit.Funs
   , module Dahdit.Nums
@@ -27,9 +28,10 @@ import Dahdit.Run
 import Dahdit.Sizes
 import Dahdit.Via
 import Data.ByteString (ByteString)
+import Data.ByteString.Short (ShortByteString)
 import Data.Int (Int8)
+import Data.Primitive (Prim)
+import Data.Primitive.PrimArray (PrimArray)
 import Data.Sequence (Seq (..))
-import Data.Vector.Storable (Vector)
 import Data.Word (Word8)
-import Foreign.Storable (Storable)
 import GHC.Generics (Generic)

@@ -1,202 +1,279 @@
 module Dahdit.Run
-  ( runGet
+  ( GetError (..)
+  , prettyGetError
+  , runGet
+  , PutError (..)
+  , prettyPutError
   , runPut
   , runCount
   ) where
 
 import Control.Applicative (Alternative (..))
-import Control.Monad.Except (ExceptT, runExceptT, throwError)
+import Control.Exception (Exception (..))
+import Control.Monad.Except (ExceptT, MonadError, runExceptT, throwError)
 import Control.Monad.Free.Church (F (..))
-import Control.Monad.Reader (MonadReader, ReaderT (..), ask)
+import Control.Monad.Reader (MonadReader (..), ReaderT (..))
+import Control.Monad.ST.Strict (ST, runST)
 import Control.Monad.State.Strict (MonadState, State, runState)
 import qualified Control.Monad.State.Strict as State
+import Control.Monad.Trans (lift)
 import Control.Monad.Trans.Free (FreeT (..), iterT, wrap)
 import Control.Monad.Trans.Maybe (MaybeT (..))
-import Dahdit.Free (Get (..), GetF (..), GetStaticSeqF (..), GetStaticVectorF (..), Put, PutF (..), PutM (..),
-                    PutStaticSeqF (..), PutStaticVectorF (..), getStaticSeqSize, getStaticVectorSize, putStaticSeqSize,
-                    putStaticVectorSize, ScopeMode)
+import Dahdit.Free (Get (..), GetF (..), GetStaticArrayF (..), GetStaticSeqF (..), Put, PutF (..), PutM (..),
+                    PutStaticArrayF (..), PutStaticSeqF (..), ScopeMode (..), getStaticArraySize, getStaticSeqSize,
+                    putStaticArraySize, putStaticSeqSize)
 import Dahdit.Nums (Int16LE (..), Word16LE (..))
-import Dahdit.Proxy (proxyForF, Proxy (..))
-import Dahdit.Sizes (ByteCount (..), ElementCount (..), staticByteSize)
-import Data.Bits (Bits (..), unsafeShiftL)
+import Dahdit.Sizes (ByteCount (..))
 import Data.ByteString (ByteString)
-import qualified Data.ByteString as BS
-import Data.ByteString.Builder (Builder)
-import qualified Data.ByteString.Builder as BSB
-import qualified Data.ByteString.Lazy as BSL
-import qualified Data.ByteString.Unsafe as BU
+import qualified Data.ByteString.Short as BSS
+import Data.ByteString.Short.Internal (ShortByteString (..))
 import Data.Foldable (for_)
 import Data.Int (Int8)
-import Data.Sequence (Seq (..))
+import Data.Primitive.ByteArray (ByteArray (..), MutableByteArray, cloneByteArray, copyByteArray, indexByteArray,
+                                 newByteArray, unsafeFreezeByteArray, writeByteArray)
+import Data.Primitive.PrimArray (PrimArray (..))
 import qualified Data.Sequence as Seq
-import qualified Data.Vector.Storable as VS
+import Data.STRef.Strict (STRef, modifySTRef', newSTRef, readSTRef)
 import Data.Word (Word8)
-import Debug.Trace (traceM)
-import Foreign.Storable (Storable)
-import qualified Data.ByteString.Internal as BSI
-import Foreign.ForeignPtr (castForeignPtr, plusForeignPtr)
 
-data GetState = GetState
-  { gsOffset :: !ByteCount
-  , gsContents :: !ByteString
-  } deriving stock (Eq, Show)
+-- Get:
 
-newGetState :: ByteString -> GetState
-newGetState = GetState 0
+data GetError =
+    GetErrorParseNeed !String !ByteCount !ByteCount
+  | GetErrorScopedMismatch !ByteCount !ByteCount
+  | GetErrorFail !String
+  deriving stock (Eq, Show)
 
-newtype GetEff a = GetEff { unGetEff :: ReaderT ByteCount (ExceptT String (State GetState)) a }
-  deriving newtype (Functor, Applicative, Monad, MonadReader ByteCount, MonadState GetState)
+instance Exception GetError where
+  displayException = prettyGetError
 
-runGetEff :: GetEff a -> ByteCount -> GetState -> (Either String a, GetState)
-runGetEff m l = runState (runExceptT (runReaderT (unGetEff m) l))
+prettyGetError :: GetError -> String
+prettyGetError = \case
+  GetErrorParseNeed nm ac bc -> "End of input parsing " ++ nm ++ " (have " ++ show (unByteCount ac) ++ " bytes, need " ++ show (unByteCount bc) ++ ")"
+  GetErrorScopedMismatch ac bc -> "Did not parse enough scoped input (read " ++ show (unByteCount ac) ++ " bytes, expected " ++ show (unByteCount bc) ++ ")"
+  GetErrorFail msg -> "User error: " ++ msg
 
-instance MonadFail GetEff where
-  fail = GetEff . throwError
+data GetEnv s = GetEnv
+  { geLen :: !Int
+  , gePos :: !(STRef s Int)
+  , geArray :: !ByteArray
+  }
 
-newtype GetRun a = GetRun { unGetRun :: FreeT GetF GetEff a }
+newGetEnv :: ByteString -> ST s (GetEnv s)
+newGetEnv bs = do
+  let !sbs@(SBS arr) = BSS.toShort bs
+      !len = BSS.length sbs
+  pos <- newSTRef 0
+  pure $! GetEnv len pos (ByteArray arr)
+
+newtype GetEff s a = GetEff { unGetEff :: ReaderT (GetEnv s) (ExceptT GetError (ST s)) a }
+  deriving newtype (Functor, Applicative, Monad, MonadReader (GetEnv s), MonadError GetError)
+
+runGetEff :: GetEff s a -> GetEnv s -> ST s (Either GetError a)
+runGetEff m l = runExceptT (runReaderT (unGetEff m) l)
+
+instance MonadFail (GetEff s) where
+  fail = GetEff . throwError . GetErrorFail
+
+stGetEff :: ST s a -> GetEff s a
+stGetEff = GetEff . lift . lift
+
+newtype GetRun s a = GetRun { unGetRun :: FreeT GetF (GetEff s) a }
   deriving newtype (Functor, Applicative, Monad)
 
-failNeedBytesM :: String -> ByteCount -> ByteCount -> GetEff a
-failNeedBytesM nm ac bc = fail ("End of input parsing " ++ nm ++ " (have " ++ show (unByteCount ac) ++ " bytes, need " ++ show (unByteCount bc) ++ ")")
-
-readBytesM :: String -> ByteCount -> (ByteString -> a) -> GetEff a
-readBytesM nm bc f = do
-  l <- ask
-  GetState o bs <- State.get
-  let !ac = l - o
+guardReadBytes :: String -> Int -> GetEff s Int
+guardReadBytes nm bc = do
+  GetEnv l posRef _ <- ask
+  pos <- stGetEff (readSTRef posRef)
+  let !ac = l - pos
   if bc > ac
-    then failNeedBytesM nm ac bc
+    then throwError (GetErrorParseNeed nm (fromIntegral ac) (fromIntegral bc))
+    else pure pos
+
+readBytes :: String -> Int -> (ByteArray -> Int -> a) -> GetEff s a
+readBytes nm bc f = do
+  pos <- guardReadBytes nm bc
+  GetEnv _ posRef arr <- ask
+  stGetEff $ do
+    let !a = f arr pos
+    modifySTRef' posRef (bc+)
+    pure a
+
+readByteString :: Int -> ByteArray -> Int -> ShortByteString
+readByteString len arr pos = let !(ByteArray frozArr) = cloneByteArray arr pos len in SBS frozArr
+
+readScope :: ScopeMode -> Int -> GetEff s a -> GetEff s a
+readScope sm bc g = do
+  GetEnv oldLen posRef _ <- ask
+  if bc > oldLen
+    then throwError (GetErrorParseNeed "scope" (fromIntegral oldLen) (fromIntegral bc))
     else do
-      let !a = f bs
-          !o' = o + bc
-          !bs' = BS.drop (fromIntegral bc) bs
-          !st' = GetState o' bs'
-      State.put st'
-      pure a
+      oldPos <- stGetEff (readSTRef posRef)
+      let !newLen = oldLen - bc
+      a <- local (\ge -> ge { geLen = newLen }) g
+      case sm of
+        ScopeModeWithin -> pure a
+        ScopeModeExact -> do
+          newPos <- stGetEff (readSTRef posRef)
+          let !actualBc = newPos - oldPos
+          if actualBc == bc
+            then pure a
+            else throwError (GetErrorScopedMismatch (fromIntegral actualBc) (fromIntegral bc))
 
-readScopeM :: ScopeMode -> ByteCount -> GetEff a -> GetEff a
-readScopeM sm bc g = do
-  -- TODO RECORD IT
-  a <- g
-  -- TODO CHECK IT
-  pure a
+readStaticSeq :: GetStaticSeqF (GetEff s a) -> GetEff s a
+readStaticSeq gss@(GetStaticSeqF ec g k) = do
+  let !bc = fromIntegral (getStaticSeqSize gss)
+  _ <- guardReadBytes "static sequence" bc
+  ss <- Seq.replicateA (fromIntegral ec) (mkGetEff g)
+  k ss
 
-readWord8 :: ByteString -> Word8
-readWord8 = BU.unsafeHead
+readStaticArray :: GetStaticArrayF (GetEff s a) -> GetEff s a
+readStaticArray gsa@(GetStaticArrayF _ _ k) = do
+  let !bc = fromIntegral (getStaticArraySize gsa)
+  sa <- readBytes "static vector" bc (\arr pos -> let !(ByteArray frozArr) = cloneByteArray arr pos bc in PrimArray frozArr)
+  k sa
 
-readInt8 :: ByteString -> Int8
-readInt8 = fromIntegral . readWord8
-
-readWord16LE :: ByteString -> Word16LE
-readWord16LE bs = (fromIntegral (bs `BU.unsafeIndex` 1) `unsafeShiftL` 8) .|. fromIntegral (bs `BU.unsafeIndex` 0)
-
-readInt16LE :: ByteString -> Int16LE
-readInt16LE = fromIntegral . readWord16LE
-
-readStaticSeqM :: GetStaticSeqF (GetEff a) -> GetEff a
-readStaticSeqM = undefined
--- let !bc = getStaticSeqSize gss
--- in readBytesM "static sequence" bc (readStaticSeq ec g) >>= k
--- readStaticSeqM ec g = go Empty 0 where
---   n = mkGetRun g
---   go !acc !i !bs = do
---     if i == ec
---       then Right acc
---       else do
---         let !l = fromIntegral (BS.length bs)
---             !s = newGetState bs
---             !(ea, GetState _ bs') = runGetRun n l s
---         a <- ea
---         go (acc :|> a) (i + 1) bs'
-
--- NOTE This is all wrong BC of pinning - just use ShortByteString everywhere
--- And use Data.Primitive.ByteArray instead of vector
-readStaticVector :: Storable a => Proxy a -> ByteCount -> ByteCount -> ByteString -> VS.Vector a
-readStaticVector _ pbc bc fullBs = vec where
-  partBs = BS.take (fromIntegral bc) fullBs
-  -- Vec pinning from https://github.com/sheyll/bytestring-to-vector/pull/1
-  vec = VS.unsafeFromForeignPtr (castForeignPtr (fptr `plusForeignPtr` off)) 0 (scale len)
-  (fptr, off, len) = BSI.toForeignPtr partBs
-  scale = (`div` fromIntegral pbc)
-
-execGetRun :: GetF (GetEff a) -> GetEff a
+execGetRun :: GetF (GetEff s a) -> GetEff s a
 execGetRun = \case
-  GetFWord8 k -> readBytesM "Word8" 1 readWord8 >>= k
-  GetFInt8 k -> readBytesM "Int8" 1 readInt8 >>= k
-  GetFWord16LE k -> readBytesM "Word16LE" 2 readWord16LE >>= k
-  GetFInt16LE k -> readBytesM "Int16LE" 2 readInt16LE >>= k
-  GetFByteString bc k -> readBytesM "ByteString" bc (BS.take (fromIntegral bc)) >>= k
-  GetFStaticSeq gss -> readStaticSeqM gss
-  GetFStaticVector gsv@(GetStaticVectorF _ p k) -> do
-    let !pbc = staticByteSize p
-        !bc = getStaticVectorSize gsv
-    readBytesM "static vector" bc (readStaticVector p pbc bc) >>= k
-  GetFScope sm bc k -> readScopeM sm bc k
-  GetFSkip bc k -> readBytesM "skip" bc (const ()) *> k
+  GetFWord8 k -> readBytes "Word8" 1 (indexByteArray @Word8) >>= k
+  GetFInt8 k -> readBytes "Int8" 1 (indexByteArray @Int8) >>= k
+  GetFWord16LE k -> readBytes "Word16LE" 2 (indexByteArray @Word16LE) >>= k
+  GetFInt16LE k -> readBytes "Int16LE" 2 (indexByteArray @Int16LE) >>= k
+  GetFByteString bc k ->
+    let !len = fromIntegral bc
+    in readBytes "ByteString" len (readByteString len) >>= k
+  GetFStaticSeq gss -> readStaticSeq gss
+  GetFStaticArray gsa -> readStaticArray gsa
+  GetFScope sm bc k -> readScope sm (fromIntegral bc) k
+  GetFSkip bc k -> readBytes "skip" (fromIntegral bc) (\_ _ -> ()) *> k
   GetFFail msg -> fail msg
 
-runGetRun :: GetRun a -> ByteCount -> GetState -> (Either String a, GetState)
+runGetRun :: GetRun s a -> GetEnv s -> ST s (Either GetError a)
 runGetRun = runGetEff . iterGetRun
 
-iterGetRun :: GetRun a -> GetEff a
+iterGetRun :: GetRun s a -> GetEff s a
 iterGetRun m = iterT execGetRun (unGetRun m)
 
-mkGetRun :: Get a -> GetRun a
+mkGetRun :: Get a -> GetRun s a
 mkGetRun (Get (F w)) = GetRun (w pure wrap)
 
-mkGetEff :: Get a -> GetEff a
+mkGetEff :: Get a -> GetEff s a
 mkGetEff = iterGetRun . mkGetRun
 
-runGet :: Get a -> ByteString -> (Either String a, ByteCount, ByteString)
-runGet m bs =
-  let !n = mkGetRun m
-      !l = fromIntegral (BS.length bs)
-      !s = newGetState bs
-      !(ea, GetState o bs') = runGetRun n l s
-  in (ea, o, bs')
+runGet :: Get a -> ByteString -> (Either GetError a, ByteCount, ByteArray)
+runGet m bs = runST $ do
+  let !n = mkGetEff m
+  env <- newGetEnv bs
+  ea <- runGetEff n env
+  bc <- readSTRef (gePos env)
+  let !ba = geArray env
+  pure (ea, fromIntegral bc, ba)
 
-newtype PutEff a = PutEff { unPutEff :: State Builder a }
-  deriving newtype (Functor, Applicative, Monad, MonadState Builder)
+-- Put:
 
-runPutEff :: PutEff a -> Builder -> (a, Builder)
-runPutEff m = runState (unPutEff m)
+data PutError = PutError !String !ByteCount !ByteCount
+  deriving stock (Eq, Show)
 
-newtype PutRun a = PutRun { unPutRun :: FreeT PutF PutEff a }
+instance Exception PutError where
+  displayException = prettyPutError
+
+prettyPutError :: PutError -> String
+prettyPutError (PutError nm ac bc) = "End of buffer writing " ++ nm ++ " (have " ++ show (unByteCount ac) ++ ", need " ++ show (unByteCount bc) ++ " more)"
+
+data PutEnv s = PutEnv
+  { peLen :: !Int
+  , pePos :: !(STRef s Int)
+  , peArray :: !(MutableByteArray s)
+  }
+
+newPutEnv :: Int -> ST s (PutEnv s)
+newPutEnv len = PutEnv len <$> newSTRef 0 <*> newByteArray len
+
+newtype PutEff s a = PutEff { unPutEff :: ReaderT (PutEnv s) (ExceptT PutError (ST s)) a }
+  deriving newtype (Functor, Applicative, Monad, MonadReader (PutEnv s), MonadError PutError)
+
+runPutEff :: PutEff s a -> PutEnv s -> ST s (Either PutError a)
+runPutEff m = runExceptT . runReaderT (unPutEff m)
+
+stPutEff :: ST s a -> PutEff s a
+stPutEff = PutEff . lift . lift
+
+newtype PutRun s a = PutRun { unPutRun :: FreeT PutF (PutEff s) a }
   deriving newtype (Functor, Applicative, Monad)
 
-execPutRun :: PutF (PutEff a) -> PutEff a
+guardWriteBytes :: String -> Int -> PutEff s Int
+guardWriteBytes nm bc = do
+  PutEnv l posRef _ <- ask
+  pos <- stPutEff (readSTRef posRef)
+  let !ac = l - pos
+  if bc > ac
+    then throwError (PutError nm (fromIntegral ac) (fromIntegral bc))
+    else pure pos
+
+writeBytes :: String -> Int -> (MutableByteArray s -> Int -> ST s ()) -> PutEff s ()
+writeBytes nm bc f = do
+  pos <- guardWriteBytes nm bc
+  PutEnv _ posRef arr <- ask
+  stPutEff $ do
+    f arr pos
+    modifySTRef' posRef (bc+)
+
+writeByteString :: ShortByteString -> MutableByteArray s -> Int -> ST s ()
+writeByteString sbs@(SBS frozArr) arr pos =
+  let !len = BSS.length sbs
+  in copyByteArray arr pos (ByteArray frozArr) 0 len
+
+writeStaticSeq :: PutStaticSeqF (PutEff s a) -> PutEff s a
+writeStaticSeq pss@(PutStaticSeqF ss p k) = do
+  let !bc = fromIntegral (putStaticSeqSize pss)
+  _ <- guardWriteBytes "static sequence" bc
+  for_ ss $ \a -> do
+    let !x = p a
+    mkPutEff x
+  k
+
+writeStaticArray :: PutStaticArrayF (PutEff s a) -> PutEff s a
+writeStaticArray psa@(PutStaticArrayF sv k) = do
+  let !bc = fromIntegral (putStaticArraySize psa)
+      !(PrimArray frozArr) = sv
+  writeBytes "static vector" bc (\arr pos -> copyByteArray arr pos (ByteArray frozArr) 0 bc)
+  k
+
+execPutRun :: PutF (PutEff s a) -> PutEff s a
 execPutRun = \case
-  PutFWord8 x k -> State.modify' (<> BSB.word8 x) *> k
-  PutFInt8 x k -> State.modify' (<> BSB.int8 x) *> k
-  PutFWord16LE x k -> State.modify' (<> BSB.word16LE (unWord16LE x)) *> k
-  PutFInt16LE x k -> State.modify' (<> BSB.int16LE (unInt16LE x)) *> k
-  PutFByteString bs k -> State.modify' (<> BSB.byteString bs) *> k
-  PutFStaticSeq (PutStaticSeqF s p k) -> do
-    for_ s $ \a -> do
-      let !x = p a
-      mkPutEff x
-    k
-  PutFStaticVector (PutStaticVectorF _v _k) -> do
-    error "TODO put vector"
+  PutFWord8 x k -> writeBytes "Word8" 1 (\arr pos -> writeByteArray arr pos x) *> k
+  PutFInt8 x k -> writeBytes "Int8" 1 (\arr pos -> writeByteArray arr pos x) *> k
+  PutFWord16LE x k -> writeBytes "Word16LE" 2 (\arr pos -> writeByteArray arr pos x) *> k
+  PutFInt16LE x k -> writeBytes "Int16LE" 2 (\arr pos -> writeByteArray arr pos x) *> k
+  PutFByteString sbs k -> writeBytes "ByteString" (BSS.length sbs) (writeByteString sbs) *> k
+  PutFStaticSeq pss -> writeStaticSeq pss
+  PutFStaticArray psa -> writeStaticArray psa
   PutFStaticHint _ k -> k
 
-runPutRun :: PutRun a -> Builder -> (a, Builder)
+runPutRun :: PutRun s a -> PutEnv s -> ST s (Either PutError a)
 runPutRun = runPutEff . iterPutRun
 
-iterPutRun :: PutRun a -> PutEff a
+iterPutRun :: PutRun s a -> PutEff s a
 iterPutRun m = iterT execPutRun (unPutRun m)
 
-mkPutRun :: PutM a -> PutRun a
+mkPutRun :: PutM a -> PutRun s a
 mkPutRun (PutM (F w)) = PutRun (w pure wrap)
 
-mkPutEff :: PutM a -> PutEff a
+mkPutEff :: PutM a -> PutEff s a
 mkPutEff = iterPutRun . mkPutRun
 
-runPut :: Put -> ByteString
-runPut m =
-  let !n = mkPutRun m
-      ((), !b) = runPutRun n mempty
-  in BSL.toStrict (BSB.toLazyByteString b)
+runPut :: Put -> ByteCount -> Either PutError (ByteCount, ByteArray)
+runPut m bc = runST $ do
+  let !len = fromIntegral bc
+      !n = mkPutRun m
+  st@(PutEnv _ posRef arr) <- newPutEnv len
+  ea <- runPutRun n st
+  case ea of
+    Left e -> pure (Left e)
+    Right () -> do
+      pos <- fmap fromIntegral (readSTRef posRef)
+      frozArr <- unsafeFreezeByteArray arr
+      pure (Right (pos, frozArr))
 
 -- Count:
 
@@ -216,13 +293,13 @@ execCountRun = \case
   PutFWord16LE _ k -> State.modify' (2+) *> k
   PutFInt16LE _ k -> State.modify' (2+) *> k
   PutFByteString bs k ->
-    let !bc = fromIntegral (BS.length bs)
+    let !bc = fromIntegral (BSS.length bs)
     in State.modify' (bc+) *> k
   PutFStaticSeq pss@(PutStaticSeqF _ _ k) ->
     let !bc = putStaticSeqSize pss
     in State.modify' (bc+) *> k
-  PutFStaticVector psv@(PutStaticVectorF _ k) ->
-    let !bc = putStaticVectorSize psv
+  PutFStaticArray psv@(PutStaticArrayF _ k) ->
+    let !bc = putStaticArraySize psv
     in State.modify' (bc+) *> k
   PutFStaticHint bc _ -> State.modify' (bc+) *> empty
 

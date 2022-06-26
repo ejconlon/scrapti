@@ -7,8 +7,8 @@ module Dahdit.Sizes
   ) where
 
 import Dahdit.Proxy (Proxy (..), proxyFor)
-import Data.ByteString (ByteString)
-import qualified Data.ByteString as BS
+import Data.ByteString.Short (ShortByteString)
+import qualified Data.ByteString.Short as BSS
 import Data.Default (Default)
 import Data.Int (Int8)
 import Data.Word (Word64, Word8)
@@ -30,8 +30,8 @@ instance ByteSized Word8 where
 instance ByteSized Int8 where
   byteSize _ = 1
 
-instance ByteSized ByteString where
-  byteSize = fromIntegral . BS.length
+instance ByteSized ShortByteString where
+  byteSize = fromIntegral . BSS.length
 
 class ByteSized a => StaticByteSized a where
   staticByteSize :: Proxy a -> ByteCount
