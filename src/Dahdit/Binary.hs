@@ -1,15 +1,15 @@
-module Scrapti.Parser.Binary
+module Dahdit.Binary
   ( Binary (..)
   , byteSizeViaPut
   ) where
 
+import Dahdit.Free (Get, Put)
+import Dahdit.Funs (getInt16LE, getInt8, getWord16LE, getWord8, putInt16LE, putInt8, putWord16LE, putWord8)
+import Dahdit.Nums (Int16LE, Word16LE)
+import Dahdit.Run (runCount)
+import Dahdit.Sizes (ByteCount, ByteSized)
 import Data.Int (Int8)
 import Data.Word (Word8)
-import Scrapti.Parser.Free (Get, Put)
-import Scrapti.Parser.Funs (getInt16LE, getInt8, getWord16LE, getWord8, putInt16LE, putInt8, putWord16LE, putWord8)
-import Scrapti.Parser.Nums (Int16LE, Word16LE)
-import Scrapti.Parser.Run (runCount)
-import Scrapti.Parser.Sizes (ByteCount, ByteSized)
 
 class ByteSized a => Binary a where
   get :: Get a

@@ -1,4 +1,4 @@
-module Scrapti.Parser.Proxy
+module Dahdit.Proxy
   ( Proxy (..)
   , proxyFor
   , proxyForF

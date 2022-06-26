@@ -1,16 +1,16 @@
 {-# LANGUAGE UnboxedTuples #-}
 
-module Scrapti.Parser.Nums
+module Dahdit.Nums
   ( Word16LE (..)
   , Int16LE (..)
   ) where
 
+import Dahdit.Sizes (ByteSized (..), StaticByteSized (..))
 import Data.Bits (Bits)
 import Data.Default (Default)
 import Data.Int (Int16)
 import Data.Word (Word16)
 import Foreign.Storable (Storable)
-import Scrapti.Parser.Sizes (ByteSized (..), StaticByteSized (..))
 
 newtype Word16LE = Word16LE { unWord16LE :: Word16 }
   deriving stock (Show)

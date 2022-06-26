@@ -1,4 +1,4 @@
-module Scrapti.Parser.Funs
+module Dahdit.Funs
   ( getWord8
   , getInt8
   , getWord16LE
@@ -22,6 +22,11 @@ module Scrapti.Parser.Funs
   ) where
 
 import Control.Monad.Free.Church (F (..))
+import Dahdit.Free (Get (..), GetF (..), GetStaticSeqF (..), GetStaticVectorF (..), Put, PutF (..), PutM (..),
+                    PutStaticSeqF (..), PutStaticVectorF (..), ScopeMode (..))
+import Dahdit.Nums (Int16LE, Word16LE)
+import Dahdit.Proxy (proxyForFun)
+import Dahdit.Sizes (ByteCount, ElementCount, StaticByteSized (..))
 import Data.ByteString (ByteString)
 import Data.Foldable (traverse_)
 import Data.Int (Int8)
@@ -29,11 +34,6 @@ import Data.Sequence (Seq (..))
 import qualified Data.Vector.Storable as VS
 import Data.Word (Word8)
 import Foreign.Storable (Storable)
-import Scrapti.Parser.Free (Get (..), GetF (..), GetStaticSeqF (..), GetStaticVectorF (..), Put, PutF (..), PutM (..),
-                            PutStaticSeqF (..), PutStaticVectorF (..), ScopeMode (..))
-import Scrapti.Parser.Nums (Int16LE, Word16LE)
-import Scrapti.Parser.Proxy (proxyForFun)
-import Scrapti.Parser.Sizes (ByteCount, ElementCount, StaticByteSized (..))
 
 getWord8 :: Get Word8
 getWord8 = Get (F (\x y -> y (GetFWord8 x)))

@@ -24,19 +24,19 @@ source-repository head
 
 library
   exposed-modules:
+      Dahdit.Binary
+      Dahdit.Example
+      Dahdit.Free
+      Dahdit.Funs
+      Dahdit.Nums
+      Dahdit.Prelude
+      Dahdit.Proxy
+      Dahdit.Run
+      Dahdit.Sizes
+      Dahdit.Via
       Scrapti.Binary
       Scrapti.Classes
       Scrapti.Main
-      Scrapti.Parser.Binary
-      Scrapti.Parser.Example
-      Scrapti.Parser.Free
-      Scrapti.Parser.Funs
-      Scrapti.Parser.Interface
-      Scrapti.Parser.Nums
-      Scrapti.Parser.Proxy
-      Scrapti.Parser.Run
-      Scrapti.Parser.Sizes
-      Scrapti.Parser.Via
       Scrapti.Pti
       Scrapti.Riff
       Scrapti.Sfont
@@ -140,6 +140,7 @@ test-suite scrapti-test
   type: exitcode-stdio-1.0
   main-is: Main.hs
   other-modules:
+      Test.Dahdit
       Paths_scrapti
   hs-source-dirs:
       test

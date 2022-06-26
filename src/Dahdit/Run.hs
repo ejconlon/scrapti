@@ -1,4 +1,4 @@
-module Scrapti.Parser.Run
+module Dahdit.Run
   ( runGet
   , runPut
   , runCount
@@ -12,6 +12,11 @@ import Control.Monad.State.Strict (MonadState, State, runState)
 import qualified Control.Monad.State.Strict as State
 import Control.Monad.Trans.Free (FreeT (..), iterT, wrap)
 import Control.Monad.Trans.Maybe (MaybeT (..))
+import Dahdit.Free (Get (..), GetF (..), GetStaticSeqF (..), GetStaticVectorF (..), Put, PutF (..), PutM (..),
+                    PutStaticSeqF (..), PutStaticVectorF (..))
+import Dahdit.Nums (Int16LE (..), Word16LE (..))
+import Dahdit.Proxy (proxyForF)
+import Dahdit.Sizes (ByteCount (..), staticByteSize)
 import Data.Bits (Bits (..), unsafeShiftL)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
@@ -24,11 +29,6 @@ import Data.Int (Int8)
 import qualified Data.Sequence as Seq
 import qualified Data.Vector.Storable as VS
 import Data.Word (Word8)
-import Scrapti.Parser.Free (Get (..), GetF (..), GetStaticSeqF (..), GetStaticVectorF (..), Put, PutF (..), PutM (..),
-                            PutStaticSeqF (..), PutStaticVectorF (..))
-import Scrapti.Parser.Nums (Int16LE (..), Word16LE (..))
-import Scrapti.Parser.Proxy (proxyForF)
-import Scrapti.Parser.Sizes (ByteCount (..), staticByteSize)
 
 data GetState = GetState
   { gsOffset :: !ByteCount

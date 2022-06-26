@@ -1,18 +1,18 @@
 {-# LANGUAGE UndecidableInstances #-}
 
-module Scrapti.Parser.Via
+module Dahdit.Via
   ( ViaGeneric (..)
   , ViaStaticGeneric (..)
   ) where
 
 import Control.Applicative (liftA2)
+import Dahdit.Binary (Binary (..))
+import Dahdit.Free (Get, Put)
+import Dahdit.Funs (putStaticHint)
+import Dahdit.Proxy (Proxy (..))
+import Dahdit.Sizes (ByteCount, ByteSized (..), StaticByteSized (..))
 import Data.Kind (Type)
 import GHC.Generics ((:*:) (..), Generic (..), K1 (..), M1 (..), U1 (..), V1)
-import Scrapti.Parser.Binary (Binary (..))
-import Scrapti.Parser.Free (Get, Put)
-import Scrapti.Parser.Funs (putStaticHint)
-import Scrapti.Parser.Proxy (Proxy (..))
-import Scrapti.Parser.Sizes (ByteCount, ByteSized (..), StaticByteSized (..))
 
 -- Use: deriving (ByteSized, Binary) via (Generic Foo)
 newtype ViaGeneric a = ViaGeneric { unViaGeneric :: a }

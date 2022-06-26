@@ -1,6 +1,6 @@
-module Scrapti.Parser.Example where
+module Dahdit.Example where
 
-import Scrapti.Parser.Interface
+import Dahdit.Prelude
 
 data DynFoo = DynFoo !Word8 !Word16LE
   deriving stock (Eq, Show, Generic)

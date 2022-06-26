@@ -1,4 +1,4 @@
-module Scrapti.Parser.Sizes
+module Dahdit.Sizes
   ( ElementCount (..)
   , ByteCount (..)
   , ByteSized (..)
@@ -6,12 +6,12 @@ module Scrapti.Parser.Sizes
   , byteSizeViaStatic
   ) where
 
+import Dahdit.Proxy (Proxy (..), proxyFor)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.Default (Default)
 import Data.Int (Int8)
 import Data.Word (Word64, Word8)
-import Scrapti.Parser.Proxy (Proxy (..), proxyFor)
 
 newtype ElementCount = ElementCount { unElementCount :: Word64 }
   deriving stock (Show)

@@ -1,4 +1,4 @@
-module Scrapti.Parser.Free
+module Dahdit.Free
   ( GetStaticSeqF (..)
   , GetStaticVectorF (..)
   , ScopeMode (..)
@@ -12,14 +12,14 @@ module Scrapti.Parser.Free
   ) where
 
 import Control.Monad.Free.Church (F (..))
+import Dahdit.Nums (Int16LE, Word16LE)
+import Dahdit.Sizes (ByteCount, ElementCount, StaticByteSized)
 import Data.ByteString (ByteString)
 import Data.Int (Int8)
 import Data.Sequence (Seq)
 import qualified Data.Vector.Storable as VS
 import Data.Word (Word8)
 import Foreign.Storable (Storable)
-import Scrapti.Parser.Nums (Int16LE, Word16LE)
-import Scrapti.Parser.Sizes (ByteCount, ElementCount, StaticByteSized)
 
 data GetStaticSeqF a where
   GetStaticSeqF :: StaticByteSized z => !ElementCount -> Get z -> (Seq z -> a) -> GetStaticSeqF a

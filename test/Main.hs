@@ -11,6 +11,7 @@ import Scrapti.Riff (Chunk (..))
 import Scrapti.Sfont (InfoChunk (..), ListChunk (..), PdtaChunk (..), SdtaChunk (..), Sfont (..))
 import Scrapti.Wav (Sampled (..), SampledWav (..), Wav (..), WavBody (..), WavChunk (..), WavFormat (..),
                     WavFormatChunk (..), WavHeader (..), WavSampleChunk (..))
+import Test.Dahdit (testDahdit)
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (testCase, (@?=))
 
@@ -102,4 +103,4 @@ testPti :: TestTree
 testPti = testGroup "pti" [testPtiManual]
 
 main :: IO ()
-main = defaultMain (testGroup "Scrapti" [testWav, testSfont, testPti])
+main = defaultMain (testGroup "Scrapti" [testWav, testSfont, testPti, testDahdit])
