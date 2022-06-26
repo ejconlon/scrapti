@@ -29,6 +29,7 @@ import Data.Int (Int8)
 import qualified Data.Sequence as Seq
 import qualified Data.Vector.Storable as VS
 import Data.Word (Word8)
+import Debug.Trace (traceM)
 
 data GetState = GetState
   { gsOffset :: !ByteCount
@@ -55,10 +56,12 @@ failNeedBytes nm ac bc = fail ("End of input parsing " ++ nm ++ " (have " ++ sho
 
 readBytes :: String -> ByteCount -> (ByteString -> a) -> GetEff a
 readBytes nm bc f = do
+  -- traceM "XXX readBytes"
   l <- ask
   GetState o bs <- State.get
   let !ac = l - o
-  if bc < ac
+  -- traceM ("XXX state " ++ show (l, o, bs))
+  if bc > ac
     then failNeedBytes nm ac bc
     else do
       let a = f bs

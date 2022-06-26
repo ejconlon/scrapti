@@ -93,11 +93,11 @@ testSfont = testGroup "sfont" [testSfontWhole, testSfontWrite]
 
 testPtiManual :: TestTree
 testPtiManual = testCase "manual" $ do
-  putStrLn "TODO"
   -- bs <- BSL.readFile "testdata/testproj/instruments/1 drums.pti"
   -- PairPti (Pair ah pti) <- runParseM bs (parseWithoutSize @PairPti)
   -- print ah
   -- print pti
+  pure ()
 
 testPti :: TestTree
 testPti = testGroup "pti" [testPtiManual]

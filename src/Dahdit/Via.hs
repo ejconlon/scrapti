@@ -97,9 +97,9 @@ instance Binary a => GBinary (K1 i a) where
   gput = put . unK1
 
 instance (Generic t, GBinary (Rep t)) => Binary (ViaGeneric t) where
-  get = undefined
+  get = fmap (ViaGeneric . to) gget
   put = gput . from . unViaGeneric
 
 instance (Generic t, GStaticByteSized (Rep t), GBinary (Rep t)) => Binary (ViaStaticGeneric t) where
-  get = undefined
+  get = fmap (ViaStaticGeneric . to) gget
   put = putStaticHint (gput . from . unViaStaticGeneric)
