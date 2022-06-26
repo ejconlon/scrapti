@@ -14,9 +14,9 @@ import Control.Monad.Trans.Free (FreeT (..), iterT, wrap)
 import Control.Monad.Trans.Maybe (MaybeT (..))
 import Dahdit.Free (Get (..), GetF (..), GetStaticSeqF (..), GetStaticVectorF (..), Put, PutF (..), PutM (..),
                     PutStaticSeqF (..), PutStaticVectorF (..), getStaticSeqSize, getStaticVectorSize, putStaticSeqSize,
-                    putStaticVectorSize)
+                    putStaticVectorSize, ScopeMode)
 import Dahdit.Nums (Int16LE (..), Word16LE (..))
-import Dahdit.Proxy (proxyForF)
+import Dahdit.Proxy (proxyForF, Proxy (..))
 import Dahdit.Sizes (ByteCount (..), ElementCount (..), staticByteSize)
 import Data.Bits (Bits (..), unsafeShiftL)
 import Data.ByteString (ByteString)
@@ -32,6 +32,9 @@ import qualified Data.Sequence as Seq
 import qualified Data.Vector.Storable as VS
 import Data.Word (Word8)
 import Debug.Trace (traceM)
+import Foreign.Storable (Storable)
+import qualified Data.ByteString.Internal as BSI
+import Foreign.ForeignPtr (castForeignPtr, plusForeignPtr)
 
 data GetState = GetState
   { gsOffset :: !ByteCount
@@ -53,27 +56,30 @@ instance MonadFail GetEff where
 newtype GetRun a = GetRun { unGetRun :: FreeT GetF GetEff a }
   deriving newtype (Functor, Applicative, Monad)
 
-failNeedBytes :: String -> ByteCount -> ByteCount -> GetEff a
-failNeedBytes nm ac bc = fail ("End of input parsing " ++ nm ++ " (have " ++ show (unByteCount ac) ++ " bytes, need " ++ show (unByteCount bc) ++ ")")
+failNeedBytesM :: String -> ByteCount -> ByteCount -> GetEff a
+failNeedBytesM nm ac bc = fail ("End of input parsing " ++ nm ++ " (have " ++ show (unByteCount ac) ++ " bytes, need " ++ show (unByteCount bc) ++ ")")
 
-readBytes :: String -> ByteCount -> (ByteString -> Either String a) -> GetEff a
-readBytes nm bc f = do
-  -- traceM "XXX readBytes"
+readBytesM :: String -> ByteCount -> (ByteString -> a) -> GetEff a
+readBytesM nm bc f = do
   l <- ask
   GetState o bs <- State.get
   let !ac = l - o
-  -- traceM ("XXX state " ++ show (l, o, bs))
   if bc > ac
-    then failNeedBytes nm ac bc
-    else
-      case f bs of
-        Left err -> fail err
-        Right a -> do
-          let !o' = o + bc
-              !bs' = BS.drop (fromIntegral bc) bs
-              !st' = GetState o' bs'
-          State.put st'
-          pure a
+    then failNeedBytesM nm ac bc
+    else do
+      let !a = f bs
+          !o' = o + bc
+          !bs' = BS.drop (fromIntegral bc) bs
+          !st' = GetState o' bs'
+      State.put st'
+      pure a
+
+readScopeM :: ScopeMode -> ByteCount -> GetEff a -> GetEff a
+readScopeM sm bc g = do
+  -- TODO RECORD IT
+  a <- g
+  -- TODO CHECK IT
+  pure a
 
 readWord8 :: ByteString -> Word8
 readWord8 = BU.unsafeHead
@@ -87,35 +93,46 @@ readWord16LE bs = (fromIntegral (bs `BU.unsafeIndex` 1) `unsafeShiftL` 8) .|. fr
 readInt16LE :: ByteString -> Int16LE
 readInt16LE = fromIntegral . readWord16LE
 
-readStaticSeq :: ElementCount -> Get a -> ByteString -> Either String (Seq a)
-readStaticSeq ec g = go Empty 0 where
-  n = mkGetRun g
-  go !acc !i !bs = do
-    if i == ec
-      then Right acc
-      else do
-        let !l = fromIntegral (BS.length bs)
-            !s = newGetState bs
-            (ea, GetState _ bs') = runGetRun n l s
-        a <- ea
-        go (acc :|> a) (i + 1) bs'
+readStaticSeqM :: GetStaticSeqF (GetEff a) -> GetEff a
+readStaticSeqM = undefined
+-- let !bc = getStaticSeqSize gss
+-- in readBytesM "static sequence" bc (readStaticSeq ec g) >>= k
+-- readStaticSeqM ec g = go Empty 0 where
+--   n = mkGetRun g
+--   go !acc !i !bs = do
+--     if i == ec
+--       then Right acc
+--       else do
+--         let !l = fromIntegral (BS.length bs)
+--             !s = newGetState bs
+--             !(ea, GetState _ bs') = runGetRun n l s
+--         a <- ea
+--         go (acc :|> a) (i + 1) bs'
+
+-- NOTE This is all wrong BC of pinning - just use ShortByteString everywhere
+-- And use Data.Primitive.ByteArray instead of vector
+readStaticVector :: Storable a => Proxy a -> ByteCount -> ByteCount -> ByteString -> VS.Vector a
+readStaticVector _ pbc bc fullBs = vec where
+  partBs = BS.take (fromIntegral bc) fullBs
+  -- Vec pinning from https://github.com/sheyll/bytestring-to-vector/pull/1
+  vec = VS.unsafeFromForeignPtr (castForeignPtr (fptr `plusForeignPtr` off)) 0 (scale len)
+  (fptr, off, len) = BSI.toForeignPtr partBs
+  scale = (`div` fromIntegral pbc)
 
 execGetRun :: GetF (GetEff a) -> GetEff a
 execGetRun = \case
-  GetFWord8 k -> readBytes "Word8" 1 (Right . readWord8) >>= k
-  GetFInt8 k -> readBytes "Int8" 1 (Right . readInt8) >>= k
-  GetFWord16LE k -> readBytes "Word16LE" 2 (Right . readWord16LE) >>= k
-  GetFInt16LE k -> readBytes "Int16LE" 2 (Right . readInt16LE) >>= k
-  GetFByteString bc k -> readBytes "ByteString" bc (Right . BS.take (fromIntegral bc)) >>= k
-  GetFStaticSeq gss@(GetStaticSeqF ec g k) ->
-    let !bc = getStaticSeqSize gss
-    in readBytes "static sequence" bc (readStaticSeq ec g) >>= k
-  GetFStaticVector gsv@(GetStaticVectorF ec _ k) -> do
-    let !bc = getStaticVectorSize gsv
-    error "TODO get vector"
-  GetFScope sm bc k -> do
-    error "TODO get scope"
-  GetFSkip bc k -> readBytes "skip" bc (const (Right ())) *> k
+  GetFWord8 k -> readBytesM "Word8" 1 readWord8 >>= k
+  GetFInt8 k -> readBytesM "Int8" 1 readInt8 >>= k
+  GetFWord16LE k -> readBytesM "Word16LE" 2 readWord16LE >>= k
+  GetFInt16LE k -> readBytesM "Int16LE" 2 readInt16LE >>= k
+  GetFByteString bc k -> readBytesM "ByteString" bc (BS.take (fromIntegral bc)) >>= k
+  GetFStaticSeq gss -> readStaticSeqM gss
+  GetFStaticVector gsv@(GetStaticVectorF _ p k) -> do
+    let !pbc = staticByteSize p
+        !bc = getStaticVectorSize gsv
+    readBytesM "static vector" bc (readStaticVector p pbc bc) >>= k
+  GetFScope sm bc k -> readScopeM sm bc k
+  GetFSkip bc k -> readBytesM "skip" bc (const ()) *> k
   GetFFail msg -> fail msg
 
 runGetRun :: GetRun a -> ByteCount -> GetState -> (Either String a, GetState)
@@ -135,7 +152,7 @@ runGet m bs =
   let !n = mkGetRun m
       !l = fromIntegral (BS.length bs)
       !s = newGetState bs
-      (ea, GetState o bs') = runGetRun n l s
+      !(ea, GetState o bs') = runGetRun n l s
   in (ea, o, bs')
 
 newtype PutEff a = PutEff { unPutEff :: State Builder a }
@@ -201,10 +218,10 @@ execCountRun = \case
   PutFByteString bs k ->
     let !bc = fromIntegral (BS.length bs)
     in State.modify' (bc+) *> k
-  PutFStaticSeq pss@(PutStaticSeqF s _ k) ->
+  PutFStaticSeq pss@(PutStaticSeqF _ _ k) ->
     let !bc = putStaticSeqSize pss
     in State.modify' (bc+) *> k
-  PutFStaticVector psv@(PutStaticVectorF v k) ->
+  PutFStaticVector psv@(PutStaticVectorF _ k) ->
     let !bc = putStaticVectorSize psv
     in State.modify' (bc+) *> k
   PutFStaticHint bc _ -> State.modify' (bc+) *> empty
