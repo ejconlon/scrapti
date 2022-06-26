@@ -1,11 +1,15 @@
 module Dahdit.Free
   ( GetStaticSeqF (..)
+  , getStaticSeqSize
   , GetStaticVectorF (..)
+  , getStaticVectorSize
   , ScopeMode (..)
   , GetF (..)
   , Get (..)
   , PutStaticSeqF (..)
+  , putStaticSeqSize
   , PutStaticVectorF (..)
+  , putStaticVectorSize
   , PutF (..)
   , PutM (..)
   , Put
@@ -13,10 +17,12 @@ module Dahdit.Free
 
 import Control.Monad.Free.Church (F (..))
 import Dahdit.Nums (Int16LE, Word16LE)
-import Dahdit.Sizes (ByteCount, ElementCount, StaticByteSized)
+import Dahdit.Proxy (Proxy (..), proxyForF)
+import Dahdit.Sizes (ByteCount, ElementCount, StaticByteSized (..))
 import Data.ByteString (ByteString)
 import Data.Int (Int8)
 import Data.Sequence (Seq)
+import qualified Data.Sequence as Seq
 import qualified Data.Vector.Storable as VS
 import Data.Word (Word8)
 import Foreign.Storable (Storable)
@@ -27,11 +33,21 @@ data GetStaticSeqF a where
 instance Functor GetStaticSeqF where
   fmap f (GetStaticSeqF ec g k) = GetStaticSeqF ec g (f . k)
 
+getStaticSeqSize :: GetStaticSeqF a -> ByteCount
+getStaticSeqSize (GetStaticSeqF ec g _) =
+  let !z = staticByteSize (proxyForF g)
+  in z * fromIntegral ec
+
 data GetStaticVectorF a where
-  GetStaticVectorF :: (StaticByteSized z, Storable z) => !ElementCount -> (VS.Vector z -> a) -> GetStaticVectorF a
+  GetStaticVectorF :: (StaticByteSized z, Storable z) => !ElementCount -> Proxy z -> (VS.Vector z -> a) -> GetStaticVectorF a
 
 instance Functor GetStaticVectorF where
-  fmap f (GetStaticVectorF ec k) = GetStaticVectorF ec (f . k)
+  fmap f (GetStaticVectorF ec prox k) = GetStaticVectorF ec prox (f . k)
+
+getStaticVectorSize :: GetStaticVectorF a -> ByteCount
+getStaticVectorSize (GetStaticVectorF ec prox _) =
+  let !z = staticByteSize prox
+  in z * fromIntegral ec
 
 data ScopeMode =
     ScopeModeExact
@@ -63,11 +79,23 @@ data PutStaticSeqF a where
 instance Functor PutStaticSeqF where
   fmap f (PutStaticSeqF s p k) = PutStaticSeqF s p (f k)
 
+putStaticSeqSize :: PutStaticSeqF a -> ByteCount
+putStaticSeqSize (PutStaticSeqF s _ _) =
+  let !z = staticByteSize (proxyForF s)
+      !ec = fromIntegral (Seq.length s)
+  in z * ec
+
 data PutStaticVectorF a where
   PutStaticVectorF :: (StaticByteSized z, Storable z) => !(VS.Vector z) -> a -> PutStaticVectorF a
 
 instance Functor PutStaticVectorF where
   fmap f (PutStaticVectorF n k) = PutStaticVectorF n (f k)
+
+putStaticVectorSize :: PutStaticVectorF a -> ByteCount
+putStaticVectorSize (PutStaticVectorF v _) =
+  let !z = staticByteSize (proxyForF v)
+      !ec = fromIntegral (VS.length v)
+  in z * ec
 
 data PutF a =
     PutFWord8 !Word8 a

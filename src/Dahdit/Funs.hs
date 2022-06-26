@@ -25,7 +25,7 @@ import Control.Monad.Free.Church (F (..))
 import Dahdit.Free (Get (..), GetF (..), GetStaticSeqF (..), GetStaticVectorF (..), Put, PutF (..), PutM (..),
                     PutStaticSeqF (..), PutStaticVectorF (..), ScopeMode (..))
 import Dahdit.Nums (Int16LE, Word16LE)
-import Dahdit.Proxy (proxyForFun)
+import Dahdit.Proxy (Proxy (..), proxyForFun)
 import Dahdit.Sizes (ByteCount, ElementCount, StaticByteSized (..))
 import Data.ByteString (ByteString)
 import Data.Foldable (traverse_)
@@ -75,7 +75,7 @@ getStaticSeq n g = Get (F (\x y -> y (GetFStaticSeq (GetStaticSeqF n g x))))
 
 -- | Get Vector of statically-sized elements
 getStaticVector :: (StaticByteSized a, Storable a) => ElementCount -> Get (VS.Vector a)
-getStaticVector n = Get (F (\x y -> y (GetFStaticVector (GetStaticVectorF n x))))
+getStaticVector n = Get (F (\x y -> y (GetFStaticVector (GetStaticVectorF n (Proxy :: Proxy a) x))))
 
 putWord8 :: Word8 -> Put
 putWord8 d = PutM (F (\x y -> y (PutFWord8 d (x ()))))
