@@ -3,7 +3,7 @@ module Dahdit.Funs
   , getInt8
   , getWord16LE
   , getInt16LE
-  , getByteString
+  , getShortByteString
   , getSkip
   , getExact
   , getWithin
@@ -14,7 +14,7 @@ module Dahdit.Funs
   , putInt8
   , putWord16LE
   , putInt16LE
-  , putByteString
+  , putShortByteString
   , putSeq
   , putStaticSeq
   , putStaticArray
@@ -47,8 +47,8 @@ getWord16LE = Get (F (\x y -> y (GetFWord16LE x)))
 getInt16LE :: Get Int16LE
 getInt16LE = Get (F (\x y -> y (GetFInt16LE x)))
 
-getByteString :: ByteCount -> Get ShortByteString
-getByteString bc = Get (F (\x y -> y (GetFByteString bc x)))
+getShortByteString :: ByteCount -> Get ShortByteString
+getShortByteString bc = Get (F (\x y -> y (GetFShortByteString bc x)))
 
 getSkip :: ByteCount -> Get ()
 getSkip bc = Get (F (\x y -> y (GetFSkip bc (x ()))))
@@ -89,8 +89,8 @@ putWord16LE d = PutM (F (\x y -> y (PutFWord16LE d (x ()))))
 putInt16LE :: Int16LE -> Put
 putInt16LE d = PutM (F (\x y -> y (PutFInt16LE d (x ()))))
 
-putByteString :: ShortByteString -> Put
-putByteString bs = PutM (F (\x y -> y (PutFByteString bs (x ()))))
+putShortByteString :: ShortByteString -> Put
+putShortByteString bs = PutM (F (\x y -> y (PutFShortByteString bs (x ()))))
 
 -- | Put Seq of dynamically-sized elements
 putSeq :: (a -> Put) -> Seq a -> Put

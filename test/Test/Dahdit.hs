@@ -8,7 +8,7 @@ import Test.Tasty.HUnit (testCase, (@?=))
 
 runGetCase :: (ByteSized a, Show a, Eq a) => Get a -> Maybe a -> ByteString -> IO ()
 runGetCase getter mayValue bs = do
-  let (result, bc, _) = runGet getter bs
+  let (result, bc, _) = runGetBS getter bs
   -- putStrLn ("<<<<" ++ show (result, bc) ++ ">>>>")
   case (result, mayValue) of
     (Left _, Nothing) -> pure ()
@@ -30,7 +30,7 @@ testDahditGet = testGroup "get"
   , testCase "Word16LE two" (runGetCase getWord16LE (Just 0x5DEC) (BS.pack [0xEC, 0x5D]))
   , testCase "Word16LE three" (runGetCase getWord16LE (Just 0x5DEC) (BS.pack [0xEC, 0x5D, 0xBB]))
   , testCase "Int16LE" (runGetCase getInt16LE (Just 0x5DEC) (BS.pack [0xEC, 0x5D, 0xBB]))
-  , testCase "ByteString" (runGetCase (getByteString 2) (Just (BSS.pack [0xEC, 0x5D])) (BS.pack [0xEC, 0x5D, 0xBB]))
+  , testCase "ByteString" (runGetCase (getShortByteString 2) (Just (BSS.pack [0xEC, 0x5D])) (BS.pack [0xEC, 0x5D, 0xBB]))
   ]
 
 testDahdit :: TestTree
