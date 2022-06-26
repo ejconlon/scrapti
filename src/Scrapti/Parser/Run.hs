@@ -7,19 +7,23 @@ module Scrapti.Parser.Run
 import Control.Applicative (Alternative (..))
 import Control.Monad.Except (ExceptT, runExceptT, throwError)
 import Control.Monad.Free.Church (F (..))
-import Control.Monad.Reader (MonadReader, ReaderT (..))
+import Control.Monad.Reader (MonadReader, ReaderT (..), ask)
 import Control.Monad.State.Strict (MonadState, State, runState)
 import qualified Control.Monad.State.Strict as State
 import Control.Monad.Trans.Free (FreeT (..), iterT, wrap)
 import Control.Monad.Trans.Maybe (MaybeT (..))
+import Data.Bits (Bits (..), unsafeShiftL)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.ByteString.Builder (Builder)
 import qualified Data.ByteString.Builder as BSB
 import qualified Data.ByteString.Lazy as BSL
+import qualified Data.ByteString.Unsafe as BU
 import Data.Foldable (for_)
+import Data.Int (Int8)
 import qualified Data.Sequence as Seq
 import qualified Data.Vector.Storable as VS
+import Data.Word (Word8)
 import Scrapti.Parser.Free (Get (..), GetF (..), GetStaticSeqF (..), GetStaticVectorF (..), Put, PutF (..), PutM (..),
                             PutStaticSeqF (..), PutStaticVectorF (..))
 import Scrapti.Parser.Nums (Int16LE (..), Word16LE (..))
@@ -46,24 +50,50 @@ instance MonadFail GetEff where
 newtype GetRun a = GetRun { unGetRun :: FreeT GetF GetEff a }
   deriving newtype (Functor, Applicative, Monad)
 
-failNeedBytes :: String -> ByteCount -> GetEff a
-failNeedBytes tyName numBytes = fail ("End of input parsing " ++ tyName ++ " (" ++ show numBytes ++ " bytes)")
+failNeedBytes :: String -> ByteCount -> ByteCount -> GetEff a
+failNeedBytes nm ac bc = fail ("End of input parsing " ++ nm ++ " (have " ++ show (unByteCount ac) ++ " bytes, need " ++ show (unByteCount bc) ++ ")")
+
+readBytes :: String -> ByteCount -> (ByteString -> a) -> GetEff a
+readBytes nm bc f = do
+  l <- ask
+  GetState o bs <- State.get
+  let !ac = l - o
+  if bc < ac
+    then failNeedBytes nm ac bc
+    else do
+      let a = f bs
+          !o' = o + bc
+          !bs' = BS.drop (fromIntegral bc) bs
+          !st' = GetState o' bs'
+      State.put st'
+      pure a
+
+readWord8 :: ByteString -> Word8
+readWord8 = BU.unsafeHead
+
+readInt8 :: ByteString -> Int8
+readInt8 = fromIntegral . readWord8
+
+readWord16LE :: ByteString -> Word16LE
+readWord16LE bs = (fromIntegral (bs `BU.unsafeIndex` 1) `unsafeShiftL` 8) .|. fromIntegral (bs `BU.unsafeIndex` 0)
+
+readInt16LE :: ByteString -> Int16LE
+readInt16LE = fromIntegral . readWord16LE
 
 execGetRun :: GetF (GetEff a) -> GetEff a
 execGetRun = \case
-  GetFWord8 k -> do
-    GetState o bs <- State.get
-    case BS.uncons bs of
-      Nothing -> failNeedBytes "Word8" 1
-      Just _ -> undefined
-  GetFInt8 k -> undefined
-  GetFWord16LE k -> undefined
-  GetFInt16LE k -> undefined
-  GetFByteString bc k -> undefined
-  GetFStaticSeq (GetStaticSeqF ec g k) -> undefined
-  GetFStaticVector (GetStaticVectorF ec g k) -> undefined
-  GetFScope sm bc k -> undefined
-  GetFSkip bc k -> undefined
+  GetFWord8 k -> readBytes "Word8" 1 readWord8 >>= k
+  GetFInt8 k -> readBytes "Int8" 1 readInt8 >>= k
+  GetFWord16LE k -> readBytes "Word16LE" 2 readWord16LE >>= k
+  GetFInt16LE k -> readBytes "Int16LE" 2 readInt16LE >>= k
+  GetFByteString bc k -> readBytes "ByteString" bc (BS.take (fromIntegral bc)) >>= k
+  GetFStaticSeq (GetStaticSeqF ec g k) -> do
+    error "TODO get seq"
+  GetFStaticVector (GetStaticVectorF ec k) -> do
+    error "TODO get vector"
+  GetFScope sm bc k -> do
+    error "TODO get scope"
+  GetFSkip bc k -> readBytes "skip" bc (const ()) *> k
   GetFFail msg -> fail msg
 
 runGetRun :: GetRun a -> ByteCount -> GetState -> (Either String a, GetState)
@@ -107,12 +137,8 @@ execPutRun = \case
       let !x = p a
       mkPutEff x
     k
-  PutFStaticVector (PutStaticVectorF v p k) -> do
-    -- TODO exploit storable
-    VS.forM_ v $ \a -> do
-      let !x = p a
-      mkPutEff x
-    k
+  PutFStaticVector (PutStaticVectorF _v _k) -> do
+    error "TODO put vector"
   PutFStaticHint _ k -> k
 
 runPutRun :: PutRun a -> Builder -> (a, Builder)
@@ -158,8 +184,7 @@ execCountRun = \case
         !ec = fromIntegral (Seq.length s)
         !bc = z * ec
     in State.modify' (bc+) *> k
-  PutFStaticVector (PutStaticVectorF v _ k) ->
-    -- TODO exploit storable
+  PutFStaticVector (PutStaticVectorF v k) ->
     let !z = staticByteSize (proxyForF v)
         !ec = fromIntegral (VS.length v)
         !bc = z * ec

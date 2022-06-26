@@ -74,8 +74,8 @@ getStaticSeq :: StaticByteSized a => ElementCount -> Get a -> Get (Seq a)
 getStaticSeq n g = Get (F (\x y -> y (GetFStaticSeq (GetStaticSeqF n g x))))
 
 -- | Get Vector of statically-sized elements
-getStaticVector :: (StaticByteSized a, Storable a) => ElementCount -> Get a -> Get (VS.Vector a)
-getStaticVector n g = Get (F (\x y -> y (GetFStaticVector (GetStaticVectorF n g x))))
+getStaticVector :: (StaticByteSized a, Storable a) => ElementCount -> Get (VS.Vector a)
+getStaticVector n = Get (F (\x y -> y (GetFStaticVector (GetStaticVectorF n x))))
 
 putWord8 :: Word8 -> Put
 putWord8 d = PutM (F (\x y -> y (PutFWord8 d (x ()))))
@@ -101,8 +101,8 @@ putStaticSeq :: StaticByteSized a => (a -> Put) -> Seq a -> Put
 putStaticSeq p s = PutM (F (\x y -> y (PutFStaticSeq (PutStaticSeqF s p (x ())))))
 
 -- | Put Vector of statically-sized elements
-putStaticVector :: (StaticByteSized a, Storable a) => (a -> Put) -> VS.Vector a -> Put
-putStaticVector p v = PutM (F (\x y -> y (PutFStaticVector (PutStaticVectorF v p (x ())))))
+putStaticVector :: (StaticByteSized a, Storable a) => VS.Vector a -> Put
+putStaticVector v = PutM (F (\x y -> y (PutFStaticVector (PutStaticVectorF v (x ())))))
 
 putStaticHint :: StaticByteSized a => (a -> Put) -> a -> Put
 putStaticHint p =

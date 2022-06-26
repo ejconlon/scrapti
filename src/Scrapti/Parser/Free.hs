@@ -28,10 +28,10 @@ instance Functor GetStaticSeqF where
   fmap f (GetStaticSeqF ec g k) = GetStaticSeqF ec g (f . k)
 
 data GetStaticVectorF a where
-  GetStaticVectorF :: (StaticByteSized z, Storable z) => !ElementCount -> Get z -> (VS.Vector z -> a) -> GetStaticVectorF a
+  GetStaticVectorF :: (StaticByteSized z, Storable z) => !ElementCount -> (VS.Vector z -> a) -> GetStaticVectorF a
 
 instance Functor GetStaticVectorF where
-  fmap f (GetStaticVectorF ec g k) = GetStaticVectorF ec g (f . k)
+  fmap f (GetStaticVectorF ec k) = GetStaticVectorF ec (f . k)
 
 data ScopeMode =
     ScopeModeExact
@@ -64,10 +64,10 @@ instance Functor PutStaticSeqF where
   fmap f (PutStaticSeqF s p k) = PutStaticSeqF s p (f k)
 
 data PutStaticVectorF a where
-  PutStaticVectorF :: (StaticByteSized z, Storable z) => !(VS.Vector z) -> (z -> Put) -> a -> PutStaticVectorF a
+  PutStaticVectorF :: (StaticByteSized z, Storable z) => !(VS.Vector z) -> a -> PutStaticVectorF a
 
 instance Functor PutStaticVectorF where
-  fmap f (PutStaticVectorF n g k) = PutStaticVectorF n g (f k)
+  fmap f (PutStaticVectorF n k) = PutStaticVectorF n (f k)
 
 data PutF a =
     PutFWord8 !Word8 a
