@@ -1,10 +1,10 @@
 module Test.Dahdit (testDahdit) where
 
-import Dahdit.Prelude (Binary (..), ByteCount, ByteSized (..), Generic, Get, Int16LE, Int8, Proxy (..), Put,
-                       ShortByteString, StaticByteSized (..), ViaGeneric (..), ViaStaticGeneric (..), Word16LE, Word8,
-                       getInt16LE, getInt8, getSeq, getShortByteString, getStaticArray, getStaticSeq, getWord16LE,
-                       getWord8, putInt16LE, putInt8, putSeq, putShortByteString, putStaticArray, putStaticSeq,
-                       putWord16LE, putWord8, runCount, runGetBS, runPutArray)
+import Dahdit (Binary (..), ByteCount, ByteSized (..), Generic, Get, Int16LE, Int8, Proxy (..), Put, ShortByteString,
+               StaticByteSized (..), ViaGeneric (..), ViaStaticGeneric (..), Word16LE, Word8, getInt16LE, getInt8,
+               getSeq, getShortByteString, getStaticArray, getStaticSeq, getWord16LE, getWord8, putInt16LE, putInt8,
+               putSeq, putShortByteString, putStaticArray, putStaticSeq, putWord16LE, putWord8, runCount, runGetBS,
+               runPutArray)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
 import Data.Primitive.ByteArray (byteArrayFromList)

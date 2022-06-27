@@ -15,12 +15,14 @@ module Dahdit.Funs
   , putWord16LE
   , putInt16LE
   , putShortByteString
+  , putFixedByteString
   , putSeq
   , putStaticSeq
   , putStaticArray
   , putStaticHint
   ) where
 
+import Control.Monad (replicateM_, unless)
 import Control.Monad.Free.Church (F (..))
 import Dahdit.Free (Get (..), GetF (..), GetStaticArrayF (..), GetStaticSeqF (..), Put, PutF (..), PutM (..),
                     PutStaticArrayF (..), PutStaticSeqF (..), ScopeMode (..))
@@ -28,6 +30,7 @@ import Dahdit.Nums (Int16LE, Word16LE)
 import Dahdit.Proxy (Proxy (..), proxyForFun)
 import Dahdit.Sizes (ByteCount, ElementCount, StaticByteSized (..))
 import Data.ByteString.Short (ShortByteString)
+import qualified Data.ByteString.Short as BSS
 import Data.Foldable (traverse_)
 import Data.Int (Int8)
 import Data.Primitive (Prim)
@@ -90,7 +93,20 @@ putInt16LE :: Int16LE -> Put
 putInt16LE d = PutM (F (\x y -> y (PutFInt16LE d (x ()))))
 
 putShortByteString :: ShortByteString -> Put
-putShortByteString bs = PutM (F (\x y -> y (PutFShortByteString bs (x ()))))
+putShortByteString sbs =
+  let !bc = fromIntegral (BSS.length sbs)
+  in PutM (F (\x y -> y (PutFShortByteString bc sbs (x ()))))
+
+putFixedByteString :: Word8 -> ByteCount -> ShortByteString -> Put
+putFixedByteString pad bc sbs = do
+  unless (bc == 0) $ do
+    let !len = fromIntegral bc
+        !lenSbs = BSS.length sbs
+        !mostLen = min len lenSbs
+        !mostBc = fromIntegral mostLen
+    PutM (F (\x y -> y (PutFShortByteString mostBc sbs (x ()))))
+    let !diff = len - lenSbs
+    unless (diff <= 0) (replicateM_ diff (putWord8 pad))
 
 -- | Put Seq of dynamically-sized elements
 putSeq :: (a -> Put) -> Seq a -> Put

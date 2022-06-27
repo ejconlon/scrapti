@@ -75,7 +75,7 @@ data PutF a =
   | PutFInt8 !Int8 a
   | PutFWord16LE !Word16LE a
   | PutFInt16LE !Int16LE a
-  | PutFShortByteString !ShortByteString a
+  | PutFShortByteString !ByteCount !ShortByteString a
   | PutFStaticSeq !(PutStaticSeqF a)
   | PutFStaticArray !(PutStaticArrayF a)
   | PutFStaticHint !ByteCount a

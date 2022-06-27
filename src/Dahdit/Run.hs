@@ -259,8 +259,8 @@ execPutRun = \case
   PutFInt8 x k -> writeBytes 1 (\arr pos -> writeByteArray arr pos x) *> k
   PutFWord16LE x k -> writeBytes 2 (writeByteArrayLifted x) *> k
   PutFInt16LE x k -> writeBytes 2 (writeByteArrayLifted x) *> k
-  PutFShortByteString sbs k ->
-    let !len = BSS.length sbs
+  PutFShortByteString bc sbs k ->
+    let !len = fromIntegral bc
     in writeBytes len (writeShortByteString sbs len) *> k
   PutFStaticSeq pss -> writeStaticSeq pss
   PutFStaticArray psa -> writeStaticArray psa
@@ -305,15 +305,15 @@ execCountRun = \case
   PutFInt8 _ k -> State.modify' (1+) *> k
   PutFWord16LE _ k -> State.modify' (2+) *> k
   PutFInt16LE _ k -> State.modify' (2+) *> k
-  PutFShortByteString bs k ->
-    let !bc = BSS.length bs
-    in State.modify' (bc+) *> k
+  PutFShortByteString bc _ k ->
+    let !len = fromIntegral bc
+    in State.modify' (len+) *> k
   PutFStaticSeq pss@(PutStaticSeqF _ _ k) ->
-    let !bc = putStaticSeqSize pss
-    in State.modify' (bc+) *> k
+    let !len = putStaticSeqSize pss
+    in State.modify' (len+) *> k
   PutFStaticArray psv@(PutStaticArrayF _ k) ->
-    let !bc = putStaticArraySize psv
-    in State.modify' (bc+) *> k
+    let !len = putStaticArraySize psv
+    in State.modify' (len+) *> k
   PutFStaticHint bc _ ->
     let !len = fromIntegral bc
     in State.modify' (len+) *> empty

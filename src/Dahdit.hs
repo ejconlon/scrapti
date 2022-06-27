@@ -1,4 +1,4 @@
-module Dahdit.Prelude
+module Dahdit
   ( Word8
   , Int8
   , ByteString
@@ -8,6 +8,7 @@ module Dahdit.Prelude
   , Generic
   , Prim
   , module Dahdit.Binary
+  , module Dahdit.Fancy
   , module Dahdit.Free
   , module Dahdit.Funs
   , module Dahdit.Nums
@@ -18,6 +19,7 @@ module Dahdit.Prelude
    ) where
 
 import Dahdit.Binary
+import Dahdit.Fancy
 import Dahdit.Free (Get, Put, PutM)
 import Dahdit.Funs
 import Dahdit.Nums (Int16LE (..), Word16LE (..))

@@ -24,11 +24,12 @@ source-repository head
 
 library
   exposed-modules:
+      Dahdit
       Dahdit.Binary
+      Dahdit.Fancy
       Dahdit.Free
       Dahdit.Funs
       Dahdit.Nums
-      Dahdit.Prelude
       Dahdit.Proxy
       Dahdit.Run
       Dahdit.Sizes

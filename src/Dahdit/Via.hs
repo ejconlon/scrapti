@@ -14,10 +14,10 @@ import Dahdit.Sizes (ByteCount, ByteSized (..), StaticByteSized (..))
 import Data.Kind (Type)
 import GHC.Generics ((:*:) (..), Generic (..), K1 (..), M1 (..), U1 (..), V1)
 
--- Use: deriving (ByteSized, Binary) via (Generic Foo)
+-- | Use: deriving (ByteSized, Binary) via (ViaGeneric Foo)
 newtype ViaGeneric a = ViaGeneric { unViaGeneric :: a }
 
--- Use: deriving (ByteSized, StaticByteSized, Binary) via (StaticGeneric Foo)
+-- | Use: deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Foo)
 newtype ViaStaticGeneric a = ViaStaticGeneric { unViaStaticGeneric :: a }
 
 -- ByteSized:
