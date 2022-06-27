@@ -9,7 +9,7 @@ module Dahdit.Run
 
 import Control.Applicative (Alternative (..))
 import Control.Exception (Exception (..), throwIO)
-import Control.Monad (unless)
+import Control.Monad (replicateM_, unless)
 import Control.Monad.Except (ExceptT, MonadError, runExceptT, throwError)
 import Control.Monad.Free.Church (F (..))
 import Control.Monad.Reader (MonadReader (..), ReaderT (..), asks)
@@ -26,11 +26,11 @@ import Dahdit.Proxy (proxyForF)
 import Dahdit.Sizes (ByteCount (..), staticByteSize)
 import qualified Data.ByteString.Short as BSS
 import Data.ByteString.Short.Internal (ShortByteString (..))
-import Data.Foldable (for_)
+import Data.Foldable (for_, toList)
 import Data.Int (Int8)
 import Data.Primitive.ByteArray (ByteArray (..), MutableByteArray, cloneByteArray, copyByteArray, indexByteArray,
-                                 newByteArray, sizeofByteArray, unsafeFreezeByteArray, writeByteArray)
-import Data.Primitive.PrimArray (PrimArray (..))
+                                 newByteArray, setByteArray, unsafeFreezeByteArray, writeByteArray)
+import Data.Primitive.PrimArray (PrimArray (..), sizeofPrimArray)
 import qualified Data.Sequence as Seq
 import Data.STRef.Strict (STRef, newSTRef, readSTRef, writeSTRef)
 import Data.Word (Word8)
@@ -43,18 +43,23 @@ getStaticSeqSize (GetStaticSeqF ec g _) =
   in z * fromIntegral ec
 
 getStaticArraySize :: GetStaticArrayF a -> Int
-getStaticArraySize (GetStaticArrayF ec prox _) =
+getStaticArraySize (GetStaticArrayF n prox _) =
   let !z = fromIntegral (staticByteSize prox)
-  in z * fromIntegral ec
+  in z * fromIntegral n
 
 putStaticSeqSize :: PutStaticSeqF a -> Int
-putStaticSeqSize (PutStaticSeqF s _ _) =
+putStaticSeqSize (PutStaticSeqF n _ _ s _) =
   let !z = fromIntegral (staticByteSize (proxyForF s))
-      !ec = Seq.length s
-  in z * ec
+  in z * fromIntegral n
+
+putStaticArrayElemSize :: PutStaticArrayF a -> Int
+putStaticArrayElemSize (PutStaticArrayF _ _ a _) =
+  fromIntegral (staticByteSize (proxyForF a))
 
 putStaticArraySize :: PutStaticArrayF a -> Int
-putStaticArraySize (PutStaticArrayF (PrimArray frozArr) _) = sizeofByteArray (ByteArray frozArr)
+putStaticArraySize (PutStaticArrayF n _ a _) =
+  let !z = fromIntegral (staticByteSize (proxyForF a))
+  in z * fromIntegral n
 
 -- Get:
 
@@ -248,17 +253,28 @@ writeShortByteString :: ShortByteString -> Int -> MutableByteArray s -> Int -> S
 writeShortByteString (SBS frozArr) len arr pos = copyByteArray arr pos (ByteArray frozArr) 0 len
 
 writeStaticSeq :: PutStaticSeqF (PutEff s a) -> PutEff s a
-writeStaticSeq (PutStaticSeqF ss p k) = do
-  for_ ss $ \a -> do
+writeStaticSeq (PutStaticSeqF n z p s k) = do
+  let n' = fromIntegral n
+  for_ (take n' (toList s)) $ \a -> do
     let !x = p a
     mkPutEff x
+  let !e = Seq.length s
+  unless (n' <= e) $ do
+    let !q = mkPutEff (p z)
+    replicateM_ (n' - e) q
   k
 
 writeStaticArray :: PutStaticArrayF (PutEff s a) -> PutEff s a
-writeStaticArray psa@(PutStaticArrayF sv k) = do
-  let !bc = putStaticArraySize psa
-      !(PrimArray frozArr) = sv
-  writeBytes bc (\arr pos -> copyByteArray arr pos (ByteArray frozArr) 0 bc)
+writeStaticArray psa@(PutStaticArrayF needElems z a@(PrimArray frozArr) k) = do
+  let !elemSize = putStaticArrayElemSize psa
+      !haveElems = sizeofPrimArray a
+      !useElems = min haveElems (fromIntegral needElems)
+      !useBc = elemSize * useElems
+  writeBytes useBc (\arr pos -> copyByteArray arr pos (ByteArray frozArr) 0 useBc)
+  let !needBc = putStaticArraySize psa
+  unless (useBc == needBc) $ do
+    let !extraBc = needBc - useBc
+    writeBytes extraBc (\arr pos -> setByteArray arr (pos + useBc) (pos + extraBc) z)
   k
 
 execPutRun :: PutF (PutEff s a) -> PutEff s a
@@ -323,10 +339,10 @@ execCountRun = \case
   PutFShortByteString bc _ k ->
     let !len = fromIntegral bc
     in State.modify' (len+) *> k
-  PutFStaticSeq pss@(PutStaticSeqF _ _ k) ->
+  PutFStaticSeq pss@(PutStaticSeqF _ _ _ _ k) ->
     let !len = putStaticSeqSize pss
     in State.modify' (len+) *> k
-  PutFStaticArray psv@(PutStaticArrayF _ k) ->
+  PutFStaticArray psv@(PutStaticArrayF _ _ _ k) ->
     let !len = putStaticArraySize psv
     in State.modify' (len+) *> k
   PutFStaticHint bc _ ->

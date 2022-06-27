@@ -32,7 +32,9 @@ module Dahdit.Funs
   , putFixedString
   , putSeq
   , putStaticSeq
+  , unsafePutStaticSeqN
   , putStaticArray
+  , unsafePutStaticArrayN
   , putStaticHint
   ) where
 
@@ -42,14 +44,15 @@ import Dahdit.Free (Get (..), GetF (..), GetLookAheadF (..), GetStaticArrayF (..
                     PutM (..), PutStaticArrayF (..), PutStaticSeqF (..), ScopeMode (..))
 import Dahdit.Nums (FloatLE, Int16LE, Int32LE, Word16LE, Word32LE)
 import Dahdit.Proxy (Proxy (..), proxyForF, proxyForFun)
-import Dahdit.Sizes (ByteCount (..), ElementCount, StaticByteSized (..))
+import Dahdit.Sizes (ByteCount (..), ElementCount (..), StaticByteSized (..))
 import Data.ByteString.Short (ShortByteString)
 import qualified Data.ByteString.Short as BSS
 import Data.Foldable (traverse_)
 import Data.Int (Int8)
-import Data.Primitive (Prim)
+import Data.Primitive (Prim, sizeofPrimArray)
 import Data.Primitive.PrimArray (PrimArray)
 import Data.Sequence (Seq (..))
+import qualified Data.Sequence as Seq
 import Data.Word (Word8)
 
 getWord8 :: Get Word8
@@ -199,11 +202,21 @@ putSeq = traverse_
 
 -- | Put Seq of statically-sized elements
 putStaticSeq :: StaticByteSized a => (a -> Put) -> Seq a -> Put
-putStaticSeq p s = PutM (F (\x y -> y (PutFStaticSeq (PutStaticSeqF s p (x ())))))
+putStaticSeq p s =
+  let !n = fromIntegral (Seq.length s)
+  in unsafePutStaticSeqN n undefined p s
+
+unsafePutStaticSeqN :: StaticByteSized a => ElementCount -> a -> (a -> Put) -> Seq a -> Put
+unsafePutStaticSeqN n z p s = PutM (F (\x y -> y (PutFStaticSeq (PutStaticSeqF n z p s (x ())))))
 
 -- | Put Array of statically-sized elements
 putStaticArray :: (StaticByteSized a, Prim a) => PrimArray a -> Put
-putStaticArray v = PutM (F (\x y -> y (PutFStaticArray (PutStaticArrayF v (x ())))))
+putStaticArray a =
+  let !n = fromIntegral (sizeofPrimArray a)
+  in unsafePutStaticArrayN n undefined a
+
+unsafePutStaticArrayN :: (StaticByteSized a, Prim a) => ElementCount -> a -> PrimArray a -> Put
+unsafePutStaticArrayN n z a = PutM (F (\x y -> y (PutFStaticArray (PutStaticArrayF n z a (x ())))))
 
 putStaticHint :: StaticByteSized a => (a -> Put) -> a -> Put
 putStaticHint p =

@@ -23,7 +23,7 @@ import Dahdit.Binary
 import Dahdit.BinaryRep
 import Dahdit.Fancy
 import Dahdit.Free (Get, Put, PutM)
-import Dahdit.Funs
+import Dahdit.Funs hiding (unsafePutStaticArrayN, unsafePutStaticSeqN)
 import Dahdit.Generic
 import Dahdit.Nums (FloatLE (..), Int16LE (..), Int32LE (..), Word16LE (..), Word32LE (..))
 import Dahdit.Proxy

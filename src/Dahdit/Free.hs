@@ -27,13 +27,13 @@ data GetStaticSeqF a where
   GetStaticSeqF :: (StaticByteSized z) => !ElementCount -> Get z -> (Seq z -> a) -> GetStaticSeqF a
 
 instance Functor GetStaticSeqF where
-  fmap f (GetStaticSeqF ec g k) = GetStaticSeqF ec g (f . k)
+  fmap f (GetStaticSeqF n g k) = GetStaticSeqF n g (f . k)
 
 data GetStaticArrayF a where
   GetStaticArrayF :: (StaticByteSized z, Prim z) => !ElementCount -> Proxy z -> (PrimArray z -> a) -> GetStaticArrayF a
 
 instance Functor GetStaticArrayF where
-  fmap f (GetStaticArrayF ec prox k) = GetStaticArrayF ec prox (f . k)
+  fmap f (GetStaticArrayF n p k) = GetStaticArrayF n p (f . k)
 
 data GetLookAheadF a where
   GetLookAheadF :: Get z -> (z -> a) -> GetLookAheadF a
@@ -71,16 +71,18 @@ instance MonadFail Get where
   fail msg = Get (F (\_ y -> y (GetFFail msg)))
 
 data PutStaticSeqF a where
-  PutStaticSeqF :: StaticByteSized z => !(Seq z) -> (z -> Put) -> a -> PutStaticSeqF a
+  PutStaticSeqF :: StaticByteSized z => !ElementCount -> z -> (z -> Put) -> !(Seq z) -> a -> PutStaticSeqF a
+  -- second elem NOT STRICT because may be undefined
 
 instance Functor PutStaticSeqF where
-  fmap f (PutStaticSeqF s p k) = PutStaticSeqF s p (f k)
+  fmap f (PutStaticSeqF n z p s k) = PutStaticSeqF n z p s (f k)
 
 data PutStaticArrayF a where
-  PutStaticArrayF :: (StaticByteSized z, Prim z) => !(PrimArray z) -> a -> PutStaticArrayF a
+  PutStaticArrayF :: (StaticByteSized z, Prim z) => !ElementCount -> z -> !(PrimArray z) -> a -> PutStaticArrayF a
+  -- second elem NOT STRICT because may be undefined
 
 instance Functor PutStaticArrayF where
-  fmap f (PutStaticArrayF n k) = PutStaticArrayF n (f k)
+  fmap f (PutStaticArrayF n z a k) = PutStaticArrayF n z a (f k)
 
 data PutF a =
     PutFWord8 !Word8 a

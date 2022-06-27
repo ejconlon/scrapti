@@ -12,11 +12,11 @@ module Scrapti.Riff
   , Chunk (..)
   ) where
 
-import Dahdit (Binary (..), ByteCount, ByteSized (..), FixedBytes, Get, Proxy (..), Put, StaticByteSized (..), Word32LE,
-               getExact, getExpect)
+import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, Proxy (..), Put, StaticByteSized (..), StaticBytes,
+               Word32LE, getExact, getExpect)
 import Data.Default (Default)
 
-type Label = FixedBytes 4
+type Label = StaticBytes 4
 
 labelRiff :: Label
 labelRiff = "RIFF"

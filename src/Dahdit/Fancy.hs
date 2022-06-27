@@ -1,24 +1,26 @@
 module Dahdit.Fancy
   ( TermBytes (..)
-  , FixedBytes (..)
-  , FixedSeq (..)
-  , FixedArray (..)
+  , StaticBytes (..)
+  , StaticSeq (..)
+  , StaticArray (..)
   , BoolByte (..)
   ) where
 
 import Control.Monad (unless)
 import Dahdit.Binary (Binary (..))
 import Dahdit.Free (Get)
-import Dahdit.Funs (getByteString, getStaticArray, getWord8, putByteString, putFixedString, putWord8)
+import Dahdit.Funs (getByteString, getStaticArray, getStaticSeq, getWord8, putByteString, putFixedString, putWord8,
+                    unsafePutStaticArrayN, unsafePutStaticSeqN)
 import Dahdit.Proxy (Proxy (..))
-import Dahdit.Sizes (ByteSized (..), StaticByteSized (..), ViaStaticByteSized (..))
+import Dahdit.Sizes (ByteSized (..), StaticByteSized (..), ViaStaticByteSized (..), staticByteSizeFoldable)
 import qualified Data.ByteString.Short as BSS
 import Data.ByteString.Short.Internal (ShortByteString (..))
 import Data.Default (Default (..))
 import Data.Primitive (Prim)
 import Data.Primitive.ByteArray (ByteArray (..), byteArrayFromListN)
-import Data.Primitive.PrimArray (PrimArray)
+import Data.Primitive.PrimArray (PrimArray, replicatePrimArray)
 import Data.Sequence (Seq)
+import qualified Data.Sequence as Seq
 import Data.String (IsString)
 import Data.Word (Word8)
 import GHC.TypeLits (KnownNat, Nat, natVal)
@@ -66,54 +68,61 @@ instance Binary TermBytes where
     unless (odd (BSS.length sbs)) (putWord8 0)
 
 -- | A fixed-length bytestring (truncated or zero-padded on put if length does not match).
-newtype FixedBytes (n :: Nat) = FixedBytes { unFixedBytes :: ShortByteString }
+newtype StaticBytes (n :: Nat) = StaticBytes { unStaticBytes :: ShortByteString }
   deriving stock (Show)
   deriving newtype (Eq, Ord, IsString)
-  deriving (ByteSized) via (ViaStaticByteSized (FixedBytes n))
+  deriving (ByteSized) via (ViaStaticByteSized (StaticBytes n))
 
-instance Default (FixedBytes n) where
-  def = FixedBytes BSS.empty
+instance Default (StaticBytes n) where
+  def = StaticBytes BSS.empty
 
-instance KnownNat n => StaticByteSized (FixedBytes n) where
+instance KnownNat n => StaticByteSized (StaticBytes n) where
   staticByteSize _ = fromInteger (natVal (Proxy :: Proxy n))
 
-instance KnownNat n => Binary (FixedBytes n) where
-  get = fmap FixedBytes (getByteString (fromInteger (natVal (Proxy :: Proxy n))))
-  put fb@(FixedBytes sbs) = putFixedString 0 (fromInteger (natVal fb)) sbs
+instance KnownNat n => Binary (StaticBytes n) where
+  get = fmap StaticBytes (getByteString (fromInteger (natVal (Proxy :: Proxy n))))
+  put fb@(StaticBytes sbs) = putFixedString 0 (fromInteger (natVal fb)) sbs
 
-newtype FixedSeq (n :: Nat) a = FixedSeq { unFixedSeq :: Seq a }
+newtype StaticSeq (n :: Nat) a = StaticSeq { unStaticSeq :: Seq a }
+  deriving stock (Show)
+  deriving newtype (Eq, Functor, Foldable)
+  deriving (ByteSized) via (ViaStaticByteSized (StaticSeq n a))
+
+instance (KnownNat n, Default a) => Default (StaticSeq n a) where
+  def = StaticSeq (Seq.replicate (fromIntegral (natVal (Proxy :: Proxy n))) def)
+
+instance (StaticByteSized a) => StaticByteSized (StaticSeq n a) where
+  staticByteSize _ = staticByteSizeFoldable (Proxy :: Proxy a)
+
+instance (KnownNat n, Binary a, StaticByteSized a, Default a) => Binary (StaticSeq n a) where
+  get = fmap StaticSeq (getStaticSeq (fromIntegral (natVal (Proxy :: Proxy n))) get)
+  put = unsafePutStaticSeqN (fromIntegral (natVal (Proxy :: Proxy n))) def put . unStaticSeq
+  -- put (StaticSeq s) =
+  --   let !n = fromIntegral (natVal (Proxy :: Proxy n))
+  --       !e = fromIntegral (Seq.length s)
+  --   in if n > e
+  --     then error ("Wrong number of elements to put static seq (have " ++ show (unElementCount e) ++ ", need " ++ show (unElementCount n) ++ ")")
+  --     else unsafePutStaticSeqN n put s
+
+newtype StaticArray (n :: Nat) a = StaticArray { unStaticArray :: PrimArray a }
   deriving stock (Show)
   deriving newtype (Eq)
+  deriving (ByteSized) via (ViaStaticByteSized (StaticArray n a))
 
-instance (KnownNat n, Default a) => Default (FixedSeq n a) where
-  def = undefined -- FixedSeq (replicate (fromIntegral (natVal (Proxy :: Proxy n))) def)
+instance (KnownNat n, Prim a, Default a) => Default (StaticArray n a) where
+  def = StaticArray (replicatePrimArray (fromIntegral (natVal (Proxy :: Proxy n))) def)
 
-instance (KnownNat n, ByteSized a) => ByteSized (FixedSeq n a) where
-  byteSize = undefined
-
-instance (KnownNat n, Binary a) => Binary (FixedSeq n a) where
-  get = undefined
-  put = undefined
-
-newtype FixedArray (n :: Nat) a = FixedArray { unFixedArray :: PrimArray a }
-  deriving stock (Show)
-  deriving newtype (Eq)
-  deriving (ByteSized) via (ViaStaticByteSized (FixedArray n a))
-
-instance (KnownNat n, Prim a, Default a) => Default (FixedArray n a) where
-  def = undefined -- FixedArray (replicate (fromIntegral (natVal (Proxy :: Proxy n))) def)
-
-instance (KnownNat n, StaticByteSized a) => StaticByteSized (FixedArray n a) where
+instance (KnownNat n, StaticByteSized a) => StaticByteSized (StaticArray n a) where
   staticByteSize = const (fromIntegral (natVal (Proxy :: Proxy n)) * staticByteSize (Proxy :: Proxy a))
 
-instance (KnownNat n, Prim a, StaticByteSized a, Binary a) => Binary (FixedArray n a) where
-  get = fmap FixedArray (getStaticArray (fromIntegral (natVal (Proxy :: Proxy n))))
-  put (FixedArray arr0) =
-    -- TODO put element count in PutFStaticArray + Sequence
-    undefined
-    -- let !intLen = fromIntegral (natVal (Proxy :: Proxy n))
-    --     !v1 = if VP.length v0 == intLen then v0 else VP.take intLen v0
-    -- in putVec v1
+instance (KnownNat n, Prim a, StaticByteSized a, Default a) => Binary (StaticArray n a) where
+  get = fmap StaticArray (getStaticArray (fromIntegral (natVal (Proxy :: Proxy n))))
+  put = unsafePutStaticArrayN (fromIntegral (natVal (Proxy :: Proxy n))) def . unStaticArray
+    -- let !n = fromIntegral (natVal (Proxy :: Proxy n))
+    --     !e = fromIntegral (sizeofPrimArray a)
+    -- in if n > e
+    --   then error ("Wrong number of elements to put static array (have " ++ show (unElementCount e) ++ ", need " ++ show (unElementCount n) ++ ")")
+    --   else putStaticArrayN n a
 
 newtype BoolByte = BoolByte { unBoolByte :: Bool }
   deriving stock (Show)

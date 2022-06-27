@@ -20,8 +20,8 @@ module Scrapti.Sfont
   ) where
 
 import Control.Monad (unless)
-import Dahdit (Binary (..), ByteCount, ByteSized (..), FixedBytes, Get, Int16LE, PrimArray, ShortByteString,
-               StaticByteSized (..), TermBytes, ViaStaticByteSized (..), ViaStaticGeneric (..), Word16LE, Word32LE,
+import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, Int16LE, PrimArray, ShortByteString, StaticByteSized (..),
+               StaticBytes, TermBytes, ViaStaticByteSized (..), ViaStaticGeneric (..), Word16LE, Word32LE,
                byteSizeFoldable, getExact, getRemainingSeq, getRemainingStaticSeq, getRemainingString, getSkip,
                getStaticArray, putByteString, putSeq, putStaticArray)
 import Data.Foldable (foldl')
@@ -76,7 +76,7 @@ newtype SampleCount = SampleCount { unSampleCount :: Word32LE }
   deriving stock (Show)
   deriving newtype (Eq, Ord, Num, Enum, Real, Integral, ByteSized, StaticByteSized, Binary)
 
-type ShortText = FixedBytes 20
+type ShortText = StaticBytes 20
 
 listChunkHeaderSize :: ByteCount
 listChunkHeaderSize = chunkHeaderSize + 4

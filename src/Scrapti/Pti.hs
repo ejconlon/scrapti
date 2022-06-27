@@ -3,9 +3,9 @@
 
 module Scrapti.Pti where
 
-import Dahdit (Binary (..), BinaryRep (..), BoolByte (..), ByteSized (..), FixedArray, FixedBytes, FloatLE, Int16LE,
-               StaticByteSized (..), ViaBinaryRep (..), ViaBoundedEnum (..), ViaGeneric (..), ViaStaticGeneric (..),
-               Word16LE, Word32LE)
+import Dahdit (Binary (..), BinaryRep (..), BoolByte (..), ByteSized (..), FloatLE, Int16LE, StaticArray,
+               StaticByteSized (..), StaticBytes, ViaBinaryRep (..), ViaBoundedEnum (..), ViaGeneric (..),
+               ViaStaticGeneric (..), Word16LE, Word32LE)
 import Data.Default (Default (..))
 import Data.Int (Int8)
 import Data.Word (Word8)
@@ -59,13 +59,13 @@ instance Default SamplePlayback where
   def = SPOneShot
 
 data Preamble = Preamble
-  { preAux0To19 :: !(FixedBytes 20)
+  { preAux0To19 :: !(StaticBytes 20)
   -- ^ 0-19
   , preIsWavetable :: !BoolByte
   -- 20
-  , preName :: !(FixedBytes 30)
+  , preName :: !(StaticBytes 30)
   -- 21-51
-  , preAux52To59 :: !(FixedBytes 8)
+  , preAux52To59 :: !(StaticBytes 8)
   -- 52-59
   , preSampleLength :: !Word32LE
   -- 60-63
@@ -75,7 +75,7 @@ data Preamble = Preamble
   -- 66-67
   , preWavetableTotalPositions :: !Word16LE
   -- 68-69
-  , preAux70To75 :: !(FixedBytes 6)
+  , preAux70To75 :: !(StaticBytes 6)
   -- 70-75
   , preSamplePlayback :: !SamplePlayback
   -- 76
@@ -282,7 +282,7 @@ data InstParams = InstParams
 --   def = AuxInstParams 0 0 0
 
 data Slices = Slices
-  { slicesAdjust :: !(FixedArray 48 Word16LE)
+  { slicesAdjust :: !(StaticArray 48 Word16LE)
   , slicesNumber :: !Word8
   , slicesActive :: !Word8
   } deriving stock (Eq, Show, Generic)
