@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Scrapti.Sfont
@@ -21,21 +20,18 @@ module Scrapti.Sfont
   ) where
 
 import Control.Monad (unless)
-import Data.ByteString (ByteString)
-import qualified Data.ByteString as BS
+import Dahdit (Binary (..), ByteCount, ByteSized (..), FixedBytes, Get, Int16LE, PrimArray, ShortByteString,
+               StaticByteSized (..), TermBytes, ViaStaticByteSized (..), ViaStaticGeneric (..), Word16LE, Word32LE,
+               byteSizeFoldable, getExact, getRemainingSeq, getRemainingStaticSeq, getRemainingString, getSkip,
+               getStaticArray, putByteString, putSeq, putStaticArray)
 import Data.Foldable (foldl')
 import Data.Int (Int8)
 import Data.Proxy (Proxy (..))
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
-import qualified Data.Vector.Primitive as VP
 import Data.Word (Word8)
 import GHC.Generics (Generic)
-import Scrapti.Binary (Binary (..), BinaryParser (..), ByteLength, ByteSized (..), FixedText, Int16LE, ParseM,
-                       StaticByteSized (..), TermText, ViaStaticByteSized (..), Word16LE, Word32LE, getWithoutSize,
-                       parseBound, parseRemaining, parseRepeated, parseSkip, parseVec, putByteString, putSeq, putVec)
-import Scrapti.Riff (Label, StaticLabel (..), chunkHeaderSize, labelRiff, parseChunkSize, parseExpectLabel,
-                     putChunkSize)
+import Scrapti.Riff (Label, StaticLabel (..), chunkHeaderSize, getChunkSize, getExpectLabel, labelRiff, putChunkSize)
 
 labelSfbk, labelList, labelInfo, labelIfil, labelIver, labelIsng, labelInam, labelIrom, labelIcrd,
   labelIeng, labelIprd, labelIcop, labelIcmt, labelIsft, labelSdta, labelSmpl, labelSm24,
@@ -68,49 +64,46 @@ labelImod = "imod"
 labelIgen = "igen"
 labelShdr = "shdr"
 
-sizePhdr, sizeBag, sizeMod, sizeGen, sizeInst, sizeShdr :: ByteLength
-sizePhdr = 38
-sizeBag = 4
-sizeMod = 10
-sizeGen = 4
-sizeInst = 22
-sizeShdr = 46
+-- sizePhdr, sizeBag, sizeMod, sizeGen, sizeInst, sizeShdr :: ByteCount
+-- sizePhdr = 38
+-- sizeBag = 4
+-- sizeMod = 10
+-- sizeGen = 4
+-- sizeInst = 22
+-- sizeShdr = 46
 
 newtype SampleCount = SampleCount { unSampleCount :: Word32LE }
   deriving stock (Show)
-  deriving newtype (Eq, Ord, Num, Enum, Real, Integral, Binary)
+  deriving newtype (Eq, Ord, Num, Enum, Real, Integral, ByteSized, StaticByteSized, Binary)
 
-type ShortText = FixedText 20
+type ShortText = FixedBytes 20
 
-listChunkHeaderSize :: ByteLength
+listChunkHeaderSize :: ByteCount
 listChunkHeaderSize = chunkHeaderSize + 4
 
 newtype ListChunk a = ListChunk { listChunkElems :: Seq a }
   deriving stock (Show)
   deriving newtype (Eq)
 
-instance (StaticLabel a, BinaryParser a) => Binary (ListChunk a) where
-  get = getWithoutSize
+instance ByteSized a => ByteSized (ListChunk a) where
+  byteSize (ListChunk elems) = listChunkHeaderSize + byteSizeFoldable elems
+
+instance (StaticLabel a, Binary a) => Binary (ListChunk a) where
+  get = do
+    getExpectLabel labelList
+    chunkSize <- getChunkSize
+    getExact chunkSize $ do
+      let !label = staticLabel (Proxy :: Proxy a)
+      getExpectLabel label
+      elems <- getRemainingSeq get
+      pure $! ListChunk elems
   put (ListChunk elems) = do
     put labelList
-    let !chunkSize = byteSize elems + 4
+    let !chunkSize = byteSizeFoldable elems + 4
     putChunkSize chunkSize
     let !label = staticLabel (Proxy :: Proxy a)
     put label
-    putSeq elems
-
-instance ByteSized a => ByteSized (ListChunk a) where
-  byteSize (ListChunk elems) = listChunkHeaderSize + byteSize elems
-
-instance (StaticLabel a, BinaryParser a) => BinaryParser (ListChunk a) where
-  parseWithoutSize = do
-    parseExpectLabel labelList
-    chunkSize <- parseChunkSize
-    parseBound chunkSize $ do
-      let !label = staticLabel (Proxy :: Proxy a)
-      parseExpectLabel label
-      elems <- parseRepeated
-      pure $! ListChunk elems
+    putSeq put elems
 
 data Sfont = Sfont
   { sfontInfo :: !InfoChunk
@@ -118,8 +111,19 @@ data Sfont = Sfont
   , sfontPdta :: !PdtaChunk
   } deriving stock (Eq, Show)
 
+instance ByteSized Sfont where
+  byteSize (Sfont info sdta pdta) = chunkHeaderSize + byteSize info + byteSize sdta + byteSize pdta
+
 instance Binary Sfont where
-  get = getWithoutSize
+  get = do
+    getExpectLabel labelRiff
+    chunkSize <- getChunkSize
+    getExact chunkSize $ do
+      getExpectLabel labelSfbk
+      info <- get
+      sdta <- get
+      pdta <- get
+      pure $! Sfont info sdta pdta
   put sfont@(Sfont info sdta pdta) = do
     put labelRiff
     let !chunkSize = byteSize sfont + 4
@@ -129,49 +133,46 @@ instance Binary Sfont where
     put sdta
     put pdta
 
-instance ByteSized Sfont where
-  byteSize (Sfont info sdta pdta) = chunkHeaderSize + byteSize info + byteSize sdta + byteSize pdta
-
-instance BinaryParser Sfont where
-  parseWithoutSize = do
-    parseExpectLabel labelRiff
-    chunkSize <- parseChunkSize
-    parseBound chunkSize $ do
-      parseExpectLabel labelSfbk
-      info <- parseWithoutSize
-      sdta <- parseWithoutSize
-      pdta <- parseWithoutSize
-      pure $! Sfont info sdta pdta
-
 newtype InfoChunk = InfoChunk { unInfoChunk :: ListChunk Info }
   deriving stock (Show)
   deriving newtype (Eq, ByteSized, Binary)
-
-instance BinaryParser InfoChunk
 
 newtype PdtaChunk = PdtaChunk { unPdtaChunk :: ListChunk PdtaBlock }
   deriving stock (Show)
   deriving newtype (Eq, ByteSized, Binary)
 
-instance BinaryParser PdtaChunk
-
 data Info =
     InfoVersion !Word16LE !Word16LE
-  | InfoTargetSoundEngine !TermText
-  | InfoBankName !TermText
-  | InfoRomName !TermText
+  | InfoTargetSoundEngine !TermBytes
+  | InfoBankName !TermBytes
+  | InfoRomName !TermBytes
   | InfoRomVersion !Word16LE !Word16LE
-  | InfoCreationDate !TermText
-  | InfoAuthors !TermText
-  | InfoIntendedProduct !TermText
-  | InfoCopyrightMessage !TermText
-  | InfoComments !TermText
-  | InfoUsedTools !TermText
-  | InfoReserved !Label !ByteString
+  | InfoCreationDate !TermBytes
+  | InfoAuthors !TermBytes
+  | InfoIntendedProduct !TermBytes
+  | InfoCopyrightMessage !TermBytes
+  | InfoComments !TermBytes
+  | InfoUsedTools !TermBytes
+  | InfoReserved !Label !ShortByteString
   deriving stock (Eq, Show)
 
 instance StaticLabel Info where
   staticLabel = const labelInfo
+
+instance ByteSized Info where
+  byteSize info = chunkHeaderSize + case info of
+    InfoVersion _ _ -> 4
+    InfoTargetSoundEngine z -> byteSize z
+    InfoBankName z -> byteSize z
+    InfoRomName z -> byteSize z
+    InfoRomVersion _ _ -> 4
+    InfoCreationDate z -> byteSize z
+    InfoAuthors z -> byteSize z
+    InfoIntendedProduct z -> byteSize z
+    InfoCopyrightMessage z -> byteSize z
+    InfoComments z -> byteSize z
+    InfoUsedTools z -> byteSize z
+    InfoReserved _ bs -> byteSize bs
 
 whichLabelInfo :: Info -> Label
 whichLabelInfo = \case
@@ -189,7 +190,33 @@ whichLabelInfo = \case
   InfoReserved l _ -> l
 
 instance Binary Info where
-  get = getWithoutSize
+  get = do
+    label <- get
+    chunkSize <- getChunkSize
+    getExact chunkSize $
+      if
+        | label == labelIfil -> do
+          unless (chunkSize == 4) (fail "Bad ifil chunk size")
+          w1 <- get
+          w2 <- get
+          pure $! InfoVersion w1 w2
+        | label == labelIver -> do
+          unless (chunkSize == 4) (fail "Bad iver chunk size")
+          w1 <- get
+          w2 <- get
+          pure $! InfoRomVersion w1 w2
+        | label == labelIsng -> fmap InfoTargetSoundEngine get
+        | label == labelInam -> fmap InfoBankName get
+        | label == labelIrom -> fmap InfoRomName get
+        | label == labelIcrd -> fmap InfoCreationDate get
+        | label == labelIeng -> fmap InfoAuthors get
+        | label == labelIprd -> fmap InfoIntendedProduct get
+        | label == labelIcop -> fmap InfoCopyrightMessage get
+        | label == labelIcmt -> fmap InfoComments get
+        | label == labelIsft -> fmap InfoUsedTools get
+        | otherwise -> do
+          bs <- getRemainingString
+          pure $! InfoReserved label bs
   put info = do
     let !label = whichLabelInfo info
     put label
@@ -209,104 +236,57 @@ instance Binary Info where
       InfoUsedTools z -> put z
       InfoReserved _ bs -> putByteString bs
 
-instance ByteSized Info where
-  byteSize info = chunkHeaderSize + case info of
-    InfoVersion _ _ -> 4
-    InfoTargetSoundEngine z -> byteSize z
-    InfoBankName z -> byteSize z
-    InfoRomName z -> byteSize z
-    InfoRomVersion _ _ -> 4
-    InfoCreationDate z -> byteSize z
-    InfoAuthors z -> byteSize z
-    InfoIntendedProduct z -> byteSize z
-    InfoCopyrightMessage z -> byteSize z
-    InfoComments z -> byteSize z
-    InfoUsedTools z -> byteSize z
-    InfoReserved _ bs -> fromIntegral (BS.length bs)
-
-instance BinaryParser Info where
-  parseWithoutSize = do
-    label <- parseWithoutSize
-    chunkSize <- parseChunkSize
-    parseBound chunkSize $
-      if
-        | label == labelIfil -> do
-          unless (chunkSize == 4) (fail "bad ifil chunk size")
-          w1 <- parseWithoutSize
-          w2 <- parseWithoutSize
-          pure $! InfoVersion w1 w2
-        | label == labelIver -> do
-          unless (chunkSize == 4) (fail "bad iver chunk size")
-          w1 <- parseWithoutSize
-          w2 <- parseWithoutSize
-          pure $! InfoRomVersion w1 w2
-        | label == labelIsng -> fmap InfoTargetSoundEngine parseWithoutSize
-        | label == labelInam -> fmap InfoBankName parseWithoutSize
-        | label == labelIrom -> fmap InfoRomName parseWithoutSize
-        | label == labelIcrd -> fmap InfoCreationDate parseWithoutSize
-        | label == labelIeng -> fmap InfoAuthors parseWithoutSize
-        | label == labelIprd -> fmap InfoIntendedProduct parseWithoutSize
-        | label == labelIcop -> fmap InfoCopyrightMessage parseWithoutSize
-        | label == labelIcmt -> fmap InfoComments parseWithoutSize
-        | label == labelIsft -> fmap InfoUsedTools parseWithoutSize
-        | otherwise -> do
-          bs <- parseRemaining
-          pure $! InfoReserved label bs
-
 data SdtaChunk = SdtaChunk
-  { sdtaHighBits :: !(VP.Vector Int16LE)
-  , sdtaLowBits :: !(Maybe (VP.Vector Word8))
+  { sdtaHighBits :: !(PrimArray Int16LE)
+  , sdtaLowBits :: !(Maybe (PrimArray Word8))
   } deriving stock (Eq, Show)
 
 instance ByteSized SdtaChunk where
   byteSize (SdtaChunk high mlow) = sizeHigh + sizeLow where
-    sizeHigh = 12 + 2 * fromIntegral (VP.length high)
-    sizeLow = maybe 0 (\low -> 8 + fromIntegral (VP.length low)) mlow
+    sizeHigh = 12 + byteSize high
+    sizeLow = maybe 0 (\low -> 8 + byteSize low) mlow
+
+getHighBits :: SampleCount -> Get (PrimArray Int16LE)
+getHighBits numSamples = getStaticArray (fromIntegral numSamples)
+
+getLowBits :: SampleCount -> Get (PrimArray Word8)
+getLowBits numSamples = getStaticArray (fromIntegral numSamples)
 
 instance Binary SdtaChunk where
-  get = getWithoutSize
+  get = do
+    getExpectLabel labelList
+    chunkSize <- getChunkSize
+    getExact chunkSize $ do
+      getExpectLabel labelSdta
+      getExpectLabel labelSmpl
+      highSize <- getChunkSize
+      let !numSamples = div (fromIntegral highSize) 2
+      highBits <- getHighBits numSamples
+      let !numExtra = chunkSize - highSize - 12
+      if
+        | numExtra > 0 -> do
+          getExpectLabel labelSm24
+          lowSize <- getChunkSize
+          let !expectedSize = if even numSamples then numSamples else numSamples + 1
+          unless (fromIntegral lowSize == expectedSize) (fail "invalid low sample size")
+          lowBits <- getLowBits numSamples
+          unless (even numSamples) (getSkip 1)
+          pure $! SdtaChunk highBits (Just lowBits)
+        | numExtra == 0 -> pure $! SdtaChunk highBits Nothing
+        | otherwise -> fail "invalid sdata chunk/sample sizes"
   put sdta@(SdtaChunk highBits mayLowBits) = do
     put labelList
     putChunkSize (byteSize sdta)
     put labelSdta
     put labelSmpl
-    putChunkSize (fromIntegral (VP.length highBits * 2))
-    putVec highBits
+    putChunkSize (byteSize highBits)
+    putStaticArray highBits
     case mayLowBits of
       Nothing -> pure ()
       Just lowBits -> do
         put labelSm24
-        putChunkSize (fromIntegral (VP.length lowBits))
-        putVec lowBits
-
-parseHighBits :: SampleCount -> ParseM (VP.Vector Int16LE)
-parseHighBits numSamples = parseVec Proxy (fromIntegral numSamples)
-
-parseLowBits :: SampleCount -> ParseM (VP.Vector Word8)
-parseLowBits numSamples = parseVec Proxy (fromIntegral numSamples)
-
-instance BinaryParser SdtaChunk where
-  parseWithoutSize = do
-    parseExpectLabel labelList
-    chunkSize <- parseChunkSize
-    parseBound chunkSize $ do
-      parseExpectLabel labelSdta
-      parseExpectLabel labelSmpl
-      highSize <- parseChunkSize
-      let !numSamples = div (fromIntegral highSize) 2
-      highBits <- parseHighBits numSamples
-      let !numExtra = chunkSize - highSize - 12
-      if
-        | numExtra > 0 -> do
-          parseExpectLabel labelSm24
-          lowSize <- parseChunkSize
-          let !expectedSize = if even numSamples then numSamples else numSamples + 1
-          unless (fromIntegral lowSize == expectedSize) (fail "invalid low sample size")
-          lowBits <- parseLowBits numSamples
-          unless (even numSamples) (parseSkip 1)
-          pure $! SdtaChunk highBits (Just lowBits)
-        | numExtra == 0 -> pure $! SdtaChunk highBits Nothing
-        | otherwise -> fail "invalid sdata chunk/sample sizes"
+        putChunkSize (byteSize lowBits)
+        putStaticArray lowBits
 
 data PdtaCat =
     PdtaCatPreset
@@ -323,16 +303,23 @@ data PdtaBlock =
   deriving stock (Eq, Show)
 
 instance StaticLabel PdtaBlock where
-  staticLabel = const labelPdta
+  staticLabel _ = labelPdta
 
 instance ByteSized PdtaBlock where
-  byteSize block = chunkHeaderSize + case block of
-    PdtaBlockPhdr phdrs -> sizePhdr * fromIntegral (Seq.length phdrs)
-    PdtaBlockBag _ bags -> sizeBag * fromIntegral (Seq.length bags)
-    PdtaBlockMod _ mods -> sizeMod * fromIntegral (Seq.length mods)
-    PdtaBlockGen _ gens -> sizeGen * fromIntegral (Seq.length gens)
-    PdtaBlockInst insts -> sizeInst * fromIntegral (Seq.length insts)
-    PdtaBlockShdr shdrs -> sizeShdr * fromIntegral (Seq.length shdrs)
+  byteSize block = res where
+    res = chunkHeaderSize + case block of
+      PdtaBlockPhdr phdrs -> fromIntegral (Seq.length phdrs) * sizePhdr
+      PdtaBlockBag _ bags -> fromIntegral (Seq.length bags) * sizeBag
+      PdtaBlockMod _ mods -> fromIntegral (Seq.length mods) * sizeMod
+      PdtaBlockGen _ gens -> fromIntegral (Seq.length gens) * sizeGen
+      PdtaBlockInst insts -> fromIntegral (Seq.length insts) * sizeInst
+      PdtaBlockShdr shdrs -> fromIntegral (Seq.length shdrs) * sizeShdr
+    sizePhdr = staticByteSize (Proxy :: Proxy Phdr)
+    sizeBag = staticByteSize (Proxy :: Proxy Bag)
+    sizeMod = staticByteSize (Proxy :: Proxy Mod)
+    sizeGen = staticByteSize (Proxy :: Proxy Gen)
+    sizeInst = staticByteSize (Proxy :: Proxy Inst)
+    sizeShdr = staticByteSize (Proxy :: Proxy Shdr)
 
 whichLabelPdtaBlock :: PdtaBlock -> Label
 whichLabelPdtaBlock = \case
@@ -350,46 +337,43 @@ whichLabelPdtaBlock = \case
   PdtaBlockShdr _ -> labelShdr
 
 instance Binary PdtaBlock where
-  get = getWithoutSize
+  get = do
+    label <- get
+    chunkSize <- getChunkSize
+    getExact chunkSize $
+      if
+        | label == labelPhdr ->
+          fmap PdtaBlockPhdr (getRemainingStaticSeq get)
+        | label == labelPbag ->
+          fmap (PdtaBlockBag PdtaCatPreset) (getRemainingStaticSeq get)
+        | label == labelPmod ->
+          fmap (PdtaBlockMod PdtaCatPreset) (getRemainingStaticSeq get)
+        | label == labelPgen ->
+          fmap (PdtaBlockGen PdtaCatPreset) (getRemainingStaticSeq get)
+        | label == labelInst ->
+          fmap PdtaBlockInst (getRemainingSeq get)
+        | label == labelIbag ->
+          fmap (PdtaBlockBag PdtaCatInst) (getRemainingStaticSeq get)
+        | label == labelImod ->
+          fmap (PdtaBlockMod PdtaCatInst) (getRemainingStaticSeq get)
+        | label == labelIgen ->
+          fmap (PdtaBlockGen PdtaCatInst) (getRemainingStaticSeq get)
+        | label == labelShdr ->
+          fmap PdtaBlockShdr (getRemainingStaticSeq get)
+        | otherwise ->
+          fail ("unrecognized pdta elem: " ++ show label)
   put block = do
     let !label = whichLabelPdtaBlock block
     put label
     let !chunkSize = byteSize block - chunkHeaderSize
     putChunkSize chunkSize
     case block of
-      PdtaBlockPhdr phdrs -> putSeq phdrs
-      PdtaBlockBag _ bags -> putSeq bags
-      PdtaBlockMod _ mods -> putSeq mods
-      PdtaBlockGen _ gens -> putSeq gens
-      PdtaBlockInst insts -> putSeq insts
-      PdtaBlockShdr shdrs -> putSeq shdrs
-
-instance BinaryParser PdtaBlock where
-  parseWithoutSize = do
-    label <- parseWithoutSize
-    chunkSize <- parseChunkSize
-    parseBound chunkSize $
-      if
-        | label == labelPhdr ->
-          fmap PdtaBlockPhdr parseRepeated
-        | label == labelPbag ->
-          fmap (PdtaBlockBag PdtaCatPreset) parseRepeated
-        | label == labelPmod ->
-          fmap (PdtaBlockMod PdtaCatPreset) parseRepeated
-        | label == labelPgen ->
-          fmap (PdtaBlockGen PdtaCatPreset) parseRepeated
-        | label == labelInst ->
-          fmap PdtaBlockInst parseRepeated
-        | label == labelIbag ->
-          fmap (PdtaBlockBag PdtaCatInst) parseRepeated
-        | label == labelImod ->
-          fmap (PdtaBlockMod PdtaCatInst) parseRepeated
-        | label == labelIgen ->
-          fmap (PdtaBlockGen PdtaCatInst) parseRepeated
-        | label == labelShdr ->
-          fmap PdtaBlockShdr parseRepeated
-        | otherwise ->
-          fail ("unrecognized pdta elem: " ++ show label)
+      PdtaBlockPhdr phdrs -> putSeq put phdrs
+      PdtaBlockBag _ bags -> putSeq put bags
+      PdtaBlockMod _ mods -> putSeq put mods
+      PdtaBlockGen _ gens -> putSeq put gens
+      PdtaBlockInst insts -> putSeq put insts
+      PdtaBlockShdr shdrs -> putSeq put shdrs
 
 -- | Preset header
 data Phdr = Phdr
@@ -401,25 +385,13 @@ data Phdr = Phdr
   , phdrGenre :: !Word32LE
   , phdrMorphology :: !Word32LE
   } deriving stock (Eq, Show, Generic)
-    deriving anyclass (Binary)
-    deriving (ByteSized) via (ViaStaticByteSized Phdr)
-
-instance StaticByteSized Phdr where
-  staticByteSize = const sizePhdr
-
-instance BinaryParser Phdr
+    deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Phdr)
 
 data Bag = Bag
   { bagGenIndex :: !Word16LE
   , bagModIndex :: !Word16LE
   } deriving stock (Eq, Show, Generic)
-    deriving anyclass (Binary)
-    deriving (ByteSized) via (ViaStaticByteSized Bag)
-
-instance StaticByteSized Bag where
-  staticByteSize = const sizeBag
-
-instance BinaryParser Bag
+    deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Bag)
 
 -- | Modulator
 data Mod = Mod
@@ -429,13 +401,7 @@ data Mod = Mod
   , modAmtSrcOper :: !Word16LE
   , modTransOper :: !Word16LE
   } deriving stock (Eq, Show, Generic)
-    deriving anyclass (Binary)
-    deriving (ByteSized) via (ViaStaticByteSized Mod)
-
-instance StaticByteSized Mod where
-  staticByteSize = const sizeMod
-
-instance BinaryParser Mod
+    deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Mod)
 
 data SampleMode =
     SampleModeNoLoop !Int16LE
@@ -502,7 +468,7 @@ data Gen =
   deriving (ByteSized) via (ViaStaticByteSized Gen)
 
 instance StaticByteSized Gen where
-  staticByteSize = const sizeGen
+  staticByteSize _ = 4
 
 whichTagGen :: Gen -> Int16LE
 whichTagGen = \case
@@ -561,7 +527,76 @@ whichTagGen = \case
   GenReserved t _ -> t
 
 instance Binary Gen where
-  get = getWithoutSize
+  get = do
+    tag <- get
+    if
+      | tag == 0 -> fmap GenStartAddressOffset get
+      | tag == 1 -> fmap GenEndAddressOffset get
+      | tag == 2 -> fmap GenLoopStartAddressOffset get
+      | tag == 3 -> fmap GenLoopEndAddressOffset get
+      | tag == 4 -> fmap GenStartAddressCoarseOffset get
+      | tag == 5 -> fmap GenModLfoToPitch get
+      | tag == 6 -> fmap GenVibLfoToPitch get
+      | tag == 7 -> fmap GenModEnvToPitch get
+      | tag == 8 -> fmap GenInitFc get
+      | tag == 9 -> fmap GenInitQ get
+      | tag == 10 -> fmap GenModLfoToFc get
+      | tag == 11 -> fmap GenModEnvToFc get
+      | tag == 12 -> fmap GenEndAddressCoarseOffset get
+      | tag == 13 -> fmap GenModLfoToVol get
+      | tag == 15 -> fmap GenChorus get
+      | tag == 16 -> fmap GenReverb get
+      | tag == 17 -> fmap GenPan get
+      | tag == 21 -> fmap GenDelayModLfo get
+      | tag == 22 -> fmap GenFreqModLfo get
+      | tag == 23 -> fmap GenDelayVibLfo get
+      | tag == 24 -> fmap GenFreqVibLfo get
+      | tag == 25 -> fmap GenDelayModEnv get
+      | tag == 26 -> fmap GenAttackModEnv get
+      | tag == 27 -> fmap GenHoldModEnv get
+      | tag == 28 -> fmap GenDecayModEnv get
+      | tag == 29 -> fmap GenSustainModEnv get
+      | tag == 30 -> fmap GenReleaseModEnv get
+      | tag == 31 -> fmap GenKeyToModEnvHold get
+      | tag == 32 -> fmap GenKeyToModEnvDecay get
+      | tag == 33 -> fmap GenDelayVolEnv get
+      | tag == 34 -> fmap GenAttackVolEnv get
+      | tag == 35 -> fmap GenHoldVolEnv get
+      | tag == 36 -> fmap GenDecayVolEnv get
+      | tag == 37 -> fmap GenSustainVolEnv get
+      | tag == 38 -> fmap GenReleaseVolEnv get
+      | tag == 39 -> fmap GenKeyToVolEnvHold get
+      | tag == 40 -> fmap GenKeyToVolEnvDecay get
+      | tag == 41 -> fmap GenInstIndex get
+      | tag == 43 -> do
+        a <- get
+        b <- get
+        pure $! GenKeyRange a b
+      | tag == 44 -> do
+        a <- get
+        b <- get
+        pure $! GenVelRange a b
+      | tag == 45 -> fmap GenLoopStartAddressCoarseOffset get
+      | tag == 46 -> fmap GenKey get
+      | tag == 47 -> fmap GenVel get
+      | tag == 48 -> fmap GenInitAtten get
+      | tag == 50 -> fmap GenLoopEndAddressCoarseOffset get
+      | tag == 51 -> fmap GenCoarseTune get
+      | tag == 52 -> fmap GenFineTune get
+      | tag == 53 -> fmap GenSampleIndex get
+      | tag == 54 -> do
+        a <- get
+        let !sm = case a of
+              1 -> SampleModeContLoop
+              3 -> SampleModePressLoop
+              _ -> SampleModeNoLoop a
+        pure $! GenSampleMode sm
+      | tag == 56 -> fmap GenScaleTuning get
+      | tag == 57 -> fmap GenExclusiveClass get
+      | tag == 58 -> fmap GenRootKey get
+      | otherwise -> do
+        a <- get
+        pure $! GenReserved tag a
   put gen = do
     put (whichTagGen gen)
     case gen of
@@ -624,90 +659,12 @@ instance Binary Gen where
       GenRootKey x -> put x
       GenReserved _ x -> put x
 
-instance BinaryParser Gen where
-  parseWithoutSize = do
-    tag <- parseWithoutSize
-    if
-      | tag == 0 -> fmap GenStartAddressOffset parseWithoutSize
-      | tag == 1 -> fmap GenEndAddressOffset parseWithoutSize
-      | tag == 2 -> fmap GenLoopStartAddressOffset parseWithoutSize
-      | tag == 3 -> fmap GenLoopEndAddressOffset parseWithoutSize
-      | tag == 4 -> fmap GenStartAddressCoarseOffset parseWithoutSize
-      | tag == 5 -> fmap GenModLfoToPitch parseWithoutSize
-      | tag == 6 -> fmap GenVibLfoToPitch parseWithoutSize
-      | tag == 7 -> fmap GenModEnvToPitch parseWithoutSize
-      | tag == 8 -> fmap GenInitFc parseWithoutSize
-      | tag == 9 -> fmap GenInitQ parseWithoutSize
-      | tag == 10 -> fmap GenModLfoToFc parseWithoutSize
-      | tag == 11 -> fmap GenModEnvToFc parseWithoutSize
-      | tag == 12 -> fmap GenEndAddressCoarseOffset parseWithoutSize
-      | tag == 13 -> fmap GenModLfoToVol parseWithoutSize
-      | tag == 15 -> fmap GenChorus parseWithoutSize
-      | tag == 16 -> fmap GenReverb parseWithoutSize
-      | tag == 17 -> fmap GenPan parseWithoutSize
-      | tag == 21 -> fmap GenDelayModLfo parseWithoutSize
-      | tag == 22 -> fmap GenFreqModLfo parseWithoutSize
-      | tag == 23 -> fmap GenDelayVibLfo parseWithoutSize
-      | tag == 24 -> fmap GenFreqVibLfo parseWithoutSize
-      | tag == 25 -> fmap GenDelayModEnv parseWithoutSize
-      | tag == 26 -> fmap GenAttackModEnv parseWithoutSize
-      | tag == 27 -> fmap GenHoldModEnv parseWithoutSize
-      | tag == 28 -> fmap GenDecayModEnv parseWithoutSize
-      | tag == 29 -> fmap GenSustainModEnv parseWithoutSize
-      | tag == 30 -> fmap GenReleaseModEnv parseWithoutSize
-      | tag == 31 -> fmap GenKeyToModEnvHold parseWithoutSize
-      | tag == 32 -> fmap GenKeyToModEnvDecay parseWithoutSize
-      | tag == 33 -> fmap GenDelayVolEnv parseWithoutSize
-      | tag == 34 -> fmap GenAttackVolEnv parseWithoutSize
-      | tag == 35 -> fmap GenHoldVolEnv parseWithoutSize
-      | tag == 36 -> fmap GenDecayVolEnv parseWithoutSize
-      | tag == 37 -> fmap GenSustainVolEnv parseWithoutSize
-      | tag == 38 -> fmap GenReleaseVolEnv parseWithoutSize
-      | tag == 39 -> fmap GenKeyToVolEnvHold parseWithoutSize
-      | tag == 40 -> fmap GenKeyToVolEnvDecay parseWithoutSize
-      | tag == 41 -> fmap GenInstIndex parseWithoutSize
-      | tag == 43 -> do
-        a <- parseWithoutSize
-        b <- parseWithoutSize
-        pure $! GenKeyRange a b
-      | tag == 44 -> do
-        a <- parseWithoutSize
-        b <- parseWithoutSize
-        pure $! GenVelRange a b
-      | tag == 45 -> fmap GenLoopStartAddressCoarseOffset parseWithoutSize
-      | tag == 46 -> fmap GenKey parseWithoutSize
-      | tag == 47 -> fmap GenVel parseWithoutSize
-      | tag == 48 -> fmap GenInitAtten parseWithoutSize
-      | tag == 50 -> fmap GenLoopEndAddressCoarseOffset parseWithoutSize
-      | tag == 51 -> fmap GenCoarseTune parseWithoutSize
-      | tag == 52 -> fmap GenFineTune parseWithoutSize
-      | tag == 53 -> fmap GenSampleIndex parseWithoutSize
-      | tag == 54 -> do
-        a <- parseWithoutSize
-        let !sm = case a of
-              1 -> SampleModeContLoop
-              3 -> SampleModePressLoop
-              _ -> SampleModeNoLoop a
-        pure $! GenSampleMode sm
-      | tag == 56 -> fmap GenScaleTuning parseWithoutSize
-      | tag == 57 -> fmap GenExclusiveClass parseWithoutSize
-      | tag == 58 -> fmap GenRootKey parseWithoutSize
-      | otherwise -> do
-        a <- parseWithoutSize
-        pure $! GenReserved tag a
-
 -- | Instrument
 data Inst = Inst
   { instName :: !ShortText
   , instBagIndex :: !Word16LE
   } deriving stock (Eq, Show, Generic)
-    deriving anyclass (Binary)
-    deriving (ByteSized) via (ViaStaticByteSized Inst)
-
-instance StaticByteSized Inst where
-  staticByteSize = const sizeInst
-
-instance BinaryParser Inst
+    deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Inst)
 
 -- | Sample header
 data Shdr = Shdr
@@ -722,13 +679,7 @@ data Shdr = Shdr
   , shdrSampleLink :: !Word16LE
   , shdrSampleType :: !Word16LE
   } deriving stock (Eq, Show, Generic)
-    deriving anyclass (Binary)
-    deriving (ByteSized) via (ViaStaticByteSized Shdr)
-
-instance StaticByteSized Shdr where
-  staticByteSize = const sizeShdr
-
-instance BinaryParser Shdr
+    deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Shdr)
 
 data Pdta = Pdta
   { pdtaPhdrs :: !(Seq Phdr)

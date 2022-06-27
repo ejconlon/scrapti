@@ -1,15 +1,14 @@
-{-# LANGUAGE MagicHash #-}
 {-# LANGUAGE UnboxedTuples #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 -- The derived instances here work for little-endian, which covers intel/arm.
 -- Custom instances will have to be provided for big endian or to support portability.
--- The Prim implementations here are probably extremely bad - I'm just trying to make it work.
--- I used this example: https://hackage.haskell.org/package/prim-instances-0.2/docs/src/Data.Primitive.Instances.html
--- Also it's proabably not as efficient to derive implementations but it is what it is.
 module Dahdit.Nums
   ( Word16LE (..)
   , Int16LE (..)
+  , Word32LE (..)
+  , Int32LE (..)
+  , FloatLE (..)
   , LiftedPrim (..)
   ) where
 
@@ -17,26 +16,13 @@ import Control.Monad.Primitive (PrimMonad (..))
 import Dahdit.Sizes (ByteSized (..), StaticByteSized (..))
 import Data.Bits (Bits (..))
 import Data.Default (Default)
-import Data.Int (Int16, Int8)
+import Data.Int (Int16, Int32, Int8)
 import Data.Primitive.ByteArray (ByteArray, MutableByteArray, indexByteArray, writeByteArray)
 import Data.Primitive.Types (Prim (..))
-import Data.Word (Word16, Word8)
--- import GHC.Exts ((*#), (+#))
+import Data.Word (Word16, Word32, Word8)
+import GHC.Float (castFloatToWord32, castWord32ToFloat)
 
 newtype ViaFromIntegral x y = ViaFromIntegral { unViaFromIntegral :: y }
-
--- TODO finish this
-instance (Num x, Integral x, Prim x, Num y, Integral y) => Prim (ViaFromIntegral x y) where
-  sizeOf# _ = sizeOf# (undefined :: x)
-  alignment# _ = alignment# (undefined :: x)
-  indexByteArray# arr# i# = ViaFromIntegral (fromIntegral (indexByteArray# arr# i# :: x))
-  readByteArray# arr# i# s0 = let !(# s1#, x :: x #) = readByteArray# arr# i# s0 in (# s1#, ViaFromIntegral (fromIntegral x) #)
-  writeByteArray# arr# i# y = let !x = fromIntegral (unViaFromIntegral y) :: x in writeByteArray# arr# i# x
-  setByteArray# _ _ _ _ = undefined
-  indexOffAddr# _ _ = undefined
-  readOffAddr# _ _ _ = undefined
-  writeOffAddr# _ _ _ _ = undefined
-  setOffAddr# _ _ _ _ = undefined
 
 -- Indices here are in bytes, not elements
 class LiftedPrim w where
@@ -86,28 +72,6 @@ instance LiftedPrim Word16LE where
     let !(b0, b1) = unMkWord16LE w
     in writeByteArray arr pos b0 *> writeByteArray arr (pos + 1) b1
 
--- instance Prim Word16LE where
---   sizeOf# _ = 2# *# sizeOf# (undefined :: Word8)
---   alignment# _ = alignment# (undefined :: Word8)
---   indexByteArray# arr# i# =
---     let !b0 = indexByteArray# arr# (2# *# i#)
---         !b1 = indexByteArray# arr# (2# *# i# +# 1#)
---     in mkWord16LE b0 b1
---   readByteArray# arr# i# s0 =
---     case readByteArray# arr# (2# *# i#) s0 of
---       (# s1#, x #) -> case readByteArray# arr# (2# *# i# +# 1#) s1# of
---         (# s2#, y #) -> (# s2#, mkWord16LE x y #)
---   writeByteArray# arr# i# w =
---     let !(# b0, b1 #) = unMkWord16LE w
---     in \s0 -> case writeByteArray# arr# (2# *# i#) b0 s0 of
---       s1 -> case writeByteArray# arr# (2# *# i# +# 1#) b1 s1 of
---         s2 -> s2
---   setByteArray# = defaultSetByteArray#
---   indexOffAddr# _ _ = undefined
---   readOffAddr# _ _ _ = undefined
---   writeOffAddr# _ _ _ _ = undefined
---   setOffAddr# = defaultSetOffAddr#
-
 newtype Int16LE = Int16LE { unInt16LE :: Int16 }
   deriving stock (Show)
   deriving newtype (Eq, Ord, Num, Enum, Real, Integral, Bits, Default, Prim)
@@ -118,3 +82,89 @@ instance ByteSized Int16LE where
 
 instance StaticByteSized Int16LE where
   staticByteSize _ = 2
+
+newtype Word32LE = Word32LE { unWord32LE :: Word32 }
+  deriving stock (Show)
+  deriving newtype (Eq, Ord, Num, Enum, Real, Integral, Bits, Default, Prim)
+
+instance ByteSized Word32LE where
+  byteSize _ = 4
+
+instance StaticByteSized Word32LE where
+  staticByteSize _ = 4
+
+mkWord32LE :: Word8 -> Word8 -> Word8 -> Word8 -> Word32LE
+mkWord32LE b0 b1 b2 b3 =
+  let !w = (fromIntegral b3 `unsafeShiftL` 24) .|. (fromIntegral b2 `unsafeShiftL` 16) .|.
+            (fromIntegral b1 `unsafeShiftL` 8) .|. fromIntegral b0
+  in Word32LE w
+
+unMkWord32LE :: Word32LE -> (Word8, Word8, Word8, Word8)
+unMkWord32LE (Word32LE w) =
+  let !b0 = fromIntegral w
+      !b1 = fromIntegral (w `shiftR` 8)
+      !b2 = fromIntegral (w `shiftR` 16)
+      !b3 = fromIntegral (w `shiftR` 24)
+  in (b0, b1, b2, b3)
+
+instance LiftedPrim Word32LE where
+  indexByteArrayLifted arr pos =
+    let !b0 = indexByteArray arr pos
+        !b1 = indexByteArray arr (pos + 1)
+        !b2 = indexByteArray arr (pos + 2)
+        !b3 = indexByteArray arr (pos + 3)
+    in mkWord32LE b0 b1 b2 b3
+
+  writeByteArrayLifted w arr pos = do
+    let !(b0, b1, b2, b3) = unMkWord32LE w
+    writeByteArray arr pos b0
+    writeByteArray arr (pos + 1) b1
+    writeByteArray arr (pos + 2) b2
+    writeByteArray arr (pos + 3) b3
+
+newtype Int32LE = Int32LE { unInt32LE :: Int32 }
+  deriving stock (Show)
+  deriving newtype (Eq, Ord, Num, Enum, Real, Integral, Bits, Default, Prim)
+  deriving (LiftedPrim) via (ViaFromIntegral Word32LE Int32LE)
+
+instance ByteSized Int32LE where
+  byteSize _ = 4
+
+instance StaticByteSized Int32LE where
+  staticByteSize _ = 4
+
+newtype FloatLE = FloatLE { unFloatLE :: Float }
+  deriving stock (Show)
+  deriving newtype (Eq, Ord, Num, Real, Fractional, Floating, RealFrac, Default, Prim)
+
+instance ByteSized FloatLE where
+  byteSize _ = 4
+
+instance StaticByteSized FloatLE where
+  staticByteSize _ = 4
+
+mkFloatLE :: Word8 -> Word8 -> Word8 -> Word8 -> FloatLE
+mkFloatLE b0 b1 b2 b3 =
+  let !(Word32LE w) = mkWord32LE b0 b1 b2 b3
+      !f = castWord32ToFloat w
+  in FloatLE f
+
+unMkFloatLE :: FloatLE -> (Word8, Word8, Word8, Word8)
+unMkFloatLE (FloatLE f) =
+  let !w = castFloatToWord32 f
+  in unMkWord32LE (Word32LE w)
+
+instance LiftedPrim FloatLE where
+  indexByteArrayLifted arr pos =
+    let !b0 = indexByteArray arr pos
+        !b1 = indexByteArray arr (pos + 1)
+        !b2 = indexByteArray arr (pos + 2)
+        !b3 = indexByteArray arr (pos + 3)
+    in mkFloatLE b0 b1 b2 b3
+
+  writeByteArrayLifted f arr pos = do
+    let !(b0, b1, b2, b3) = unMkFloatLE f
+    writeByteArray arr pos b0
+    writeByteArray arr (pos + 1) b1
+    writeByteArray arr (pos + 2) b2
+    writeByteArray arr (pos + 3) b3

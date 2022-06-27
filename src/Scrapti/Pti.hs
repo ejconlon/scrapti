@@ -1,17 +1,15 @@
-{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards #-}
 
 module Scrapti.Pti where
 
+import Dahdit (Binary (..), BinaryRep (..), BoolByte (..), ByteSized (..), FixedArray, FixedBytes, FloatLE, Int16LE,
+               StaticByteSized (..), ViaBinaryRep (..), ViaBoundedEnum (..), ViaGeneric (..), ViaStaticGeneric (..),
+               Word16LE, Word32LE)
 import Data.Default (Default (..))
 import Data.Int (Int8)
 import Data.Word (Word8)
 import GHC.Generics (Generic)
-import Scrapti.Binary (Binary (..), BoolByte (..), ByteSized, FixedBytes, FixedText, FixedVec, FloatLE, Int16LE,
-                       StaticByteSized, Word16LE, Word32LE)
-import Scrapti.Classes (BinaryRep (..), Equiv (..), Pair (..), ViaBinaryRep (..), ViaBoundedEnum (..), ViaEquiv (..))
 import Scrapti.Wav (Wav)
 
 data WavetableWindowSize =
@@ -28,7 +26,7 @@ instance Default WavetableWindowSize where
   def = WWS2048
 
 instance BinaryRep Word16LE WavetableWindowSize where
-  parse = \case
+  fromBinaryRep = \case
     32 -> Right WWS32
     64 -> Right WWS64
     128 -> Right WWS128
@@ -36,7 +34,7 @@ instance BinaryRep Word16LE WavetableWindowSize where
     1024 -> Right WWS1024
     2048 -> Right WWS2048
     other -> Left ("invalid wavetable window size: " ++ show other)
-  rep = \case
+  toBinaryRep = \case
     WWS32 -> 32
     WWS64 -> 64
     WWS128 -> 128
@@ -55,63 +53,33 @@ data SamplePlayback =
   | SPGranular
   deriving stock (Eq, Ord, Show, Enum, Bounded)
   deriving (BinaryRep Word8) via (ViaBoundedEnum Word8 SamplePlayback)
-  deriving Binary via (ViaBinaryRep SamplePlayback)
+  deriving (ByteSized, StaticByteSized, Binary) via (ViaBinaryRep SamplePlayback)
 
 instance Default SamplePlayback where
   def = SPOneShot
 
 data Preamble = Preamble
-  { preIsWavetable :: !BoolByte
-  , preName :: !(FixedText 30)
-  , preSampleLength :: !Word32LE
-  , preWavetableWindowSize :: !WavetableWindowSize
-  , preWavetableTotalPositions :: !Word16LE
-  , preSamplePlayback :: !SamplePlayback
-  , prePlaybackStart :: !Word16LE
-  , preLoopStart :: !Word16LE
-  , preLoopEnd :: !Word16LE
-  , prePlaybackEnd :: !Word16LE
-  , preWavetablePosition :: !Word16LE
-  } deriving stock (Eq, Show)
-
-instance Default Preamble where
-  def = Preamble (BoolByte False) "" 0 def 0 def 0 1 65534 65535 0
-
-data AuxPreamble = AuxPreamble
-  { auxPre0To19 :: !(FixedBytes 20)
-  , auxPre52To59 :: !(FixedBytes 8)
-  , auxPre66To67 :: !Word16LE
-  , auxPre70To75 :: !(FixedBytes 6)
-  , auxPre77 :: !Word8
-  , auxPre86To87 :: !Word16LE
-  , auxPre90To91 :: !Word16LE
-  } deriving stock (Eq, Show)
-
-instance Default AuxPreamble where
-  def = AuxPreamble def def def def def def def
-
-data MixPreamble = MixPreamble
-  { auxPre0To19 :: !(FixedBytes 20)
+  { preAux0To19 :: !(FixedBytes 20)
   -- ^ 0-19
   , preIsWavetable :: !BoolByte
   -- 20
-  , preName :: !(FixedText 30)
+  , preName :: !(FixedBytes 30)
   -- 21-51
-  , auxPre52To59 :: !(FixedBytes 8)
+  , preAux52To59 :: !(FixedBytes 8)
   -- 52-59
   , preSampleLength :: !Word32LE
   -- 60-63
   , preWavetableWindowSize :: !WavetableWindowSize
   -- 64-65
-  , auxPre66To67 :: !Word16LE
+  , preAux66To67 :: !Word16LE
   -- 66-67
   , preWavetableTotalPositions :: !Word16LE
   -- 68-69
-  , auxPre70To75 :: !(FixedBytes 6)
+  , preAux70To75 :: !(FixedBytes 6)
   -- 70-75
   , preSamplePlayback :: !SamplePlayback
   -- 76
-  , auxPre77 :: !Word8
+  , preAux77 :: !Word8
   -- 77
   , prePlaybackStart :: !Word16LE
   -- 78-79
@@ -121,55 +89,29 @@ data MixPreamble = MixPreamble
   -- 82-83
   , prePlaybackEnd :: !Word16LE
   -- 84-85
-  , auxPre86To87 :: !Word16LE
+  , preAux86To87 :: !Word16LE
   -- 86-87
   , preWavetablePosition :: !Word16LE
   -- 88-89
-  , auxPre90To91 :: !Word16LE
+  , preAux90To91 :: !Word16LE
   -- 90-91
   } deriving stock (Eq, Show, Generic)
-    deriving anyclass (Binary)
+    deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Preamble)
 
-newtype PairPreamble = PairPreamble { unPairPreamble :: Pair AuxPreamble Preamble }
-  deriving stock (Show)
-  deriving newtype (Eq, Default)
-  deriving (Binary) via (ViaEquiv PairPreamble)
+-- instance Default Preamble where
+--   def = Preamble (BoolByte False) "" 0 def 0 def 0 1 65534 65535 0
 
-instance Equiv PairPreamble (Pair AuxPreamble Preamble) where
-  equivFwd = unPairPreamble
-  equivBwd = PairPreamble
-
-instance Equiv MixPreamble PairPreamble where
-  equivFwd (MixPreamble {..}) = PairPreamble (Pair (AuxPreamble {..}) (Preamble {..}))
-  equivBwd (PairPreamble (Pair (AuxPreamble {..}) (Preamble {..}))) = MixPreamble {..}
+-- instance Default AuxPreamble where
+--   def = AuxPreamble def def def def def def def
 
 data AutoEnvelope = AutoEnvelope
   { aeAmount :: !FloatLE
-  , aeAttack :: !Word16LE
-  , aeDecay :: !Word16LE
-  , aeSustain :: !FloatLE
-  , aeRelease :: !Word16LE
-  } deriving stock (Eq, Show)
-
-instance Default AutoEnvelope where
-  def = AutoEnvelope 1.0 0 0 1.0 1000
-
-data AuxAutoEnvelope = AuxAutoEnvelope
-  { aae96To97 :: !Word16LE
-  , aae100To101 :: !Word16LE
-  } deriving stock (Eq, Show)
-
-instance Default AuxAutoEnvelope where
-  def = AuxAutoEnvelope 0 0
-
-data MixAutoEnvelope = MixAutoEnvelope
-  { aeAmount :: !FloatLE
   -- 92-95
-  , aae96To97 :: !Word16LE
+  , aeAux96To97 :: !Word16LE
   -- 96-97
   , aeAttack :: !Word16LE
   -- 98-909
-  , aae100To101 :: !Word16LE
+  , aeAux100To101 :: !Word16LE
   -- 100-101
   , aeDecay :: !Word16LE
   -- 102-103
@@ -178,38 +120,31 @@ data MixAutoEnvelope = MixAutoEnvelope
   , aeRelease :: !Word16LE
   -- 108-109
   } deriving stock (Eq, Show, Generic)
-    deriving anyclass (Binary)
+    deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric AutoEnvelope)
 
-newtype PairAutoEnvelope = PairAutoEnvelope { unPairAutoEnvelope :: Pair AuxAutoEnvelope AutoEnvelope }
-  deriving stock (Show)
-  deriving newtype (Eq, Default)
-  deriving (Binary) via (ViaEquiv PairAutoEnvelope)
+-- instance Default AutoEnvelope where
+--   def = AutoEnvelope 1.0 0 0 1.0 1000
 
-instance Equiv PairAutoEnvelope (Pair AuxAutoEnvelope AutoEnvelope) where
-  equivFwd = unPairAutoEnvelope
-  equivBwd = PairAutoEnvelope
-
-instance Equiv MixAutoEnvelope PairAutoEnvelope where
-  equivFwd (MixAutoEnvelope {..}) = PairAutoEnvelope (Pair (AuxAutoEnvelope {..}) (AutoEnvelope {..}))
-  equivBwd (PairAutoEnvelope (Pair (AuxAutoEnvelope {..}) (AutoEnvelope {..}))) = MixAutoEnvelope {..}
+-- instance Default AuxAutoEnvelope where
+--   def = AuxAutoEnvelope 0 0
 
 data AutoType =
     ATOff
   | ATEnvelope
   | ATLfo
   deriving stock (Eq, Ord, Show, Enum, Bounded)
-  deriving Binary via (ViaBinaryRep AutoType)
+  deriving (ByteSized, StaticByteSized, Binary) via (ViaBinaryRep AutoType)
 
 instance Default AutoType where
   def = ATEnvelope
 
 instance BinaryRep Word16LE AutoType where
-  parse = \case
+  fromBinaryRep = \case
     0x0000 -> Right ATOff
     0x0001 -> Right ATEnvelope
     0x0101 -> Right ATLfo
     other -> Left ("invalid automation type: " ++ show other)
-  rep = \case
+  toBinaryRep = \case
     ATOff -> 0x0000
     ATEnvelope -> 0x0001
     ATLfo -> 0x0101
@@ -217,28 +152,11 @@ instance BinaryRep Word16LE AutoType where
 data Auto = Auto
   { autoEnvelope :: !AutoEnvelope
   , autoType :: !AutoType
-  } deriving stock (Eq, Show)
+  } deriving stock (Eq, Show, Generic)
+    deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Auto)
 
-instance Default Auto where
-  def = Auto def def
-
-newtype PairAuto = PairAuto { unPairAuto :: Pair AuxAutoEnvelope Auto }
-  deriving stock (Show)
-  deriving newtype (Eq, Default)
-
-instance Equiv PairAuto (Pair AuxAutoEnvelope Auto) where
-  equivFwd = unPairAuto
-  equivBwd = PairAuto
-
-instance Binary PairAuto where
-  get = do
-    PairAutoEnvelope (Pair aae ae) <- get
-    at <- get
-    let !pair = Pair aae (Auto ae at)
-    pure $! PairAuto pair
-  put (PairAuto (Pair aae (Auto ae at))) = do
-    put (PairAutoEnvelope (Pair aae ae))
-    put at
+-- instance Default Auto where
+--   def = Auto def def
 
 data LfoType =
     LTRevSaw
@@ -248,7 +166,7 @@ data LfoType =
   | LTRandom
   deriving stock (Eq, Ord, Show, Enum, Bounded)
   deriving (BinaryRep Word8) via (ViaBoundedEnum Word8 LfoType)
-  deriving (Binary) via (ViaBinaryRep LfoType)
+  deriving (ByteSized, StaticByteSized, Binary) via (ViaBinaryRep LfoType)
 
 instance Default LfoType where
   def = LTTriangle
@@ -280,52 +198,28 @@ data LfoSteps =
   | LS1Over64
   deriving stock (Eq, Ord, Show, Enum, Bounded)
   deriving (BinaryRep Word8) via (ViaBoundedEnum Word8 LfoSteps)
-  deriving Binary via (ViaBinaryRep LfoSteps)
+  deriving (ByteSized, StaticByteSized, Binary) via (ViaBinaryRep LfoSteps)
 
 instance Default LfoSteps where
   def = LS24
 
 data Lfo = Lfo
   { lfoType :: !LfoType
-  , lfoSteps :: !LfoSteps
-  , lfoAmount :: !FloatLE
-  } deriving stock (Eq, Show)
-
-instance Default Lfo where
-  def = Lfo def def 0.5
-
-newtype AuxLfo = AuxLfo
-  { auxLfo214To215 :: Word16LE
-  } deriving stock (Show)
-    deriving newtype (Eq)
-
-instance Default AuxLfo where
-  def = AuxLfo 0
-
-data MixLfo = MixLfo
-  { lfoType :: !LfoType
   -- 212
   , lfoSteps :: !LfoSteps
   -- 213
-  , auxLfo214To215 :: Word16LE
+  , lfoAux214To215 :: Word16LE
   -- 214-215
   , lfoAmount :: !FloatLE
   -- 216-219
   } deriving stock (Eq, Show, Generic)
-    deriving anyclass (Binary)
+    deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Lfo)
 
-newtype PairLfo = PairLfo { unPairLfo :: Pair AuxLfo Lfo }
-  deriving stock (Show)
-  deriving newtype (Eq, Default)
-  deriving (Binary) via (ViaEquiv PairLfo)
+-- instance Default Lfo where
+--   def = Lfo def def 0.5
 
-instance Equiv PairLfo (Pair AuxLfo Lfo) where
-  equivFwd = unPairLfo
-  equivBwd = PairLfo
-
-instance Equiv MixLfo PairLfo where
-  equivFwd (MixLfo {..}) = PairLfo (Pair (AuxLfo {..}) (Lfo {..}))
-  equivBwd (PairLfo (Pair (AuxLfo {..}) (Lfo {..}))) = MixLfo {..}
+-- instance Default AuxLfo where
+--   def = AuxLfo 0
 
 data FilterType =
     FTDisabled
@@ -333,96 +227,66 @@ data FilterType =
   | FTHighPass
   | FTBandPass
   deriving stock (Eq, Ord, Show, Enum, Bounded)
-  deriving Binary via (ViaBinaryRep FilterType)
+  deriving (ByteSized, StaticByteSized, Binary) via (ViaBinaryRep FilterType)
 
 instance Default FilterType where
   def = FTDisabled
 
 instance BinaryRep Word16LE FilterType where
-  parse = \case
+  fromBinaryRep = \case
     0x0000 -> pure FTDisabled
     0x0001 -> pure FTLowPass
     0x0101 -> pure FTHighPass
     0x0201 -> pure FTBandPass
     other -> Left ("invalid filter type: " ++ show other)
-  rep = \case
+  toBinaryRep = \case
     FTDisabled -> 0x0000
     FTLowPass -> 0x0001
     FTHighPass -> 0x0101
     FTBandPass -> 0x0201
 
 data Filter = Filter
-  { filtCutoff :: !Float
-  , filtResonance :: !Float
+  { filtCutoff :: !FloatLE
+  , filtResonance :: !FloatLE
   , filtType :: !FilterType
   } deriving stock (Eq, Show, Generic)
-    deriving anyclass (Binary)
+    deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Filter)
 
 instance Default Filter where
   def = Filter 1.0 0.0 def
 
 data InstParams = InstParams
   { ipTune :: !Int8
-  , ipFineTune :: !Int8
-  , ipVolume :: !Word8
-  , ipPanning :: !Word8
-  , ipDelaySend :: !Word8
-  } deriving stock (Eq, Show)
-
-instance Default InstParams where
-  def = InstParams 0 0 50 50 0
-
-data AuxInstParams = AuxInstParams
-  { aip273To275 :: !Word16LE
-  , aip277 :: !Word8
-  , aip279 :: !Word8
-  } deriving stock (Eq, Show)
-
-instance Default AuxInstParams where
-  def = AuxInstParams 0 0 0
-
-data MixInstParams = MixInstParams
-  { ipTune :: !Int8
   -- 270
   , ipFineTune :: !Int8
   -- 271
   , ipVolume :: !Word8
   -- 272
-  , aip273To275 :: !Word16LE
+  , ipAux273To275 :: !Word16LE
   -- 273-275
   , ipPanning :: !Word8
   -- 276
-  , aip277 :: !Word8
+  , ipAux277 :: !Word8
   -- 277
   , ipDelaySend :: !Word8
   -- 278
-  , aip279 :: !Word8
+  , ipAux279 :: !Word8
   -- 279
   } deriving stock (Eq, Show, Generic)
-    deriving anyclass (Binary)
+    deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric InstParams)
 
-newtype PairInstParams = PairInstParams { unPairInstParams :: Pair AuxInstParams InstParams }
-  deriving stock (Show)
-  deriving newtype (Eq, Default)
-  deriving (Binary) via (ViaEquiv PairInstParams)
+-- instance Default InstParams where
+--   def = InstParams 0 0 50 50 0
 
-instance Equiv PairInstParams (Pair AuxInstParams InstParams) where
-  equivFwd = unPairInstParams
-  equivBwd = PairInstParams
-
-instance Equiv MixInstParams PairInstParams where
-  equivFwd (MixInstParams {..}) = PairInstParams (Pair (AuxInstParams {..}) (InstParams {..}))
-  equivBwd (PairInstParams (Pair (AuxInstParams {..}) (InstParams {..}))) = MixInstParams {..}
-
-numSlices :: Int
-numSlices = 48
+-- instance Default AuxInstParams where
+--   def = AuxInstParams 0 0 0
 
 data Slices = Slices
-  { slicesAdjust :: !(FixedVec 48 Word16LE)
+  { slicesAdjust :: !(FixedArray 48 Word16LE)
   , slicesNumber :: !Word8
   , slicesActive :: !Word8
   } deriving stock (Eq, Show, Generic)
-    deriving anyclass (Binary)
+    deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Slices)
 
 instance Default Slices where
   def = Slices def 0 0
@@ -433,7 +297,7 @@ data GranularShape =
   | GSGauss
   deriving stock (Eq, Ord, Show, Enum, Bounded)
   deriving (BinaryRep Word8) via (ViaBoundedEnum Word8 GranularShape)
-  deriving Binary via (ViaBinaryRep GranularShape)
+  deriving (ByteSized, StaticByteSized, Binary) via (ViaBinaryRep GranularShape)
 
 instance Default GranularShape where
   def = GSSquare
@@ -444,7 +308,7 @@ data GranularLoopMode =
   | GLMPingPong
   deriving stock (Eq, Ord, Show, Enum, Bounded)
   deriving (BinaryRep Word8) via (ViaBoundedEnum Word8 GranularLoopMode)
-  deriving Binary via (ViaBinaryRep GranularLoopMode)
+  deriving (ByteSized, StaticByteSized, Binary) via (ViaBinaryRep GranularLoopMode)
 
 instance Default GranularLoopMode where
   def = GLMForward
@@ -455,54 +319,30 @@ data Granular = Granular
   , granShape :: !GranularShape
   , granLoopMode :: !GranularLoopMode
   } deriving stock (Eq, Show, Generic)
-    deriving anyclass (Binary)
+    deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Granular)
 
 instance Default Granular where
   def = Granular 441 0 def def
 
 data Effects = Effects
   { effReverbSend :: !Word8
-  , effOverdrive :: !Word8
-  , effBitDepth :: !Word8
-  } deriving stock (Eq, Show)
-
-instance Default Effects where
-  def = Effects 0 0 16
-
-data AuxEffects = AuxEffects
-  { auxEff387 :: !Word8
-  , auxEff388To391 :: !Word32LE
-  } deriving stock (Eq, Show)
-
-instance Default AuxEffects where
-  def = AuxEffects 0 0
-
-data MixEffects = MixEffects
-  { effReverbSend :: !Word8
   -- 384
   , effOverdrive :: !Word8
   -- 385
   , effBitDepth :: !Word8
   -- 386
-  , auxEff387 :: !Word8
+  , effAux387 :: !Word8
   -- 387
-  , auxEff388To391 :: !Word32LE
+  , effAux388To391 :: !Word32LE
   -- 388-391
   } deriving stock (Eq, Show, Generic)
-    deriving anyclass (Binary)
+    deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Effects)
 
-newtype PairEffects = PairEffects { unPairEffects :: Pair AuxEffects Effects }
-  deriving stock (Show)
-  deriving newtype (Eq, Default)
-  deriving (Binary) via (ViaEquiv PairEffects)
+-- instance Default Effects where
+--   def = Effects 0 0 16
 
-instance Equiv PairEffects (Pair AuxEffects Effects) where
-  equivFwd = unPairEffects
-  equivBwd = PairEffects
-
-instance Equiv MixEffects PairEffects where
-  equivFwd (MixEffects {..}) = PairEffects (Pair (AuxEffects {..}) (Effects {..}))
-  equivBwd (PairEffects (Pair (AuxEffects {..}) (Effects {..}))) = MixEffects {..}
+-- instance Default AuxEffects where
+--   def = AuxEffects 0 0
 
 data Block a = Block
   { blockVolume :: !a
@@ -512,125 +352,34 @@ data Block a = Block
   , blockGranularPosition :: !a
   , blockFinetune :: !a
   } deriving stock (Eq, Show, Generic)
-    deriving anyclass (Binary)
+    deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric (Block a))
 
 instance Default a => Default (Block a) where
   def = let a = def in Block a a a a a a
 
-splitBlock :: Equiv a (Pair x y) => Block a -> Pair (Block x) (Block y)
-splitBlock (Block a b c d e f) =
-  let Pair a1 a2 = equivFwd a
-      Pair b1 b2 = equivFwd b
-      Pair c1 c2 = equivFwd c
-      Pair d1 d2 = equivFwd d
-      Pair e1 e2 = equivFwd e
-      Pair f1 f2 = equivFwd f
-      z1 = Block a1 b1 c1 d1 e1 f1
-      z2 = Block a2 b2 c2 d2 e2 f2
-  in Pair z1 z2
-
-joinBlock :: Equiv a (Pair x y) => Pair (Block x) (Block y) -> Block a
-joinBlock (Pair (Block a1 b1 c1 d1 e1 f1) (Block a2 b2 c2 d2 e2 f2)) =
-  Block
-    (equivBwd (Pair a1 a2))
-    (equivBwd (Pair b1 b2))
-    (equivBwd (Pair c1 c2))
-    (equivBwd (Pair d1 d2))
-    (equivBwd (Pair e1 e2))
-    (equivBwd (Pair f1 f2))
-
 data Header = Header
-  { headPreamble :: !Preamble
-  , headAutoBlock :: !(Block Auto)
-  , headLfoBlock :: !(Block Lfo)
-  , headFilter :: !Filter
-  , headInstParams :: !InstParams
-  , headSlices :: !Slices
-  , headGranular :: !Granular
-  , headEffects :: !Effects
-  } deriving stock (Eq, Show)
-
-instance Default Header where
-  def = Header def def def def def def def def
-
-data AuxHeader = AuxHeader
-  { ahPreamble :: !AuxPreamble
-  , ahAutoBlock :: !(Block AuxAutoEnvelope)
-  , ahLfoBlock :: !(Block AuxLfo)
-  , ahInstParams :: !AuxInstParams
-  , ahEffects :: !AuxEffects
-  } deriving stock (Eq, Show)
-
-instance Default AuxHeader where
-  def = AuxHeader def def def def def
-
-data MixHeader = MixHeader
-  { mhPreamble :: !PairPreamble
-  , mhAutoBlock :: !(Block PairAuto)
-  , mhLfoBlock :: !(Block PairLfo)
-  , mhFilter :: !Filter
-  , mhInstParams :: !PairInstParams
-  , mhSlices :: !Slices
-  , mhGranular :: !Granular
-  , mhEffects :: !PairEffects
+  { hdrPreamble :: !Preamble
+  , hdrAutoBlock :: !(Block Auto)
+  , hdrLfoBlock :: !(Block Lfo)
+  , hdrFilter :: !Filter
+  , hdrInstParams :: !InstParams
+  , hdrSlices :: !Slices
+  , hdrGranular :: !Granular
+  , hdrEffects :: !Effects
   } deriving stock (Eq, Show, Generic)
-    deriving anyclass (Binary)
+    deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Header)
 
-newtype PairHeader = PairHeader { unPairHeader :: Pair AuxHeader Header }
-  deriving stock (Show)
-  deriving newtype (Eq, Default)
-  deriving (Binary) via (ViaEquiv PairHeader)
+-- instance Default Header where
+--   def = Header def def def def def def def def
 
-instance Equiv PairHeader (Pair AuxHeader Header) where
-  equivFwd = unPairHeader
-  equivBwd = PairHeader
-
-instance Equiv MixHeader PairHeader where
-  equivFwd (MixHeader {..}) =
-    let Pair ahPreamble headPreamble = equivFwd mhPreamble
-        Pair ahAutoBlock headAutoBlock = splitBlock mhAutoBlock
-        Pair ahLfoBlock headLfoBlock = splitBlock mhLfoBlock
-        headFilter = mhFilter
-        Pair ahInstParams headInstParams = equivFwd mhInstParams
-        headSlices = mhSlices
-        headGranular = mhGranular
-        Pair ahEffects headEffects = equivFwd mhEffects
-        ahd = AuxHeader {..}
-        hd = Header {..}
-    in PairHeader (Pair ahd hd)
-  equivBwd (PairHeader (Pair (AuxHeader {..}) (Header {..}))) =
-    let mhPreamble = equivBwd (Pair ahPreamble headPreamble)
-        mhAutoBlock = joinBlock (Pair ahAutoBlock headAutoBlock)
-        mhLfoBlock = joinBlock (Pair ahLfoBlock headLfoBlock)
-        mhFilter = headFilter
-        mhInstParams = equivBwd (Pair ahInstParams headInstParams)
-        mhSlices = headSlices
-        mhGranular = headGranular
-        mhEffects = equivBwd (Pair ahEffects headEffects)
-    in MixHeader {..}
+-- instance Default AuxHeader where
+--   def = AuxHeader def def def def def
 
 data Pti = Pti
   { ptiHeader :: !Header
   , ptiWav :: !(Wav Int16LE)
-  } deriving stock (Eq, Show)
+  } deriving stock (Eq, Show, Generic)
+    deriving (ByteSized, Binary) via (ViaGeneric Pti)
 
-instance Default Pti where
-  def = Pti def def
-
-newtype PairPti = PairPti { unPairPti :: Pair AuxHeader Pti }
-  deriving stock (Show)
-  deriving newtype (Eq, Default)
-
-instance Equiv PairPti (Pair AuxHeader Pti) where
-  equivFwd = unPairPti
-  equivBwd = PairPti
-
-instance Binary PairPti where
-  get = do
-    PairHeader (Pair ahd hd) <- get
-    wav <- get
-    let !pair = Pair ahd (Pti hd wav)
-    pure $! PairPti pair
-  put (PairPti (Pair ahd (Pti hd wav))) = do
-    put (PairHeader (Pair ahd hd))
-    put wav
+-- instance Default Pti where
+--   def = Pti def def

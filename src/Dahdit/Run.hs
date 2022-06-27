@@ -1,28 +1,29 @@
 module Dahdit.Run
   ( GetError (..)
   , prettyGetError
-  , runGetBS
+  , runGet
+  , runGetIO
   , runCount
-  , runPutArray
+  , runPut
   ) where
 
 import Control.Applicative (Alternative (..))
-import Control.Exception (Exception (..))
+import Control.Exception (Exception (..), throwIO)
+import Control.Monad (unless)
 import Control.Monad.Except (ExceptT, MonadError, runExceptT, throwError)
 import Control.Monad.Free.Church (F (..))
-import Control.Monad.Reader (MonadReader (..), ReaderT (..))
+import Control.Monad.Reader (MonadReader (..), ReaderT (..), asks)
 import Control.Monad.ST.Strict (ST, runST)
 import Control.Monad.State.Strict (MonadState, State, runState)
 import qualified Control.Monad.State.Strict as State
 import Control.Monad.Trans (lift)
 import Control.Monad.Trans.Free (FreeT (..), iterT, wrap)
 import Control.Monad.Trans.Maybe (MaybeT (..))
-import Dahdit.Free (Get (..), GetF (..), GetStaticArrayF (..), GetStaticSeqF (..), Put, PutF (..), PutM (..),
-                    PutStaticArrayF (..), PutStaticSeqF (..), ScopeMode (..))
-import Dahdit.Nums (Int16LE (..), LiftedPrim (..), Word16LE (..))
+import Dahdit.Free (Get (..), GetF (..), GetLookAheadF (..), GetStaticArrayF (..), GetStaticSeqF (..), Put, PutF (..),
+                    PutM (..), PutStaticArrayF (..), PutStaticSeqF (..), ScopeMode (..))
+import Dahdit.Nums (FloatLE, Int16LE (..), Int32LE, LiftedPrim (..), Word16LE (..), Word32LE)
 import Dahdit.Proxy (proxyForF)
 import Dahdit.Sizes (ByteCount (..), staticByteSize)
-import Data.ByteString (ByteString)
 import qualified Data.ByteString.Short as BSS
 import Data.ByteString.Short.Internal (ShortByteString (..))
 import Data.Foldable (for_)
@@ -33,7 +34,6 @@ import Data.Primitive.PrimArray (PrimArray (..))
 import qualified Data.Sequence as Seq
 import Data.STRef.Strict (STRef, newSTRef, readSTRef, writeSTRef)
 import Data.Word (Word8)
--- import Debug.Trace (traceM, trace)
 
 -- Sizes:
 
@@ -79,10 +79,9 @@ data GetEnv s = GetEnv
   , geArray :: !ByteArray
   }
 
-newGetEnv :: ByteString -> ST s (GetEnv s)
-newGetEnv bs = do
-  let !sbs@(SBS arr) = BSS.toShort bs
-      !len = BSS.length sbs
+newGetEnv :: ShortByteString -> ST s (GetEnv s)
+newGetEnv sbs@(SBS arr) = do
+  let !len = BSS.length sbs
   pos <- newSTRef 0
   pure $! GetEnv len pos (ByteArray arr)
 
@@ -118,8 +117,6 @@ readBytes nm bc f = do
     let !a = f arr pos
         !newPos = pos + bc
     writeSTRef posRef newPos
-    -- traceM ("XXX BA: " ++ show arr)
-    -- traceM ("XXX READ BYTES: " ++ nm ++ " " ++ show pos ++ " " ++ show newPos ++ " " ++ show a)
     pure a
 
 readShortByteString :: Int -> ByteArray -> Int -> ShortByteString
@@ -148,7 +145,6 @@ readStaticSeq gss@(GetStaticSeqF ec g k) = do
   let !bc = getStaticSeqSize gss
   _ <- guardReadBytes "static sequence" bc
   ss <- Seq.replicateA (fromIntegral ec) (mkGetEff g)
-  -- traceM ("XXX STATIC SEQ: " ++ show bc ++ " " ++ show ec ++ " " ++ show ss)
   k ss
 
 readStaticArray :: GetStaticArrayF (GetEff s a) -> GetEff s a
@@ -157,12 +153,23 @@ readStaticArray gsa@(GetStaticArrayF _ _ k) = do
   sa <- readBytes "static vector" bc (\arr pos -> let !(ByteArray frozArr) = cloneByteArray arr pos bc in PrimArray frozArr)
   k sa
 
+readLookAhead :: GetLookAheadF (GetEff s a) -> GetEff s a
+readLookAhead (GetLookAheadF g k) = do
+  posRef <- asks gePos
+  startPos <- stGetEff (readSTRef posRef)
+  a <- mkGetEff g
+  stGetEff (writeSTRef posRef startPos)
+  k a
+
 execGetRun :: GetF (GetEff s a) -> GetEff s a
 execGetRun = \case
   GetFWord8 k -> readBytes "Word8" 1 (indexByteArray @Word8) >>= k
   GetFInt8 k -> readBytes "Int8" 1 (indexByteArray @Int8) >>= k
   GetFWord16LE k -> readBytes "Word16LE" 2 (indexByteArrayLifted @Word16LE) >>= k
   GetFInt16LE k -> readBytes "Int16LE" 2 (indexByteArrayLifted @Int16LE) >>= k
+  GetFWord32LE k -> readBytes "Word32LE" 4 (indexByteArrayLifted @Word32LE) >>= k
+  GetFInt32LE k -> readBytes "Int32LE" 4 (indexByteArrayLifted @Int32LE) >>= k
+  GetFFloatLE k -> readBytes "FloatLE" 4 (indexByteArrayLifted @FloatLE) >>= k
   GetFShortByteString bc k ->
     let !len = fromIntegral bc
     in readBytes "ShortByteString" len (readShortByteString len) >>= k
@@ -170,6 +177,12 @@ execGetRun = \case
   GetFStaticArray gsa -> readStaticArray gsa
   GetFScope sm bc k -> readScope sm (fromIntegral bc) k
   GetFSkip bc k -> readBytes "skip" (fromIntegral bc) (\_ _ -> ()) *> k
+  GetFLookAhead gla -> readLookAhead gla
+  GetFRemainingSize k -> do
+    GetEnv len posRef _ <- ask
+    pos <- stGetEff (readSTRef posRef)
+    let !bc = fromIntegral (len - pos)
+    k bc
   GetFFail msg -> fail msg
 
 runGetRun :: GetRun s a -> GetEnv s -> ST s (Either GetError a)
@@ -184,27 +197,22 @@ mkGetRun (Get (F w)) = GetRun (w pure wrap)
 mkGetEff :: Get a -> GetEff s a
 mkGetEff = iterGetRun . mkGetRun
 
-runGetBS :: Get a -> ByteString -> (Either GetError a, ByteCount, ByteArray)
-runGetBS m bs = runST $ do
-  -- traceM ("XXX INIT BS: " ++ show (BS.unpack bs))
+runGet :: Get a -> ShortByteString -> (Either GetError a, ByteCount)
+runGet m bs = runST $ do
   let !n = mkGetEff m
   env <- newGetEnv bs
-  -- traceM ("XXX INIT ARR: " ++ show (geArray env))
   ea <- runGetEff n env
   bc <- readSTRef (gePos env)
-  let !ba = geArray env
-  pure (ea, fromIntegral bc, ba)
+  pure (ea, fromIntegral bc)
+
+runGetIO :: Get a -> ShortByteString -> IO (a, ByteCount)
+runGetIO m bs =
+  let (!ea, !bc) = runGet m bs
+  in case ea of
+    Left e -> throwIO e
+    Right a -> pure (a, bc)
 
 -- Put unsafe:
-
--- data PutError = PutError !String !ByteCount !ByteCount
---   deriving stock (Eq, Show)
-
--- instance Exception PutError where
---   displayException = prettyPutError
-
--- prettyPutError :: PutError -> String
--- prettyPutError (PutError nm ac bc) = "End of buffer writing " ++ nm ++ " (have " ++ show (unByteCount ac) ++ ", need " ++ show (unByteCount bc) ++ " more)"
 
 data PutEnv s = PutEnv
   { peLen :: !Int
@@ -259,6 +267,9 @@ execPutRun = \case
   PutFInt8 x k -> writeBytes 1 (\arr pos -> writeByteArray arr pos x) *> k
   PutFWord16LE x k -> writeBytes 2 (writeByteArrayLifted x) *> k
   PutFInt16LE x k -> writeBytes 2 (writeByteArrayLifted x) *> k
+  PutFWord32LE x k -> writeBytes 4 (writeByteArrayLifted x) *> k
+  PutFInt32LE x k -> writeBytes 4 (writeByteArrayLifted x) *> k
+  PutFFloatLE x k -> writeBytes 4 (writeByteArrayLifted x) *> k
   PutFShortByteString bc sbs k ->
     let !len = fromIntegral bc
     in writeBytes len (writeShortByteString sbs len) *> k
@@ -278,15 +289,16 @@ mkPutRun (PutM (F w)) = PutRun (w pure wrap)
 mkPutEff :: PutM a -> PutEff s a
 mkPutEff = iterPutRun . mkPutRun
 
-runPutUnsafe :: Put -> ByteCount -> (ByteCount, ByteArray)
+runPutUnsafe :: Put -> ByteCount -> ShortByteString
 runPutUnsafe m bc = runST $ do
   let !len = fromIntegral bc
       !n = mkPutRun m
   st@(PutEnv _ posRef arr) <- newPutEnv len
   runPutRun n st
-  pos <- fmap fromIntegral (readSTRef posRef)
-  frozArr <- unsafeFreezeByteArray arr
-  pure (pos, frozArr)
+  pos <- readSTRef posRef
+  unless (pos == len) (error ("Invalid put length: (given " ++ show len ++ ", used " ++ show pos))
+  ByteArray frozArr <- unsafeFreezeByteArray arr
+  pure $! SBS frozArr
 
 -- Count:
 
@@ -305,6 +317,9 @@ execCountRun = \case
   PutFInt8 _ k -> State.modify' (1+) *> k
   PutFWord16LE _ k -> State.modify' (2+) *> k
   PutFInt16LE _ k -> State.modify' (2+) *> k
+  PutFWord32LE _ k -> State.modify' (4+) *> k
+  PutFInt32LE _ k -> State.modify' (4+) *> k
+  PutFFloatLE _ k -> State.modify' (4+) *> k
   PutFShortByteString bc _ k ->
     let !len = fromIntegral bc
     in State.modify' (len+) *> k
@@ -338,5 +353,5 @@ runCount m =
 
 -- Put safe:
 
-runPutArray :: Put -> (ByteCount, ByteArray)
-runPutArray m = let !bc = runCount m in runPutUnsafe m bc
+runPut :: Put -> ShortByteString
+runPut m = let !bc = runCount m in runPutUnsafe m bc

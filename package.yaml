@@ -15,17 +15,17 @@ description: Please see the README on GitHub at <https://github.com/ejconlon/scr
 
 dependencies:
 - base >= 4.12 && < 5
-- binary
 - bytestring
 - data-default
-- resourcet
-- vector
 - mtl
 - transformers
 - containers
-- text
 - primitive
 - free
+# - text
+# - binary
+# - resourcet
+# - vector
 # - yaml
 # - sdl2
 # - sdl2-mixer

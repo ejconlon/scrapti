@@ -4,8 +4,9 @@ module Dahdit.Binary
   ) where
 
 import Dahdit.Free (Get, Put)
-import Dahdit.Funs (getInt16LE, getInt8, getWord16LE, getWord8, putInt16LE, putInt8, putWord16LE, putWord8)
-import Dahdit.Nums (Int16LE, Word16LE)
+import Dahdit.Funs (getFloatLE, getInt16LE, getInt32LE, getInt8, getWord16LE, getWord32LE, getWord8, putFloatLE,
+                    putInt16LE, putInt32LE, putInt8, putWord16LE, putWord32LE, putWord8)
+import Dahdit.Nums (FloatLE, Int16LE, Int32LE, Word16LE, Word32LE)
 import Dahdit.Run (runCount)
 import Dahdit.Sizes (ByteCount, ByteSized)
 import Data.Int (Int8)
@@ -33,3 +34,15 @@ instance Binary Word16LE where
 instance Binary Int16LE where
   get = getInt16LE
   put = putInt16LE
+
+instance Binary Word32LE where
+  get = getWord32LE
+  put = putWord32LE
+
+instance Binary Int32LE where
+  get = getInt32LE
+  put = putInt32LE
+
+instance Binary FloatLE where
+  get = getFloatLE
+  put = putFloatLE

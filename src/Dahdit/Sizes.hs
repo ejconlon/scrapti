@@ -5,15 +5,19 @@ module Dahdit.Sizes
   , byteSizeViaStatic
   , ByteSized (..)
   , ViaStaticByteSized (..)
+  , byteSizeFoldable
+  , staticByteSizeFoldable
   ) where
 
-import Dahdit.Proxy (Proxy (..), proxyFor)
+import Dahdit.Proxy (Proxy (..), proxyFor, proxyForF)
 import Data.ByteString.Short (ShortByteString)
 import qualified Data.ByteString.Short as BSS
 import Data.Default (Default)
+import Data.Foldable (foldMap')
 import Data.Int (Int8)
 import Data.Primitive (Prim)
 import Data.Primitive.PrimArray (PrimArray, sizeofPrimArray)
+import Data.Semigroup (Sum (..))
 import Data.Word (Word64, Word8)
 
 newtype ElementCount = ElementCount { unElementCount :: Word64 }
@@ -58,3 +62,9 @@ newtype ViaStaticByteSized a = ViaStaticByteSized { unViaStaticByteSized :: a }
 
 instance StaticByteSized a => ByteSized (ViaStaticByteSized a) where
   byteSize _ = staticByteSize (Proxy :: Proxy a)
+
+byteSizeFoldable :: (Foldable f, ByteSized a) => f a -> ByteCount
+byteSizeFoldable = getSum . foldMap' (Sum . byteSize)
+
+staticByteSizeFoldable :: (Foldable f, StaticByteSized a) => f a -> ByteCount
+staticByteSizeFoldable fa = staticByteSize (proxyForF fa) * fromIntegral (length fa)

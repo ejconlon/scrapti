@@ -3,12 +3,13 @@ module Dahdit.Fancy
   , FixedBytes (..)
   , FixedSeq (..)
   , FixedArray (..)
+  , BoolByte (..)
   ) where
 
 import Control.Monad (unless)
 import Dahdit.Binary (Binary (..))
-import Dahdit.Free (Get, Put)
-import Dahdit.Funs (getShortByteString, getStaticArray, getWord8, putFixedByteString, putShortByteString, putWord8)
+import Dahdit.Free (Get)
+import Dahdit.Funs (getByteString, getStaticArray, getWord8, putByteString, putFixedString, putWord8)
 import Dahdit.Proxy (Proxy (..))
 import Dahdit.Sizes (ByteSized (..), StaticByteSized (..), ViaStaticByteSized (..))
 import qualified Data.ByteString.Short as BSS
@@ -37,7 +38,7 @@ mkSBS n bs = let !(ByteArray ba) = byteArrayFromListN n bs in SBS ba
 
 -- | Bytes terminated with null byte.
 -- NOTE: Terminated with TWO null bytes if the string is even length
--- to align to Word16 boundaries, as required for
+-- to align to Word16 boundaries, as required for RIFF format, for example.
 newtype TermBytes = TermBytes { unTermBytes :: ShortByteString }
   deriving stock (Show)
   deriving newtype (Eq, Ord, IsString)
@@ -60,7 +61,7 @@ instance Binary TermBytes where
     pure $! TermBytes sbs
 
   put (TermBytes sbs) = do
-    putShortByteString sbs
+    putByteString sbs
     putWord8 0
     unless (odd (BSS.length sbs)) (putWord8 0)
 
@@ -77,8 +78,8 @@ instance KnownNat n => StaticByteSized (FixedBytes n) where
   staticByteSize _ = fromInteger (natVal (Proxy :: Proxy n))
 
 instance KnownNat n => Binary (FixedBytes n) where
-  get = fmap FixedBytes (getShortByteString (fromInteger (natVal (Proxy :: Proxy n))))
-  put fb@(FixedBytes sbs) = putFixedByteString 0 (fromInteger (natVal fb)) sbs
+  get = fmap FixedBytes (getByteString (fromInteger (natVal (Proxy :: Proxy n))))
+  put fb@(FixedBytes sbs) = putFixedString 0 (fromInteger (natVal fb)) sbs
 
 newtype FixedSeq (n :: Nat) a = FixedSeq { unFixedSeq :: Seq a }
   deriving stock (Show)
@@ -113,3 +114,18 @@ instance (KnownNat n, Prim a, StaticByteSized a, Binary a) => Binary (FixedArray
     -- let !intLen = fromIntegral (natVal (Proxy :: Proxy n))
     --     !v1 = if VP.length v0 == intLen then v0 else VP.take intLen v0
     -- in putVec v1
+
+newtype BoolByte = BoolByte { unBoolByte :: Bool }
+  deriving stock (Show)
+  deriving newtype (Eq)
+  deriving (ByteSized) via (ViaStaticByteSized BoolByte)
+
+instance Default BoolByte where
+  def = BoolByte False
+
+instance StaticByteSized BoolByte where
+  staticByteSize _ = 1
+
+instance Binary BoolByte where
+  get = fmap (BoolByte . (== 0)) getWord8
+  put (BoolByte b) = putWord8 (if b then 1 else 0)

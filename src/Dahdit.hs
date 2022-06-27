@@ -8,25 +8,27 @@ module Dahdit
   , Generic
   , Prim
   , module Dahdit.Binary
+  , module Dahdit.BinaryRep
   , module Dahdit.Fancy
   , module Dahdit.Free
   , module Dahdit.Funs
+  , module Dahdit.Generic
   , module Dahdit.Nums
   , module Dahdit.Proxy
   , module Dahdit.Run
   , module Dahdit.Sizes
-  , module Dahdit.Via
    ) where
 
 import Dahdit.Binary
+import Dahdit.BinaryRep
 import Dahdit.Fancy
 import Dahdit.Free (Get, Put, PutM)
 import Dahdit.Funs
-import Dahdit.Nums (Int16LE (..), Word16LE (..))
+import Dahdit.Generic
+import Dahdit.Nums (FloatLE (..), Int16LE (..), Int32LE (..), Word16LE (..), Word32LE (..))
 import Dahdit.Proxy
 import Dahdit.Run
 import Dahdit.Sizes
-import Dahdit.Via
 import Data.ByteString (ByteString)
 import Data.ByteString.Short (ShortByteString)
 import Data.Int (Int8)

@@ -26,16 +26,15 @@ library
   exposed-modules:
       Dahdit
       Dahdit.Binary
+      Dahdit.BinaryRep
       Dahdit.Fancy
       Dahdit.Free
       Dahdit.Funs
+      Dahdit.Generic
       Dahdit.Nums
       Dahdit.Proxy
       Dahdit.Run
       Dahdit.Sizes
-      Dahdit.Via
-      Scrapti.Binary
-      Scrapti.Classes
       Scrapti.Main
       Scrapti.Pti
       Scrapti.Riff
@@ -74,17 +73,13 @@ library
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints -fno-warn-unused-top-binds -fwrite-ide-info -hiedir=.hie
   build-depends:
       base >=4.12 && <5
-    , binary
     , bytestring
     , containers
     , data-default
     , free
     , mtl
     , primitive
-    , resourcet
-    , text
     , transformers
-    , vector
   default-language: Haskell2010
 
 test-suite scrapti-test
@@ -92,6 +87,7 @@ test-suite scrapti-test
   main-is: Main.hs
   other-modules:
       Test.Dahdit
+      Test.Scrapti
       Paths_scrapti
   hs-source-dirs:
       test
@@ -124,18 +120,14 @@ test-suite scrapti-test
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints -fno-warn-unused-top-binds -fwrite-ide-info -hiedir=.hie -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.12 && <5
-    , binary
     , bytestring
     , containers
     , data-default
     , free
     , mtl
     , primitive
-    , resourcet
     , scrapti
     , tasty
     , tasty-hunit
-    , text
     , transformers
-    , vector
   default-language: Haskell2010

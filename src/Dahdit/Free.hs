@@ -1,6 +1,7 @@
 module Dahdit.Free
   ( GetStaticSeqF (..)
   , GetStaticArrayF (..)
+  , GetLookAheadF (..)
   , ScopeMode (..)
   , GetF (..)
   , Get (..)
@@ -12,7 +13,7 @@ module Dahdit.Free
   ) where
 
 import Control.Monad.Free.Church (F (..))
-import Dahdit.Nums (Int16LE, Word16LE)
+import Dahdit.Nums (FloatLE, Int16LE, Int32LE, Word16LE, Word32LE)
 import Dahdit.Proxy (Proxy (..))
 import Dahdit.Sizes (ByteCount, ElementCount, StaticByteSized (..))
 import Data.ByteString.Short (ShortByteString)
@@ -34,6 +35,12 @@ data GetStaticArrayF a where
 instance Functor GetStaticArrayF where
   fmap f (GetStaticArrayF ec prox k) = GetStaticArrayF ec prox (f . k)
 
+data GetLookAheadF a where
+  GetLookAheadF :: Get z -> (z -> a) -> GetLookAheadF a
+
+instance Functor GetLookAheadF where
+  fmap f (GetLookAheadF g k) = GetLookAheadF g (f . k)
+
 data ScopeMode =
     ScopeModeExact
   | ScopeModeWithin
@@ -44,11 +51,16 @@ data GetF a =
   | GetFInt8 (Int8 -> a)
   | GetFWord16LE (Word16LE -> a)
   | GetFInt16LE (Int16LE -> a)
+  | GetFWord32LE (Word32LE -> a)
+  | GetFInt32LE (Int32LE -> a)
+  | GetFFloatLE (FloatLE -> a)
   | GetFShortByteString !ByteCount (ShortByteString -> a)
   | GetFStaticSeq !(GetStaticSeqF a)
   | GetFStaticArray !(GetStaticArrayF a)
   | GetFScope !ScopeMode !ByteCount a
   | GetFSkip !ByteCount a
+  | GetFLookAhead !(GetLookAheadF a)
+  | GetFRemainingSize (ByteCount -> a)
   | GetFFail !String
   deriving stock (Functor)
 
@@ -75,6 +87,9 @@ data PutF a =
   | PutFInt8 !Int8 a
   | PutFWord16LE !Word16LE a
   | PutFInt16LE !Int16LE a
+  | PutFWord32LE !Word32LE a
+  | PutFInt32LE !Int32LE a
+  | PutFFloatLE !FloatLE a
   | PutFShortByteString !ByteCount !ShortByteString a
   | PutFStaticSeq !(PutStaticSeqF a)
   | PutFStaticArray !(PutStaticArrayF a)

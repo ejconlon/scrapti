@@ -1,6 +1,6 @@
 {-# LANGUAGE UndecidableInstances #-}
 
-module Dahdit.Via
+module Dahdit.Generic
   ( ViaGeneric (..)
   , ViaStaticGeneric (..)
   ) where

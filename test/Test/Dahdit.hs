@@ -1,13 +1,10 @@
 module Test.Dahdit (testDahdit) where
 
 import Dahdit (Binary (..), ByteCount, ByteSized (..), Generic, Get, Int16LE, Int8, Proxy (..), Put, ShortByteString,
-               StaticByteSized (..), ViaGeneric (..), ViaStaticGeneric (..), Word16LE, Word8, getInt16LE, getInt8,
-               getSeq, getShortByteString, getStaticArray, getStaticSeq, getWord16LE, getWord8, putInt16LE, putInt8,
-               putSeq, putShortByteString, putStaticArray, putStaticSeq, putWord16LE, putWord8, runCount, runGetBS,
-               runPutArray)
-import qualified Data.ByteString as BS
+               StaticByteSized (..), ViaGeneric (..), ViaStaticGeneric (..), Word16LE, Word8, getByteString, getInt16LE,
+               getInt8, getSeq, getStaticArray, getStaticSeq, getWord16LE, getWord8, putByteString, putInt16LE, putInt8,
+               putSeq, putStaticArray, putStaticSeq, putWord16LE, putWord8, runCount, runGet, runPut)
 import qualified Data.ByteString.Short as BSS
-import Data.Primitive.ByteArray (byteArrayFromList)
 import Data.Primitive.PrimArray (primArrayFromList)
 import qualified Data.Sequence as Seq
 import Test.Tasty (TestTree, testGroup)
@@ -23,8 +20,8 @@ data StaFoo = StaFoo !Word8 !Word16LE
 
 runGetCase :: (Show a, Eq a) => Get a -> Maybe (ByteCount, a) -> [Word8] -> IO ()
 runGetCase getter mayRes bsl = do
-  let bs = BS.pack bsl
-      (result, actBc, _) = runGetBS getter bs
+  let bs = BSS.pack bsl
+      (result, actBc) = runGet getter bs
   case (result, mayRes) of
     (Left _, Nothing) -> pure ()
     (Left err, Just (_, expecVal)) -> fail ("Got error <" ++ show err ++ ">, expected value <" ++ show expecVal ++ ">")
@@ -36,12 +33,13 @@ runGetCase getter mayRes bsl = do
 runPutCase :: Put -> [Word8] -> IO ()
 runPutCase putter expecList = do
   let expecBc = fromIntegral (length expecList)
-      expecArr = byteArrayFromList expecList
+      expecBs = BSS.pack expecList
       estBc = runCount putter
   estBc @?= expecBc
-  let (actBc, actArr) = runPutArray putter
+  let actBs = runPut putter
+      actBc = byteSize actBs
+  actBs @?= expecBs
   actBc @?= expecBc
-  actArr @?= expecArr
 
 testDahditByteSize :: TestTree
 testDahditByteSize = testGroup "byteSize"
@@ -74,7 +72,7 @@ testDahditGet = testGroup "get"
   , testCase "Word16LE two" (runGetCase getWord16LE (Just (2, 0x5DEC)) [0xEC, 0x5D])
   , testCase "Word16LE three" (runGetCase getWord16LE (Just (2, 0x5DEC)) [0xEC, 0x5D, 0xBB])
   , testCase "Int16LE" (runGetCase getInt16LE (Just (2, 0x5DEC)) [0xEC, 0x5D, 0xBB])
-  , testCase "ShortByteString" (runGetCase (getShortByteString 2) (Just (2, BSS.pack [0xEC, 0x5D])) [0xEC, 0x5D, 0xBB])
+  , testCase "ShortByteString" (runGetCase (getByteString 2) (Just (2, BSS.pack [0xEC, 0x5D])) [0xEC, 0x5D, 0xBB])
   , testCase "Two Word8" (runGetCase ((,) <$> getWord8 <*> getWord8) (Just (2, (0x5D, 0xBB))) [0x5D, 0xBB])
   , testCase "Two Word16LE" (runGetCase ((,) <$> getWord16LE <*> getWord16LE) (Just (4, (0x5DEC, 0x4020))) [0xEC, 0x5D, 0x20, 0x40])
   , testCase "Seq" (runGetCase (getSeq 2 getWord16LE) (Just (4, Seq.fromList [0x5DEC, 0x4020])) [0xEC, 0x5D, 0x20, 0x40])
@@ -90,7 +88,7 @@ testDahditPut = testGroup "put"
   , testCase "Int8" (runPutCase (putInt8 0x5D) [0x5D])
   , testCase "Word16LE" (runPutCase (putWord16LE 0x5DEC) [0xEC, 0x5D])
   , testCase "Int16LE" (runPutCase (putInt16LE 0x5DEC) [0xEC, 0x5D])
-  , testCase "ShortByteString" (runPutCase (putShortByteString (BSS.pack [0xEC, 0x5D])) [0xEC, 0x5D])
+  , testCase "ShortByteString" (runPutCase (putByteString (BSS.pack [0xEC, 0x5D])) [0xEC, 0x5D])
   , testCase "Two Word8" (runPutCase (putWord8 0x5D *> putWord8 0xBB) [0x5D, 0xBB])
   , testCase "Two Word16LE" (runPutCase (putWord16LE 0x5DEC *> putWord16LE 0x4020) [0xEC, 0x5D, 0x20, 0x40])
   , testCase "Seq" (runPutCase (putSeq putWord16LE (Seq.fromList [0x5DEC, 0x4020])) [0xEC, 0x5D, 0x20, 0x40])
