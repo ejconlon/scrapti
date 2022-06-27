@@ -83,8 +83,8 @@ instance LiftedPrim Word16LE where
     in mkWord16LE b0 b1
 
   writeByteArrayLifted w arr pos =
-    let (!b0, !b1) = unMkWord16LE w
-    in writeByteArray arr (2 * pos) b0 *> writeByteArray arr (2 * pos + 1) b1
+    let !(b0, b1) = unMkWord16LE w
+    in writeByteArray arr pos b0 *> writeByteArray arr (pos + 1) b1
 
 -- instance Prim Word16LE where
 --   sizeOf# _ = 2# *# sizeOf# (undefined :: Word8)

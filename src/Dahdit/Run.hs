@@ -19,7 +19,7 @@ import Control.Monad.Trans.Free (FreeT (..), iterT, wrap)
 import Control.Monad.Trans.Maybe (MaybeT (..))
 import Dahdit.Free (Get (..), GetF (..), GetStaticArrayF (..), GetStaticSeqF (..), Put, PutF (..), PutM (..),
                     PutStaticArrayF (..), PutStaticSeqF (..), ScopeMode (..))
-import Dahdit.Nums (Int16LE (..), Word16LE (..), indexByteArrayLifted)
+import Dahdit.Nums (Int16LE (..), LiftedPrim (..), Word16LE (..))
 import Dahdit.Proxy (proxyForF)
 import Dahdit.Sizes (ByteCount (..), staticByteSize)
 import Data.ByteString (ByteString)
@@ -257,8 +257,8 @@ execPutRun :: PutF (PutEff s a) -> PutEff s a
 execPutRun = \case
   PutFWord8 x k -> writeBytes 1 (\arr pos -> writeByteArray arr pos x) *> k
   PutFInt8 x k -> writeBytes 1 (\arr pos -> writeByteArray arr pos x) *> k
-  PutFWord16LE x k -> writeBytes 2 (\arr pos -> writeByteArray arr pos x) *> k
-  PutFInt16LE x k -> writeBytes 2 (\arr pos -> writeByteArray arr pos x) *> k
+  PutFWord16LE x k -> writeBytes 2 (writeByteArrayLifted x) *> k
+  PutFInt16LE x k -> writeBytes 2 (writeByteArrayLifted x) *> k
   PutFShortByteString sbs k ->
     let !len = BSS.length sbs
     in writeBytes len (writeShortByteString sbs len) *> k
