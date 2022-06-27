@@ -70,7 +70,7 @@ getSeq n g = go Empty 0 where
         x `seq` go (acc :|> x) (i + 1)
 
 -- | Get Seq of statically-sized elements
-getStaticSeq :: StaticByteSized a => ElementCount -> Get a -> Get (Seq a)
+getStaticSeq :: (StaticByteSized a) => ElementCount -> Get a -> Get (Seq a)
 getStaticSeq n g = Get (F (\x y -> y (GetFStaticSeq (GetStaticSeqF n g x))))
 
 -- | Get PrimArray of statically-sized elements

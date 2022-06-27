@@ -1,8 +1,5 @@
 module Dahdit.Prelude
-  ( Get
-  , PutM
-  , Put
-  , Word8
+  ( Word8
   , Int8
   , ByteString
   , ShortByteString
@@ -11,6 +8,7 @@ module Dahdit.Prelude
   , Generic
   , Prim
   , module Dahdit.Binary
+  , module Dahdit.Free
   , module Dahdit.Funs
   , module Dahdit.Nums
   , module Dahdit.Proxy
@@ -22,7 +20,7 @@ module Dahdit.Prelude
 import Dahdit.Binary
 import Dahdit.Free (Get, Put, PutM)
 import Dahdit.Funs
-import Dahdit.Nums
+import Dahdit.Nums (Int16LE (..), Word16LE (..))
 import Dahdit.Proxy
 import Dahdit.Run
 import Dahdit.Sizes

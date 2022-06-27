@@ -103,4 +103,5 @@ testPti :: TestTree
 testPti = testGroup "pti" [testPtiManual]
 
 main :: IO ()
-main = defaultMain (testGroup "Scrapti" [testWav, testSfont, testPti, testDahdit])
+-- main = defaultMain (testGroup "Scrapti" [testWav, testSfont, testPti, testDahdit])
+main = defaultMain (testGroup "Scrapti" [testDahdit])

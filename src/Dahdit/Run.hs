@@ -19,7 +19,7 @@ import Control.Monad.Trans.Free (FreeT (..), iterT, wrap)
 import Control.Monad.Trans.Maybe (MaybeT (..))
 import Dahdit.Free (Get (..), GetF (..), GetStaticArrayF (..), GetStaticSeqF (..), Put, PutF (..), PutM (..),
                     PutStaticArrayF (..), PutStaticSeqF (..), ScopeMode (..))
-import Dahdit.Nums (Int16LE (..), Word16LE (..))
+import Dahdit.Nums (Int16LE (..), Word16LE (..), indexByteArrayLifted)
 import Dahdit.Proxy (proxyForF)
 import Dahdit.Sizes (ByteCount (..), staticByteSize)
 import Data.ByteString (ByteString)
@@ -31,8 +31,9 @@ import Data.Primitive.ByteArray (ByteArray (..), MutableByteArray, cloneByteArra
                                  newByteArray, sizeofByteArray, unsafeFreezeByteArray, writeByteArray)
 import Data.Primitive.PrimArray (PrimArray (..))
 import qualified Data.Sequence as Seq
-import Data.STRef.Strict (STRef, modifySTRef', newSTRef, readSTRef, writeSTRef)
+import Data.STRef.Strict (STRef, newSTRef, readSTRef, writeSTRef)
 import Data.Word (Word8)
+-- import Debug.Trace (traceM, trace)
 
 -- Sizes:
 
@@ -115,7 +116,10 @@ readBytes nm bc f = do
   GetEnv _ posRef arr <- ask
   stGetEff $ do
     let !a = f arr pos
-    modifySTRef' posRef (bc+)
+        !newPos = pos + bc
+    writeSTRef posRef newPos
+    -- traceM ("XXX BA: " ++ show arr)
+    -- traceM ("XXX READ BYTES: " ++ nm ++ " " ++ show pos ++ " " ++ show newPos ++ " " ++ show a)
     pure a
 
 readShortByteString :: Int -> ByteArray -> Int -> ShortByteString
@@ -144,6 +148,7 @@ readStaticSeq gss@(GetStaticSeqF ec g k) = do
   let !bc = getStaticSeqSize gss
   _ <- guardReadBytes "static sequence" bc
   ss <- Seq.replicateA (fromIntegral ec) (mkGetEff g)
+  -- traceM ("XXX STATIC SEQ: " ++ show bc ++ " " ++ show ec ++ " " ++ show ss)
   k ss
 
 readStaticArray :: GetStaticArrayF (GetEff s a) -> GetEff s a
@@ -156,8 +161,8 @@ execGetRun :: GetF (GetEff s a) -> GetEff s a
 execGetRun = \case
   GetFWord8 k -> readBytes "Word8" 1 (indexByteArray @Word8) >>= k
   GetFInt8 k -> readBytes "Int8" 1 (indexByteArray @Int8) >>= k
-  GetFWord16LE k -> readBytes "Word16LE" 2 (indexByteArray @Word16LE) >>= k
-  GetFInt16LE k -> readBytes "Int16LE" 2 (indexByteArray @Int16LE) >>= k
+  GetFWord16LE k -> readBytes "Word16LE" 2 (indexByteArrayLifted @Word16LE) >>= k
+  GetFInt16LE k -> readBytes "Int16LE" 2 (indexByteArrayLifted @Int16LE) >>= k
   GetFShortByteString bc k ->
     let !len = fromIntegral bc
     in readBytes "ShortByteString" len (readShortByteString len) >>= k
@@ -181,8 +186,10 @@ mkGetEff = iterGetRun . mkGetRun
 
 runGetBS :: Get a -> ByteString -> (Either GetError a, ByteCount, ByteArray)
 runGetBS m bs = runST $ do
+  -- traceM ("XXX INIT BS: " ++ show (BS.unpack bs))
   let !n = mkGetEff m
   env <- newGetEnv bs
+  -- traceM ("XXX INIT ARR: " ++ show (geArray env))
   ea <- runGetEff n env
   bc <- readSTRef (gePos env)
   let !ba = geArray env

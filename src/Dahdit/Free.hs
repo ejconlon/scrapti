@@ -23,7 +23,7 @@ import Data.Sequence (Seq)
 import Data.Word (Word8)
 
 data GetStaticSeqF a where
-  GetStaticSeqF :: StaticByteSized z => !ElementCount -> Get z -> (Seq z -> a) -> GetStaticSeqF a
+  GetStaticSeqF :: (StaticByteSized z) => !ElementCount -> Get z -> (Seq z -> a) -> GetStaticSeqF a
 
 instance Functor GetStaticSeqF where
   fmap f (GetStaticSeqF ec g k) = GetStaticSeqF ec g (f . k)
