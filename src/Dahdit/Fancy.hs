@@ -96,7 +96,7 @@ instance (StaticByteSized a) => StaticByteSized (StaticSeq n a) where
 
 instance (KnownNat n, Binary a, StaticByteSized a, Default a) => Binary (StaticSeq n a) where
   get = fmap StaticSeq (getStaticSeq (fromIntegral (natVal (Proxy :: Proxy n))) get)
-  put = unsafePutStaticSeqN (fromIntegral (natVal (Proxy :: Proxy n))) def put . unStaticSeq
+  put = unsafePutStaticSeqN (fromIntegral (natVal (Proxy :: Proxy n))) (Just def) put . unStaticSeq
   -- put (StaticSeq s) =
   --   let !n = fromIntegral (natVal (Proxy :: Proxy n))
   --       !e = fromIntegral (Seq.length s)
@@ -117,7 +117,7 @@ instance (KnownNat n, StaticByteSized a) => StaticByteSized (StaticArray n a) wh
 
 instance (KnownNat n, Prim a, StaticByteSized a, Default a) => Binary (StaticArray n a) where
   get = fmap StaticArray (getStaticArray (fromIntegral (natVal (Proxy :: Proxy n))))
-  put = unsafePutStaticArrayN (fromIntegral (natVal (Proxy :: Proxy n))) def . unStaticArray
+  put = unsafePutStaticArrayN (fromIntegral (natVal (Proxy :: Proxy n))) (Just def) . unStaticArray
     -- let !n = fromIntegral (natVal (Proxy :: Proxy n))
     --     !e = fromIntegral (sizeofPrimArray a)
     -- in if n > e

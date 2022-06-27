@@ -71,15 +71,13 @@ instance MonadFail Get where
   fail msg = Get (F (\_ y -> y (GetFFail msg)))
 
 data PutStaticSeqF a where
-  PutStaticSeqF :: StaticByteSized z => !ElementCount -> z -> (z -> Put) -> !(Seq z) -> a -> PutStaticSeqF a
-  -- second elem NOT STRICT because may be undefined
+  PutStaticSeqF :: StaticByteSized z => !ElementCount -> !(Maybe z) -> (z -> Put) -> !(Seq z) -> a -> PutStaticSeqF a
 
 instance Functor PutStaticSeqF where
   fmap f (PutStaticSeqF n z p s k) = PutStaticSeqF n z p s (f k)
 
 data PutStaticArrayF a where
-  PutStaticArrayF :: (StaticByteSized z, Prim z) => !ElementCount -> z -> !(PrimArray z) -> a -> PutStaticArrayF a
-  -- second elem NOT STRICT because may be undefined
+  PutStaticArrayF :: (StaticByteSized z, Prim z) => !ElementCount -> !(Maybe z) -> !(PrimArray z) -> a -> PutStaticArrayF a
 
 instance Functor PutStaticArrayF where
   fmap f (PutStaticArrayF n z a k) = PutStaticArrayF n z a (f k)

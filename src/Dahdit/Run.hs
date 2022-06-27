@@ -28,6 +28,7 @@ import qualified Data.ByteString.Short as BSS
 import Data.ByteString.Short.Internal (ShortByteString (..))
 import Data.Foldable (for_, toList)
 import Data.Int (Int8)
+import Data.Maybe (fromJust)
 import Data.Primitive.ByteArray (ByteArray (..), MutableByteArray, cloneByteArray, copyByteArray, indexByteArray,
                                  newByteArray, setByteArray, unsafeFreezeByteArray, writeByteArray)
 import Data.Primitive.PrimArray (PrimArray (..), sizeofPrimArray)
@@ -253,19 +254,19 @@ writeShortByteString :: ShortByteString -> Int -> MutableByteArray s -> Int -> S
 writeShortByteString (SBS frozArr) len arr pos = copyByteArray arr pos (ByteArray frozArr) 0 len
 
 writeStaticSeq :: PutStaticSeqF (PutEff s a) -> PutEff s a
-writeStaticSeq (PutStaticSeqF n z p s k) = do
+writeStaticSeq (PutStaticSeqF n mz p s k) = do
   let n' = fromIntegral n
   for_ (take n' (toList s)) $ \a -> do
     let !x = p a
     mkPutEff x
   let !e = Seq.length s
   unless (n' <= e) $ do
-    let !q = mkPutEff (p z)
+    let !q = mkPutEff (p (fromJust mz))
     replicateM_ (n' - e) q
   k
 
 writeStaticArray :: PutStaticArrayF (PutEff s a) -> PutEff s a
-writeStaticArray psa@(PutStaticArrayF needElems z a@(PrimArray frozArr) k) = do
+writeStaticArray psa@(PutStaticArrayF needElems mz a@(PrimArray frozArr) k) = do
   let !elemSize = putStaticArrayElemSize psa
       !haveElems = sizeofPrimArray a
       !useElems = min haveElems (fromIntegral needElems)
@@ -274,7 +275,7 @@ writeStaticArray psa@(PutStaticArrayF needElems z a@(PrimArray frozArr) k) = do
   let !needBc = putStaticArraySize psa
   unless (useBc == needBc) $ do
     let !extraBc = needBc - useBc
-    writeBytes extraBc (\arr pos -> setByteArray arr (pos + useBc) (pos + extraBc) z)
+    writeBytes extraBc (\arr pos -> setByteArray arr (pos + useBc) (pos + extraBc) (fromJust mz))
   k
 
 execPutRun :: PutF (PutEff s a) -> PutEff s a

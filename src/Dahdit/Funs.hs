@@ -204,19 +204,19 @@ putSeq = traverse_
 putStaticSeq :: StaticByteSized a => (a -> Put) -> Seq a -> Put
 putStaticSeq p s =
   let !n = fromIntegral (Seq.length s)
-  in unsafePutStaticSeqN n undefined p s
+  in unsafePutStaticSeqN n Nothing p s
 
-unsafePutStaticSeqN :: StaticByteSized a => ElementCount -> a -> (a -> Put) -> Seq a -> Put
-unsafePutStaticSeqN n z p s = PutM (F (\x y -> y (PutFStaticSeq (PutStaticSeqF n z p s (x ())))))
+unsafePutStaticSeqN :: StaticByteSized a => ElementCount -> Maybe a -> (a -> Put) -> Seq a -> Put
+unsafePutStaticSeqN n mz p s = PutM (F (\x y -> y (PutFStaticSeq (PutStaticSeqF n mz p s (x ())))))
 
 -- | Put Array of statically-sized elements
 putStaticArray :: (StaticByteSized a, Prim a) => PrimArray a -> Put
 putStaticArray a =
   let !n = fromIntegral (sizeofPrimArray a)
-  in unsafePutStaticArrayN n undefined a
+  in unsafePutStaticArrayN n Nothing a
 
-unsafePutStaticArrayN :: (StaticByteSized a, Prim a) => ElementCount -> a -> PrimArray a -> Put
-unsafePutStaticArrayN n z a = PutM (F (\x y -> y (PutFStaticArray (PutStaticArrayF n z a (x ())))))
+unsafePutStaticArrayN :: (StaticByteSized a, Prim a) => ElementCount -> Maybe a -> PrimArray a -> Put
+unsafePutStaticArrayN n mz a = PutM (F (\x y -> y (PutFStaticArray (PutStaticArrayF n mz a (x ())))))
 
 putStaticHint :: StaticByteSized a => (a -> Put) -> a -> Put
 putStaticHint p =
