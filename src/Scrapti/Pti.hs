@@ -100,15 +100,15 @@ data Preamble = Preamble
 
 instance Default Preamble where
   def = Preamble
-    { preAux0To19 = "TI"
+    { preAux0To19 = "TI\SOH\NUL\SOH\ENQ\NUL\SOH\t\t\t\tt\SOHff\SOH\NUL\NUL\NUL"
     , preIsWavetable = BoolByte False
     , preName = ""
-    , preAux52To59 = def
+    , preAux52To59 = "\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL"
     , preSampleLength = 0
     , preWavetableWindowSize = def
     , preAux66To67 = 0
     , preWavetableTotalPositions = 0
-    , preAux70To75 = def
+    , preAux70To75 = "\NUL\NUL\NUL\NUL\NUL\NUL"
     , preSamplePlayback = def
     , preAux77 = 0
     , prePlaybackStart = 0
@@ -139,7 +139,15 @@ data AutoEnvelope = AutoEnvelope
     deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric AutoEnvelope)
 
 instance Default AutoEnvelope where
-  def = AutoEnvelope 1.0 0 0 0 0 1.0 1000
+  def = AutoEnvelope
+    { aeAmount = 1.0
+    , aeAux96To97 = 0
+    , aeAttack = 0
+    , aeAux100To101 = 0
+    , aeDecay = 0
+    , aeSustain = 1.0
+    , aeRelease = 1000
+    }
 
 data AutoType =
     ATOff
@@ -229,7 +237,12 @@ data Lfo = Lfo
     deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Lfo)
 
 instance Default Lfo where
-  def = Lfo def def 0 0.5
+  def = Lfo
+    { lfoType = def
+    , lfoSteps = def
+    , lfoAux214To215 = 0
+    , lfoAmount = 0.5
+    }
 
 data FilterType =
     FTDisabled
@@ -263,7 +276,11 @@ data Filter = Filter
     deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Filter)
 
 instance Default Filter where
-  def = Filter 1.0 0.0 def
+  def = Filter
+    { filtCutoff = 1.0
+    , filtResonance = 0.0
+    , filtType = def
+    }
 
 data InstParams = InstParams
   { ipTune :: !Int8
@@ -286,7 +303,16 @@ data InstParams = InstParams
     deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric InstParams)
 
 instance Default InstParams where
-  def = InstParams 0 0 0 def 50 0 50 0
+  def = InstParams
+    { ipTune = 0
+    , ipFineTune = 0
+    , ipVolume = 0
+    , ipAux273To275 = "\NUL\NUL\NUL"
+    , ipPanning = 50
+    , ipAux277 = 0
+    , ipDelaySend = 50
+    , ipAux279 = 0
+    }
 
 data Slices = Slices
   { slicesAdjust :: !(StaticArray 48 Word16LE)
@@ -296,7 +322,11 @@ data Slices = Slices
     deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Slices)
 
 instance Default Slices where
-  def = Slices def 0 0
+  def = Slices
+    { slicesAdjust = def
+    , slicesNumber = 0
+    , slicesActive = 0
+    }
 
 data GranularShape =
     GSSquare
@@ -329,7 +359,12 @@ data Granular = Granular
     deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Granular)
 
 instance Default Granular where
-  def = Granular 441 0 def def
+  def = Granular
+    { granLen = 441
+    , granPos = 0
+    , granShape = def
+    , granLoopMode = def
+    }
 
 data Effects = Effects
   { effReverbSend :: !Word8
@@ -346,7 +381,13 @@ data Effects = Effects
     deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Effects)
 
 instance Default Effects where
-  def = Effects 0 0 16 0 0
+  def = Effects
+    { effReverbSend = 0
+    , effOverdrive = 0
+    , effBitDepth = 16
+    , effAux387 = 0
+    , effAux388To391 = 0
+    }
 
 data Block a = Block
   { blockVolume :: !a

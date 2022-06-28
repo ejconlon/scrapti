@@ -4,6 +4,7 @@ import Dahdit (Binary (..), ByteCount, ElementCount, Get, Int16LE, Proxy (..), S
                StaticBytes, Word16LE, Word32LE, Word8, byteSize, getExact, getSkip, runGetIO, runPut)
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Short as BSS
+import Data.Default (def)
 import Data.Primitive.PrimArray (sizeofPrimArray)
 import qualified Data.Sequence as Seq
 import Scrapti.Pti (Auto (..), AutoEnvelope (..), AutoType, Block, Effects (..), Filter, FilterType, Granular,
@@ -15,7 +16,7 @@ import Scrapti.Sfont (Bag, Gen, InfoChunk (..), Inst, ListChunk (..), Mod, OptCh
 import Scrapti.Wav (Sampled (..), SampledWav (..), Wav (..), WavBody (..), WavChunk (..), WavFormat (..),
                     WavFormatChunk (..), WavHeader (..), WavSampleChunk (..))
 import Test.Tasty (TestTree, testGroup)
-import Test.Tasty.HUnit (testCase, (@?=))
+import Test.Tasty.HUnit (assertEqual, testCase, (@?=))
 
 dataOffset :: ByteCount
 dataOffset = 36
@@ -210,8 +211,26 @@ selEffAux388To391 = effAux388To391 . hdrEffects
 testPtiDefaults :: TestTree
 testPtiDefaults = testCase "defaults" $ do
   bs <- readShort "testdata/testproj/instruments/1 drums.pti"
-  (hdr, _) <- runGetIO (get @Header) bs
-  pure ()
+  (actHdr, _) <- runGetIO (get @Header) bs
+  let defHdr = def @Header
+      same :: (Eq a, Show a) => Int -> Sel a -> IO ()
+      same i sel = assertEqual ("aux " ++ show i) (sel defHdr) (sel actHdr)
+  same 0 selPreAux0To19
+  same 52 selPreAux52To59
+  same 66 selPreAux66To67
+  same 70 selPreAux70To75
+  same 77 selPreAux77
+  same 86 selPreAux86To87
+  same 90 selPreAux90To91
+  same 96 selAeAux96To97
+  same 100 selAeAux100To101
+  same 214 selLfoAux214To215
+  same 273 selIpAux273To275
+  same 277 selIpAux277
+  same 279 selIpAux279
+  same 387 selEffAux387
+  -- I think this is some checksum
+  -- same 388 selEffAux388To391
 
 testPti :: TestTree
 testPti = testGroup "pti" [testPtiSizes, testPtiWrite, testPtiDefaults]
