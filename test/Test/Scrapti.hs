@@ -1,7 +1,7 @@
 module Test.Scrapti (testScrapti) where
 
 import Dahdit (Binary (..), ByteCount, ElementCount, Get, Int16LE, Proxy (..), ShortByteString, StaticByteSized (..),
-               StaticBytes, Word16LE, Word32LE, Word8, byteSize, getExact, getSkip, runGetIO, runPut)
+               StaticBytes, Word16LE, Word8, byteSize, getExact, getSkip, getWord32LE, runGetIO, runPut)
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Short as BSS
 import Data.Default (def)
@@ -9,7 +9,7 @@ import Data.Primitive.PrimArray (sizeofPrimArray)
 import qualified Data.Sequence as Seq
 import Scrapti.Pti (Auto (..), AutoEnvelope (..), AutoType, Block, Effects (..), Filter, FilterType, Granular,
                     GranularLoopMode, GranularShape, Header (..), InstParams (..), Lfo (..), LfoSteps, LfoType,
-                    Postamble (..), Preamble (..), Pti (..), SamplePlayback, Slices, WavetableWindowSize)
+                    Preamble (..), Pti (..), SamplePlayback, Slices, WavetableWindowSize, calculateCrc)
 import Scrapti.Riff (Chunk (..), chunkHeaderSize, getChunkSize, getExpectLabel, labelRiff)
 import Scrapti.Sfont (Bag, Gen, InfoChunk (..), Inst, ListChunk (..), Mod, OptChunk (..), PdtaChunk (..), Phdr,
                       Sdta (..), SdtaChunk (..), Sfont (..), Shdr, labelSfbk)
@@ -153,8 +153,8 @@ testPtiSizes = testCase "sizes" $ do
   staticByteSize (Proxy :: Proxy GranularLoopMode) @?= 1
   staticByteSize (Proxy :: Proxy Granular) @?= 6
   staticByteSize (Proxy :: Proxy Effects) @?= 4
-  staticByteSize (Proxy :: Proxy Postamble) @?= 4
-  staticByteSize (Proxy :: Proxy Header) @?= 392
+  staticByteSize (Proxy :: Proxy Header) @?= 388
+  -- NOTE: total "header size" is 392 with crc32
 
 testPtiWrite :: TestTree
 testPtiWrite = testCase "write" $ do
@@ -206,9 +206,6 @@ selIpAux279 = ipAux279 . hdrInstParams
 selEffAux387 :: Sel Word8
 selEffAux387 = effAux387 . hdrEffects
 
-selPostAux388To391 :: Sel Word32LE
-selPostAux388To391 = postAux388To391 . hdrPostamble
-
 testPtiAux :: TestTree
 testPtiAux = testCase "aux" $ do
   bs <- readShort "testdata/testproj/instruments/1 drums.pti"
@@ -230,17 +227,18 @@ testPtiAux = testCase "aux" $ do
   same 277 selIpAux277
   same 279 selIpAux279
   same 387 selEffAux387
-  -- I think this is some checksum
-  -- same 388 selPostAux388To391
 
 testPtiMinimal :: TestTree
 testPtiMinimal = testCase "minimal" $ do
   bs <- readShort "testdata/testproj/instruments/1 drums.pti"
-  (actHdr, _) <- runGetIO (get @Header) bs
+  ((actHdr, actDigest), _) <- runGetIO ((,) <$> get @Header <*> getWord32LE) bs
   let defHdr = def @Header
       actPre = hdrPreamble actHdr
       defPre = hdrPreamble defHdr
       modDefPre = defPre { preName = preName actPre }
+      modDefHdr = defHdr { hdrPreamble = modDefPre }
+  -- Check individually
+  -- For preamble, need to set name
   actPre @?= modDefPre
   hdrAutoBlock actHdr @?= hdrAutoBlock defHdr
   hdrLfoBlock actHdr @?= hdrLfoBlock defHdr
@@ -249,9 +247,20 @@ testPtiMinimal = testCase "minimal" $ do
   hdrSlices actHdr @?= hdrSlices defHdr
   hdrGranular actHdr @?= hdrGranular defHdr
   hdrEffects actHdr @?= hdrEffects defHdr
+  -- Now check altogether
+  actHdr @?= modDefHdr
+  -- Now check digest
+  let modDefDigest = calculateCrc modDefHdr
+  actDigest @?= modDefDigest
+
+testPtiDigest :: TestTree
+testPtiDigest = testCase "digest" $ do
+  let defPti = def @Pti
+      expecDigest = calculateCrc (ptiHeader defPti)
+  ptiCrc defPti @?= expecDigest
 
 testPti :: TestTree
-testPti = testGroup "pti" [testPtiSizes, testPtiWrite, testPtiAux, testPtiMinimal]
+testPti = testGroup "pti" [testPtiSizes, testPtiWrite, testPtiAux, testPtiMinimal, testPtiDigest]
 
 testScrapti :: TestTree
 testScrapti = testGroup "Scrapti" [testWav, testSfont, testPti]

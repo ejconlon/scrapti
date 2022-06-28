@@ -76,6 +76,7 @@ library
     , bytestring
     , containers
     , data-default
+    , digest
     , free
     , mtl
     , primitive
@@ -123,6 +124,7 @@ test-suite scrapti-test
     , bytestring
     , containers
     , data-default
+    , digest
     , free
     , mtl
     , primitive

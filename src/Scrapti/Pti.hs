@@ -5,8 +5,11 @@ module Scrapti.Pti where
 
 import Dahdit (Binary (..), BinaryRep (..), BoolByte (..), ByteSized (..), FloatLE, Int16LE, PrimArray, Proxy (..),
                StaticArray, StaticByteSized (..), StaticBytes, ViaBinaryRep (..), ViaBoundedEnum (..), ViaGeneric (..),
-               ViaStaticGeneric (..), Word16LE, Word32LE, getRemainingStaticArray, getStaticArray, putStaticArray)
+               ViaStaticGeneric (..), Word16LE, Word32LE, getRemainingStaticArray, getStaticArray, putStaticArray,
+               putWord32LE, runPut)
+import qualified Data.ByteString.Short as BSS
 import Data.Default (Default (..))
+import Data.Digest.CRC32 (crc32)
 import Data.Int (Int8)
 import Data.Primitive.PrimArray (emptyPrimArray)
 import Data.Word (Word8)
@@ -386,16 +389,6 @@ instance Default Effects where
     , effAux387 = 0
     }
 
-newtype Postamble = Postamble
-  { postAux388To391 :: Word32LE
-  -- 388-391
-  } deriving stock (Show)
-    deriving newtype (Eq, ByteSized, StaticByteSized, Binary)
-
-instance Default Postamble where
-  -- TODO I think this is actually a checksum
-  def = Postamble 0
-
 data Block a = Block
   { blockVolume :: !a
   , blockPanning :: !a
@@ -430,31 +423,44 @@ data Header = Header
   , hdrSlices :: !Slices
   , hdrGranular :: !Granular
   , hdrEffects :: !Effects
-  , hdrPostamble :: !Postamble
   } deriving stock (Eq, Show, Generic)
     deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Header)
 
 instance Default Header where
-  def = Header def defAutoBlock def def def def def def def
+  def = Header def defAutoBlock def def def def def def
 
 data Pti = Pti
   { ptiHeader :: !Header
+  , ptiCrc :: !Word32LE
   , ptiWav :: !(PrimArray Int16LE)
   } deriving stock (Eq, Show, Generic)
     deriving (ByteSized) via (ViaGeneric Pti)
 
+calculateCrc :: Header -> Word32LE
+calculateCrc hdr = fromIntegral (crc32 (BSS.fromShort (runPut (put hdr))))
+
+updateCrc :: Pti -> Pti
+updateCrc pti = pti { ptiCrc = calculateCrc (ptiHeader pti) }
+
+checkCrc :: Pti -> Bool
+checkCrc pti = ptiCrc pti == calculateCrc (ptiHeader pti)
+
 instance Binary Pti where
   get = do
     header <- get
+    crc <- get
     let !sampleLength = fromIntegral (preSampleLength (hdrPreamble header))
     wav <-
       if sampleLength == 0  -- what the heck, it happens
         then getRemainingStaticArray (Proxy :: Proxy Int16LE)
         else getStaticArray @Int16LE sampleLength
-    pure $! Pti header wav
-  put (Pti header wav) = do
+    pure $! Pti header crc wav
+  put (Pti header crc wav) = do
     put header
+    putWord32LE crc
     putStaticArray wav
 
 instance Default Pti where
-  def = Pti def emptyPrimArray
+  -- NOTE: The default CRC will need to be updated when the default header changes.
+  -- There is a unit test that will fail if not
+  def = Pti def 222402026 emptyPrimArray
