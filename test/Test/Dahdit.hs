@@ -1,11 +1,12 @@
 module Test.Dahdit (testDahdit) where
 
-import Dahdit (Binary (..), ByteCount, ByteSized (..), FloatLE (..), Generic, Get, Int16LE, Int32LE, Int8, Proxy (..),
-               Put, ShortByteString, StaticByteSized (..), ViaGeneric (..), ViaStaticGeneric (..), Word16LE, Word32LE,
-               Word8, getByteString, getExact, getFloatLE, getInt16LE, getInt32LE, getInt8, getLookAhead,
-               getRemainingSize, getSeq, getSkip, getStaticArray, getStaticSeq, getWithin, getWord16LE, getWord32LE,
-               getWord8, putByteString, putFloatLE, putInt16LE, putInt32LE, putInt8, putSeq, putStaticArray,
-               putStaticSeq, putWord16LE, putWord32LE, putWord8, runCount, runGet, runPut)
+import Dahdit (Binary (..), BoolByte (BoolByte), ByteCount, ByteSized (..), FloatLE (..), Generic, Get, Int16LE,
+               Int32LE, Int8, Proxy (..), Put, ShortByteString, StaticByteSized (..), ViaGeneric (..),
+               ViaStaticGeneric (..), Word16LE, Word32LE, Word8, getByteString, getExact, getFloatLE, getInt16LE,
+               getInt32LE, getInt8, getLookAhead, getRemainingSize, getSeq, getSkip, getStaticArray, getStaticSeq,
+               getWithin, getWord16LE, getWord32LE, getWord8, putByteString, putFloatLE, putInt16LE, putInt32LE,
+               putInt8, putSeq, putStaticArray, putStaticSeq, putWord16LE, putWord32LE, putWord8, runCount, runGet,
+               runPut)
 import qualified Data.ByteString.Short as BSS
 import Data.Primitive.PrimArray (primArrayFromList)
 import qualified Data.Sequence as Seq
@@ -69,6 +70,7 @@ testDahditStaticByteSize = testGroup "staticByteSize"
   , testCase "Int32LE" (staticByteSize @Int32LE Proxy @?= 4)
   , testCase "FloatLE" (staticByteSize @FloatLE Proxy @?= 4)
   , testCase "StaFoo" (staticByteSize @StaFoo Proxy @?= 3)
+  , testCase "BoolByte" (staticByteSize @BoolByte Proxy @?= 1)
   ]
 
 testDahditGet :: TestTree
@@ -102,6 +104,8 @@ testDahditGet = testGroup "get"
   , testCase "getWithin eq" (runGetCase (getWithin 2 getWord16LE) (Just (2, 1, 0x5DEC)) [0xEC, 0x5D, 0xBB])
   , testCase "getWithin lt" (runGetCase (getWithin 1 getWord16LE) Nothing [0xEC, 0x5D, 0xBB])
   , testCase "getWithin gt" (runGetCase (getWithin 3 getWord16LE) (Just (2, 1, 0x5DEC)) [0xEC, 0x5D, 0xBB])
+  , testCase "BoolByte True" (runGetCase (get @BoolByte) (Just (1, 0, BoolByte True)) [0x01])
+  , testCase "BoolByte False" (runGetCase (get @BoolByte) (Just (1, 0, BoolByte False)) [0x00])
   ]
 
 testDahditPut :: TestTree
@@ -121,6 +125,8 @@ testDahditPut = testGroup "put"
   , testCase "StaticArray" (runPutCase (putStaticArray @Word16LE (primArrayFromList [0x5DEC, 0x4020])) [0xEC, 0x5D, 0x20, 0x40])
   , testCase "DynFoo" (runPutCase (put (DynFoo 0xBB 0x5DEC)) [0xBB, 0xEC, 0x5D])
   , testCase "StaFoo" (runPutCase (put (StaFoo 0xBB 0x5DEC)) [0xBB, 0xEC, 0x5D])
+  , testCase "BoolByte True" (runPutCase (put (BoolByte True)) [0x01])
+  , testCase "BoolByte False" (runPutCase (put (BoolByte False)) [0x00])
   ]
 
 testDahdit :: TestTree

@@ -136,5 +136,5 @@ instance StaticByteSized BoolByte where
   staticByteSize _ = 1
 
 instance Binary BoolByte where
-  get = fmap (BoolByte . (== 0)) getWord8
+  get = fmap (BoolByte . (/= 0)) getWord8
   put (BoolByte b) = putWord8 (if b then 1 else 0)

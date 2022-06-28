@@ -158,13 +158,11 @@ testPtiWrite :: TestTree
 testPtiWrite = testCase "write" $ do
   bs <- readShort "testdata/testproj/instruments/1 drums.pti"
   (pti, bc) <- runGetIO (get @Pti) bs
-  -- print (ptiHeader pti)
   byteSize pti @?= bc
   fromIntegral bc @?= BSS.length bs
   sizeofPrimArray (ptiWav pti) @?= div (fromIntegral drumDataLen) 2
-  -- TODO fix put
-  -- let bs' = runPut (put pti)
-  -- bs' @?= bs
+  let bs' = runPut (put pti)
+  bs' @?= bs
 
 testPti :: TestTree
 testPti = testGroup "pti" [testPtiSizes, testPtiWrite]
