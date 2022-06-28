@@ -8,6 +8,7 @@ module Dahdit.Free
   , Get (..)
   , PutStaticSeqF (..)
   , PutStaticArrayF (..)
+  , PutStaticHintF (..)
   , PutF (..)
   , PutM (..)
   , Put
@@ -89,6 +90,12 @@ data PutStaticArrayF a where
 instance Functor PutStaticArrayF where
   fmap f (PutStaticArrayF n z a k) = PutStaticArrayF n z a (f k)
 
+data PutStaticHintF a where
+  PutStaticHintF :: !ByteCount -> Put -> a -> PutStaticHintF a
+
+instance Functor PutStaticHintF where
+  fmap f (PutStaticHintF n p k) = PutStaticHintF n p (f k)
+
 data PutF a =
     PutFWord8 !Word8 a
   | PutFInt8 !Int8 a
@@ -100,7 +107,7 @@ data PutF a =
   | PutFShortByteString !ByteCount !ShortByteString a
   | PutFStaticSeq !(PutStaticSeqF a)
   | PutFStaticArray !(PutStaticArrayF a)
-  | PutFStaticHint !ByteCount a
+  | PutFStaticHint !(PutStaticHintF a)
   deriving stock (Functor)
 
 newtype PutM a = PutM { unPutM :: F PutF a }

@@ -1,17 +1,19 @@
 module Test.Scrapti (testScrapti) where
 
-import Dahdit (Binary (..), ByteCount, ElementCount, Get, Int16LE, ShortByteString, getSkip, runGetIO, runPut, getExact, Proxy (..), getRemainingSize)
+import Dahdit (Binary (..), ByteCount, ElementCount, Get, Int16LE, Proxy (..), ShortByteString, StaticByteSized (..),
+               byteSize, getExact, getSkip, runGetIO, runPut)
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Short as BSS
 import Data.Primitive.PrimArray (sizeofPrimArray)
 import qualified Data.Sequence as Seq
-import Scrapti.Riff (Chunk (..))
-import Scrapti.Sfont (InfoChunk (..), ListChunk (..), PdtaChunk (..), SdtaChunk (..), Sfont (..))
+import Scrapti.Riff (Chunk (..), chunkHeaderSize, getChunkSize, getExpectLabel, labelRiff)
+import Scrapti.Sfont (Bag, Gen, InfoChunk (..), Inst, ListChunk (..), Mod, OptChunk (..), PdtaChunk (..), Phdr,
+                      Sdta (..), SdtaChunk (..), Sfont (..), Shdr)
+import Scrapti.Sfont (labelSfbk)
 import Scrapti.Wav (Sampled (..), SampledWav (..), Wav (..), WavBody (..), WavChunk (..), WavFormat (..),
                     WavFormatChunk (..), WavHeader (..), WavSampleChunk (..))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (testCase, (@?=))
--- import Debug.Trace (traceM)
 
 dataOffset :: ByteCount
 dataOffset = 36
@@ -55,21 +57,6 @@ testWavData = testCase "data" $ do
       _ -> fail "expected samples"
   fromIntegral (sizeofPrimArray arr) @?= drumDataLen
 
--- testWavManual :: TestTree
--- testWavManual = testCase "manual" $ do
---   bs <- readShort "testdata/drums.wav"
---   ((header, body), bc) <- flip runGetIO bs $ do
---     initRem <- getRemainingSize
---     traceM ("XXX INIT REMAINING SIZE: " ++ show initRem)
---     header@(WavHeader remaining fmt) <- get @WavHeader
---     headerRem <- getRemainingSize
---     traceM ("XXX POST HEADER REMAINING SIZE: " ++ show headerRem)
---     traceM ("XXX HEADER FILE REMAINING SIZE: " ++ show remaining)
---     body <- getRestOfWav (Proxy :: Proxy Int16LE) remaining fmt
---     pure (header, body)
---   header @?= drumHeader
---   bc @?= dataOffset
-
 testWavWhole :: TestTree
 testWavWhole = testCase "whole" $ do
   bs <- readShort "testdata/drums.wav"
@@ -91,10 +78,13 @@ testWav = testGroup "wav" [testWavHeader, testWavData, testWavWhole, testWavWrit
 testSfontWhole :: TestTree
 testSfontWhole = testCase "whole" $ do
   bs <- readShort "testdata/timpani.sf2"
-  (Sfont (InfoChunk (ListChunk infos)) sdta (PdtaChunk (ListChunk pdtaBlocks)), _) <- runGetIO (get @Sfont) bs
+  (Sfont (InfoChunk (ListChunk infos)) (SdtaChunk (OptChunk maySdta)) (PdtaChunk (ListChunk pdtaBlocks)), _) <- runGetIO (get @Sfont) bs
   Seq.length infos @?= 5
-  sizeofPrimArray (sdtaHighBits sdta) @?= 1365026
-  sdtaLowBits sdta @?= Nothing
+  case maySdta of
+    Nothing -> fail "Missing sdta"
+    Just sdta -> do
+      sizeofPrimArray (sdtaHighBits sdta) @?= 1365026
+      sdtaLowBits sdta @?= Nothing
   Seq.length pdtaBlocks @?= 9
 
 testSfontWrite :: TestTree
@@ -104,8 +94,42 @@ testSfontWrite = testCase "write" $ do
   let bs' = runPut (put sfont)
   bs' @?= bs
 
+testSfontManual :: TestTree
+testSfontManual = testCase "manual" $ do
+  bs <- readShort "testdata/timpani.sf2"
+  ((info, sdta, pdta), _) <- flip runGetIO bs $ do
+    getExpectLabel labelRiff
+    chunkSize <- getChunkSize
+    getExact chunkSize $ do
+      getExpectLabel labelSfbk
+      info <- get @InfoChunk
+      sdta <- get @SdtaChunk
+      pdta <- get @PdtaChunk
+      pure (info, sdta, pdta)
+  let expecInfoSize = 124 + chunkHeaderSize
+      expecSdtaSize = 2730064 + chunkHeaderSize
+      expecPdtaSize = 3010 + chunkHeaderSize
+  byteSize info @?= expecInfoSize
+  byteSize sdta @?= expecSdtaSize
+  byteSize pdta @?= expecPdtaSize
+  let infoBs = runPut (put info)
+  BSS.length infoBs @?= fromIntegral expecInfoSize
+  let sdtaBs = runPut (put sdta)
+  BSS.length sdtaBs @?= fromIntegral expecSdtaSize
+  let pdtaBs = runPut (put pdta)
+  BSS.length pdtaBs @?= fromIntegral expecPdtaSize
+
+testSfontSizes :: TestTree
+testSfontSizes = testCase "sizes" $ do
+  staticByteSize (Proxy :: Proxy Phdr) @?= 38
+  staticByteSize (Proxy :: Proxy Bag) @?= 4
+  staticByteSize (Proxy :: Proxy Mod) @?= 10
+  staticByteSize (Proxy :: Proxy Gen) @?= 4
+  staticByteSize (Proxy :: Proxy Inst) @?= 22
+  staticByteSize (Proxy :: Proxy Shdr) @?= 46
+
 testSfont :: TestTree
-testSfont = testGroup "sfont" [testSfontWhole, testSfontWrite]
+testSfont = testGroup "sfont" [testSfontSizes, testSfontWhole, testSfontWrite, testSfontManual]
 
 testPtiManual :: TestTree
 testPtiManual = testCase "manual" $ do

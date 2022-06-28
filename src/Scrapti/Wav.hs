@@ -11,21 +11,20 @@ module Scrapti.Wav
   , WavBody (..)
   , Wav (..)
   , SampledWav (..)
-  -- TODO REMOVE
-  , getRestOfWav
+  , labelWave
   ) where
 
 import Control.Monad (unless)
 import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, Int16LE, Int32LE, PrimArray, ShortByteString,
                StaticByteSized (..), Word16LE, Word32LE, byteSizeFoldable, getByteString, getExact, getRemainingSeq,
-               getRemainingStaticArray, getRemainingString, getUnfold, putByteString, putSeq, putStaticArray, getRemainingSize)
+               getRemainingStaticArray, getRemainingString, getUnfold, putByteString, putSeq, putStaticArray)
 import Data.Default (Default (..))
 import Data.Int (Int8)
 import Data.Primitive (Prim)
 import Data.Proxy (Proxy (..))
 import Data.Sequence (Seq (..))
-import Scrapti.Riff (Chunk (..), Label, StaticLabel (..), getChunkSize, getExpectLabel, labelRiff, putChunkSize)
--- import Debug.Trace (traceM)
+import Scrapti.Riff (Chunk (..), Label, StaticLabel (..), chunkHeaderSize, getChunkSize, getExpectLabel, labelRiff,
+                     labelSize, putChunkSize)
 
 labelWave, labelFmt, labelData :: Label
 labelWave = "WAVE"
@@ -133,7 +132,7 @@ data WavHeader = WavHeader
   } deriving stock (Eq, Show)
 
 instance ByteSized WavHeader where
-  byteSize (WavHeader _ format) = 12 + byteSize format
+  byteSize (WavHeader _ format) = chunkHeaderSize + labelSize + byteSize format
 
 instance Binary WavHeader where
   get = do
@@ -142,11 +141,11 @@ instance Binary WavHeader where
     getExpectLabel labelWave
     format <- get
     let !formatSize = byteSize format
-    let !remainingSize = fileSize - formatSize - 4
+    let !remainingSize = fileSize - formatSize - labelSize
     pure $! WavHeader remainingSize format
   put (WavHeader remainingSize format) = do
     let !formatSize = byteSize format
-        !fileSize = remainingSize + formatSize + 4
+        !fileSize = remainingSize + formatSize + labelSize
     put labelRiff
     putChunkSize fileSize
     put labelWave
@@ -158,12 +157,11 @@ data WavUnparsedChunk = WavUnparsedChunk
   } deriving stock (Eq, Show)
 
 instance ByteSized WavUnparsedChunk where
-  byteSize (WavUnparsedChunk _ bs) = 8 + byteSize bs
+  byteSize (WavUnparsedChunk _ bs) = chunkHeaderSize + byteSize bs
 
 getUnparsedChunkPostLabel :: Label -> Get WavUnparsedChunk
 getUnparsedChunkPostLabel label = do
   chunkSize <- getChunkSize
-  -- traceM ("XXX READING UNPARSED CHUNK SIZE: " ++ show chunkSize)
   bs <- getByteString chunkSize
   pure $! WavUnparsedChunk label bs
 
@@ -189,7 +187,6 @@ instance (Prim a, StaticByteSized a) => ByteSized (WavChunk a) where
 instance (Prim a, StaticByteSized a) => Binary (WavChunk a) where
   get = do
     label <- get
-    -- traceM ("XXX READING CHUNK LABEL: " ++ show label)
     if label == labelData
       then fmap WavChunkSample getSampleChunkPostLabel
       else fmap WavChunkUnparsed (getUnparsedChunkPostLabel label)
@@ -211,7 +208,6 @@ instance (Prim a, StaticByteSized a) => ByteSized (WavBody a) where
 
 instance (Prim a, StaticByteSized a) => Binary (WavBody a) where
   get = do
-    -- traceM ("XXX STARTING BODY READ")
     (!pre, !sam) <- getUnfold Empty $ \pre -> do
       chunk <- get
       pure $! case chunk of
@@ -240,9 +236,6 @@ instance (Prim a, StaticByteSized a) => ByteSized (Wav a) where
 
 getRestOfWav :: (Prim a, StaticByteSized a) => Proxy a -> ByteCount -> WavFormatChunk -> Get (Wav a)
 getRestOfWav _ remainingSize fmtChunk = do
-  -- traceM ("XXX GET REST OF WAVE, SIZE: " ++ show remainingSize)
-  -- left <- getRemainingSize
-  -- traceM ("XXX BEFORE WAVE BODY GET LEFT: " ++ show left)
   body <- getExact remainingSize get
   pure $! Wav fmtChunk body
 

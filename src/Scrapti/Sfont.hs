@@ -2,11 +2,13 @@
 
 module Scrapti.Sfont
   ( ListChunk (..)
+  , OptChunk (..)
   , Sfont (..)
   , InfoChunk (..)
   , PdtaChunk (..)
-  , Info (..)
   , SdtaChunk (..)
+  , Info (..)
+  , Sdta (..)
   , PdtaCat (..)
   , PdtaBlock (..)
   , Pdta (..)
@@ -17,13 +19,14 @@ module Scrapti.Sfont
   , Inst (..)
   , Shdr (..)
   , buildPdta
+  , labelSfbk
   ) where
 
 import Control.Monad (unless)
 import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, Int16LE, PrimArray, ShortByteString, StaticByteSized (..),
                StaticBytes, TermBytes, ViaStaticByteSized (..), ViaStaticGeneric (..), Word16LE, Word32LE,
-               byteSizeFoldable, getExact, getRemainingSeq, getRemainingStaticSeq, getRemainingString, getSkip,
-               getStaticArray, putByteString, putSeq, putStaticArray)
+               byteSizeFoldable, getExact, getRemainingSeq, getRemainingSize, getRemainingStaticSeq, getRemainingString,
+               getSkip, getStaticArray, putByteString, putSeq, putStaticArray)
 import Data.Foldable (foldl')
 import Data.Int (Int8)
 import Data.Proxy (Proxy (..))
@@ -31,7 +34,8 @@ import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
 import Data.Word (Word8)
 import GHC.Generics (Generic)
-import Scrapti.Riff (Label, StaticLabel (..), chunkHeaderSize, getChunkSize, getExpectLabel, labelRiff, putChunkSize)
+import Scrapti.Riff (Label, StaticLabel (..), chunkHeaderSize, getChunkSize, getExpectLabel, labelRiff, labelSize,
+                     putChunkSize)
 
 labelSfbk, labelList, labelInfo, labelIfil, labelIver, labelIsng, labelInam, labelIrom, labelIcrd,
   labelIeng, labelIprd, labelIcop, labelIcmt, labelIsft, labelSdta, labelSmpl, labelSm24,
@@ -64,14 +68,6 @@ labelImod = "imod"
 labelIgen = "igen"
 labelShdr = "shdr"
 
--- sizePhdr, sizeBag, sizeMod, sizeGen, sizeInst, sizeShdr :: ByteCount
--- sizePhdr = 38
--- sizeBag = 4
--- sizeMod = 10
--- sizeGen = 4
--- sizeInst = 22
--- sizeShdr = 46
-
 newtype SampleCount = SampleCount { unSampleCount :: Word32LE }
   deriving stock (Show)
   deriving newtype (Eq, Ord, Num, Enum, Real, Integral, ByteSized, StaticByteSized, Binary)
@@ -79,7 +75,7 @@ newtype SampleCount = SampleCount { unSampleCount :: Word32LE }
 type ShortText = StaticBytes 20
 
 listChunkHeaderSize :: ByteCount
-listChunkHeaderSize = chunkHeaderSize + 4
+listChunkHeaderSize = chunkHeaderSize + labelSize
 
 newtype ListChunk a = ListChunk { listChunkElems :: Seq a }
   deriving stock (Show)
@@ -99,11 +95,38 @@ instance (StaticLabel a, Binary a) => Binary (ListChunk a) where
       pure $! ListChunk elems
   put (ListChunk elems) = do
     put labelList
-    let !chunkSize = byteSizeFoldable elems + 4
+    let !chunkSize = byteSizeFoldable elems + labelSize
     putChunkSize chunkSize
     let !label = staticLabel (Proxy :: Proxy a)
     put label
     putSeq put elems
+
+newtype OptChunk a = OptChunk { optChunkElem :: Maybe a }
+  deriving stock (Show)
+  deriving newtype (Eq)
+
+instance ByteSized a => ByteSized (OptChunk a) where
+  byteSize (OptChunk mayElem) = listChunkHeaderSize + byteSizeFoldable mayElem
+
+instance (StaticLabel a, Binary a) => Binary (OptChunk a) where
+  get = do
+    getExpectLabel labelList
+    chunkSize <- getChunkSize
+    getExact chunkSize $ do
+      let !label = staticLabel (Proxy :: Proxy a)
+      getExpectLabel label
+      mayElem <-
+        if chunkSize == labelSize
+          then pure Nothing
+          else fmap Just get
+      pure $! OptChunk mayElem
+  put (OptChunk mayElem) = do
+    put labelList
+    let !chunkSize = byteSizeFoldable mayElem + labelSize
+    putChunkSize chunkSize
+    let !label = staticLabel (Proxy :: Proxy a)
+    put label
+    maybe (pure ()) put mayElem
 
 data Sfont = Sfont
   { sfontInfo :: !InfoChunk
@@ -112,7 +135,7 @@ data Sfont = Sfont
   } deriving stock (Eq, Show)
 
 instance ByteSized Sfont where
-  byteSize (Sfont info sdta pdta) = chunkHeaderSize + byteSize info + byteSize sdta + byteSize pdta
+  byteSize (Sfont info sdta pdta) = chunkHeaderSize + labelSize + byteSize info + byteSize sdta + byteSize pdta
 
 instance Binary Sfont where
   get = do
@@ -126,7 +149,7 @@ instance Binary Sfont where
       pure $! Sfont info sdta pdta
   put sfont@(Sfont info sdta pdta) = do
     put labelRiff
-    let !chunkSize = byteSize sfont + 4
+    let !chunkSize = byteSize sfont - chunkHeaderSize
     putChunkSize chunkSize
     put labelSfbk
     put info
@@ -157,7 +180,7 @@ data Info =
   deriving stock (Eq, Show)
 
 instance StaticLabel Info where
-  staticLabel = const labelInfo
+  staticLabel _ = labelInfo
 
 instance ByteSized Info where
   byteSize info = chunkHeaderSize + case info of
@@ -236,15 +259,18 @@ instance Binary Info where
       InfoUsedTools z -> put z
       InfoReserved _ bs -> putByteString bs
 
-data SdtaChunk = SdtaChunk
+data Sdta = Sdta
   { sdtaHighBits :: !(PrimArray Int16LE)
   , sdtaLowBits :: !(Maybe (PrimArray Word8))
   } deriving stock (Eq, Show)
 
-instance ByteSized SdtaChunk where
-  byteSize (SdtaChunk high mlow) = sizeHigh + sizeLow where
-    sizeHigh = 12 + byteSize high
-    sizeLow = maybe 0 (\low -> 8 + byteSize low) mlow
+instance ByteSized Sdta where
+  byteSize (Sdta high mlow) = sizeHigh + sizeLow where
+    sizeHigh = chunkHeaderSize + byteSize high
+    sizeLow = maybe 0 (\low -> chunkHeaderSize + byteSize low) mlow
+
+instance StaticLabel Sdta where
+  staticLabel _ = labelSdta
 
 getHighBits :: SampleCount -> Get (PrimArray Int16LE)
 getHighBits numSamples = getStaticArray (fromIntegral numSamples)
@@ -252,32 +278,26 @@ getHighBits numSamples = getStaticArray (fromIntegral numSamples)
 getLowBits :: SampleCount -> Get (PrimArray Word8)
 getLowBits numSamples = getStaticArray (fromIntegral numSamples)
 
-instance Binary SdtaChunk where
+instance Binary Sdta where
   get = do
-    getExpectLabel labelList
-    chunkSize <- getChunkSize
-    getExact chunkSize $ do
-      getExpectLabel labelSdta
-      getExpectLabel labelSmpl
-      highSize <- getChunkSize
-      let !numSamples = div (fromIntegral highSize) 2
-      highBits <- getHighBits numSamples
-      let !numExtra = chunkSize - highSize - 12
-      if
-        | numExtra > 0 -> do
-          getExpectLabel labelSm24
-          lowSize <- getChunkSize
-          let !expectedSize = if even numSamples then numSamples else numSamples + 1
-          unless (fromIntegral lowSize == expectedSize) (fail "invalid low sample size")
-          lowBits <- getLowBits numSamples
-          unless (even numSamples) (getSkip 1)
-          pure $! SdtaChunk highBits (Just lowBits)
-        | numExtra == 0 -> pure $! SdtaChunk highBits Nothing
-        | otherwise -> fail "invalid sdata chunk/sample sizes"
-  put sdta@(SdtaChunk highBits mayLowBits) = do
-    put labelList
-    putChunkSize (byteSize sdta)
-    put labelSdta
+    chunkSize <- getRemainingSize
+    getExpectLabel labelSmpl
+    highSize <- getChunkSize
+    let !numSamples = div (fromIntegral highSize) 2
+    highBits <- getHighBits numSamples
+    let !numExtra = chunkSize - highSize - chunkHeaderSize
+    if
+      | numExtra > 0 -> do
+        getExpectLabel labelSm24
+        lowSize <- getChunkSize
+        let !expectedSize = if even numSamples then numSamples else numSamples + 1
+        unless (fromIntegral lowSize == expectedSize) (fail "invalid low sample size")
+        lowBits <- getLowBits numSamples
+        unless (even numSamples) (getSkip 1)
+        pure $! Sdta highBits (Just lowBits)
+      | numExtra == 0 -> pure $! Sdta highBits Nothing
+      | otherwise -> fail "invalid sdata chunk/sample sizes"
+  put (Sdta highBits mayLowBits) = do
     put labelSmpl
     putChunkSize (byteSize highBits)
     putStaticArray highBits
@@ -287,6 +307,10 @@ instance Binary SdtaChunk where
         put labelSm24
         putChunkSize (byteSize lowBits)
         putStaticArray lowBits
+
+newtype SdtaChunk = SdtaChunk { unSdtaChunk :: OptChunk Sdta }
+  deriving stock (Show)
+  deriving newtype (Eq, ByteSized, Binary)
 
 data PdtaCat =
     PdtaCatPreset

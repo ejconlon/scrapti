@@ -113,7 +113,7 @@ instance (KnownNat n, Prim a, Default a) => Default (StaticArray n a) where
   def = StaticArray (replicatePrimArray (fromIntegral (natVal (Proxy :: Proxy n))) def)
 
 instance (KnownNat n, StaticByteSized a) => StaticByteSized (StaticArray n a) where
-  staticByteSize = const (fromIntegral (natVal (Proxy :: Proxy n)) * staticByteSize (Proxy :: Proxy a))
+  staticByteSize _ = fromIntegral (natVal (Proxy :: Proxy n)) * staticByteSize (Proxy :: Proxy a)
 
 instance (KnownNat n, Prim a, StaticByteSized a, Default a) => Binary (StaticArray n a) where
   get = fmap StaticArray (getStaticArray (fromIntegral (natVal (Proxy :: Proxy n))))

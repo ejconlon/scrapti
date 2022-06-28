@@ -40,8 +40,9 @@ module Dahdit.Funs
 
 import Control.Monad (replicateM_, unless)
 import Control.Monad.Free.Church (F (..))
-import Dahdit.Free (Get (..), GetF (..), GetLookAheadF (..), GetStaticArrayF (..), GetStaticSeqF (..), Put, PutF (..),
-                    PutM (..), PutStaticArrayF (..), PutStaticSeqF (..), ScopeMode (..), GetScopeF (..))
+import Dahdit.Free (Get (..), GetF (..), GetLookAheadF (..), GetScopeF (..), GetStaticArrayF (..), GetStaticSeqF (..),
+                    Put, PutF (..), PutM (..), PutStaticArrayF (..), PutStaticHintF (..), PutStaticSeqF (..),
+                    ScopeMode (..))
 import Dahdit.Nums (FloatLE, Int16LE, Int32LE, Word16LE, Word32LE)
 import Dahdit.Proxy (Proxy (..), proxyForF, proxyForFun)
 import Dahdit.Sizes (ByteCount (..), ElementCount (..), StaticByteSized (..))
@@ -221,4 +222,4 @@ unsafePutStaticArrayN n mz a = PutM (F (\x y -> y (PutFStaticArray (PutStaticArr
 putStaticHint :: StaticByteSized a => (a -> Put) -> a -> Put
 putStaticHint p =
   let !bc = staticByteSize (proxyForFun p)
-  in \a -> PutM (F (\x y -> y (PutFStaticHint bc (x ())))) *> p a
+  in \a -> PutM (F (\x y -> y (PutFStaticHint (PutStaticHintF bc (p a) (x ())))))
