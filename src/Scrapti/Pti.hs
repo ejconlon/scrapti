@@ -3,14 +3,13 @@
 
 module Scrapti.Pti where
 
-import Dahdit (Binary (..), BinaryRep (..), BoolByte (..), ByteSized (..), FloatLE, Int16LE, StaticArray,
-               StaticByteSized (..), StaticBytes, ViaBinaryRep (..), ViaBoundedEnum (..), ViaGeneric (..),
-               ViaStaticGeneric (..), Word16LE, Word32LE)
+import Dahdit (Binary (..), BinaryRep (..), BoolByte (..), ByteSized (..), FloatLE, Int16LE, PrimArray, Proxy (..),
+               StaticArray, StaticByteSized (..), StaticBytes, ViaBinaryRep (..), ViaBoundedEnum (..), ViaGeneric (..),
+               ViaStaticGeneric (..), Word16LE, Word32LE, getRemainingStaticArray, putStaticArray)
 import Data.Default (Default (..))
 import Data.Int (Int8)
 import Data.Word (Word8)
 import GHC.Generics (Generic)
-import Scrapti.Wav (Wav)
 
 data WavetableWindowSize =
     WWS32
@@ -60,10 +59,10 @@ instance Default SamplePlayback where
 
 data Preamble = Preamble
   { preAux0To19 :: !(StaticBytes 20)
-  -- ^ 0-19
+  -- 0-19
   , preIsWavetable :: !BoolByte
   -- 20
-  , preName :: !(StaticBytes 30)
+  , preName :: !(StaticBytes 31)
   -- 21-51
   , preAux52To59 :: !(StaticBytes 8)
   -- 52-59
@@ -110,7 +109,7 @@ data AutoEnvelope = AutoEnvelope
   , aeAux96To97 :: !Word16LE
   -- 96-97
   , aeAttack :: !Word16LE
-  -- 98-909
+  -- 98-99
   , aeAux100To101 :: !Word16LE
   -- 100-101
   , aeDecay :: !Word16LE
@@ -141,12 +140,12 @@ instance Default AutoType where
 instance BinaryRep Word16LE AutoType where
   fromBinaryRep = \case
     0x0000 -> Right ATOff
-    0x0001 -> Right ATEnvelope
+    0x0100 -> Right ATEnvelope
     0x0101 -> Right ATLfo
-    other -> Left ("invalid automation type: " ++ show other)
+    other -> Left ("Invalid automation type: " ++ show other)
   toBinaryRep = \case
     ATOff -> 0x0000
-    ATEnvelope -> 0x0001
+    ATEnvelope -> 0x0100
     ATLfo -> 0x0101
 
 data Auto = Auto
@@ -235,15 +234,15 @@ instance Default FilterType where
 instance BinaryRep Word16LE FilterType where
   fromBinaryRep = \case
     0x0000 -> pure FTDisabled
-    0x0001 -> pure FTLowPass
+    0x0100 -> pure FTLowPass
     0x0101 -> pure FTHighPass
-    0x0201 -> pure FTBandPass
+    0x0102 -> pure FTBandPass
     other -> Left ("invalid filter type: " ++ show other)
   toBinaryRep = \case
     FTDisabled -> 0x0000
-    FTLowPass -> 0x0001
+    FTLowPass -> 0x0100
     FTHighPass -> 0x0101
-    FTBandPass -> 0x0201
+    FTBandPass -> 0x0102
 
 data Filter = Filter
   { filtCutoff :: !FloatLE
@@ -262,7 +261,7 @@ data InstParams = InstParams
   -- 271
   , ipVolume :: !Word8
   -- 272
-  , ipAux273To275 :: !Word16LE
+  , ipAux273To275 :: !(StaticBytes 3)
   -- 273-275
   , ipPanning :: !Word8
   -- 276
@@ -377,9 +376,18 @@ data Header = Header
 
 data Pti = Pti
   { ptiHeader :: !Header
-  , ptiWav :: !(Wav Int16LE)
+  , ptiWav :: !(PrimArray Int16LE)
   } deriving stock (Eq, Show, Generic)
-    deriving (ByteSized, Binary) via (ViaGeneric Pti)
+    deriving (ByteSized) via (ViaGeneric Pti)
+
+instance Binary Pti where
+  get = do
+    header <- get
+    wav <- getRemainingStaticArray (Proxy :: Proxy Int16LE)
+    pure $! Pti header wav
+  put (Pti header wav) = do
+    put header
+    putStaticArray wav
 
 -- instance Default Pti where
 --   def = Pti def def

@@ -20,7 +20,7 @@ instance (Binary x, Integral x, Bounded a, Enum a) => BinaryRep x (ViaBoundedEnu
   fromBinaryRep x =
     let i = fromIntegral x
     in if i < fromEnum (minBound :: a) || i > fromEnum (maxBound :: a)
-      then Left ("invalid enum value: " ++ show i)
+      then Left ("Invalid enum value: " ++ show i)
       else Right (ViaBoundedEnum (toEnum i))
   toBinaryRep = fromIntegral . fromEnum . unViaBoundedEnum
 

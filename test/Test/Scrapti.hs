@@ -6,6 +6,9 @@ import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Short as BSS
 import Data.Primitive.PrimArray (sizeofPrimArray)
 import qualified Data.Sequence as Seq
+import Scrapti.Pti (Auto, AutoEnvelope (..), AutoType, Effects (..), Filter, FilterType, Granular, GranularLoopMode,
+                    GranularShape, Header (..), InstParams, Lfo, LfoSteps, LfoType, Preamble (..), Pti, SamplePlayback,
+                    Slices, WavetableWindowSize)
 import Scrapti.Riff (Chunk (..), chunkHeaderSize, getChunkSize, getExpectLabel, labelRiff)
 import Scrapti.Sfont (Bag, Gen, InfoChunk (..), Inst, ListChunk (..), Mod, OptChunk (..), PdtaChunk (..), Phdr,
                       Sdta (..), SdtaChunk (..), Sfont (..), Shdr)
@@ -131,16 +134,38 @@ testSfontSizes = testCase "sizes" $ do
 testSfont :: TestTree
 testSfont = testGroup "sfont" [testSfontSizes, testSfontWhole, testSfontWrite, testSfontManual]
 
-testPtiManual :: TestTree
-testPtiManual = testCase "manual" $ do
-  -- bs <- readshort "testdata/testproj/instruments/1 drums.pti"
-  -- pti <- runGetIO (get @PairPti) bs
-  -- print ah
-  -- print pti
-  pure ()
+testPtiSizes :: TestTree
+testPtiSizes = testCase "sizes" $ do
+  staticByteSize (Proxy :: Proxy WavetableWindowSize) @?= 2
+  staticByteSize (Proxy :: Proxy SamplePlayback) @?= 1
+  staticByteSize (Proxy :: Proxy Preamble) @?= 92
+  staticByteSize (Proxy :: Proxy AutoEnvelope) @?= 18
+  staticByteSize (Proxy :: Proxy AutoType) @?= 2
+  staticByteSize (Proxy :: Proxy Auto) @?= 20
+  staticByteSize (Proxy :: Proxy LfoType) @?= 1
+  staticByteSize (Proxy :: Proxy LfoSteps) @?= 1
+  staticByteSize (Proxy :: Proxy Lfo) @?= 8
+  staticByteSize (Proxy :: Proxy FilterType) @?= 2
+  staticByteSize (Proxy :: Proxy Filter) @?= 10
+  staticByteSize (Proxy :: Proxy InstParams) @?= 10
+  staticByteSize (Proxy :: Proxy Slices) @?= 98
+  staticByteSize (Proxy :: Proxy GranularShape) @?= 1
+  staticByteSize (Proxy :: Proxy GranularLoopMode) @?= 1
+  staticByteSize (Proxy :: Proxy Granular) @?= 6
+  staticByteSize (Proxy :: Proxy Effects) @?= 8
+  staticByteSize (Proxy :: Proxy Header) @?= 392
+
+testPtiWrite :: TestTree
+testPtiWrite = testCase "write" $ do
+  bs <- readShort "testdata/testproj/instruments/1 drums.pti"
+  (pti, bc) <- runGetIO (get @Pti) bs
+  byteSize pti @?= bc
+  -- TODO fix put
+  -- let bs' = runPut (put pti)
+  -- bs' @?= bs
 
 testPti :: TestTree
-testPti = testGroup "pti" [testPtiManual]
+testPti = testGroup "pti" [testPtiSizes, testPtiWrite]
 
 testScrapti :: TestTree
 testScrapti = testGroup "Scrapti" [testWav, testSfont, testPti]
