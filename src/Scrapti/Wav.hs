@@ -245,7 +245,7 @@ instance (Prim a, StaticByteSized a) => Binary (Wav a) where
     let !fmt = chunkValue (unWavFormatChunk fmtChunk)
         !fmtBps = fromIntegral (wfBitsPerSample fmt)
         !prox = Proxy :: Proxy a
-        !parseBps = staticByteSize prox
+        !parseBps = staticByteSize prox * 8
     unless (fmtBps == parseBps) (fail ("Bad bps: in header: " ++ show fmtBps ++ " required: " ++ show parseBps))
     getRestOfWav prox remainingSize fmtChunk
   put (Wav fmtChunk body) = do

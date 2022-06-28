@@ -1,7 +1,8 @@
 module Test.Scrapti (testScrapti) where
 
-import Dahdit (Binary (..), ByteCount, ElementCount, Get, Int16LE, Proxy (..), ShortByteString, StaticByteSized (..),
-               StaticBytes, Word16LE, Word8, byteSize, getExact, getSkip, getWord32LE, runGetIO, runPut)
+import Dahdit (Binary (..), ByteCount, ElementCount, Get, Int16LE, PrimArray, Proxy (..), ShortByteString,
+               StaticByteSized (..), StaticBytes, Word16LE, Word8, byteSize, getExact, getSkip, getWord32LE, runGetIO,
+               runPut)
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Short as BSS
 import Data.Default (def)
@@ -259,8 +260,27 @@ testPtiDigest = testCase "digest" $ do
       expecDigest = calculateCrc (ptiHeader defPti)
   ptiCrc defPti @?= expecDigest
 
+getWavInt16LE :: Get (Wav Int16LE)
+getWavInt16LE = get
+
+extractWavData :: Wav a -> PrimArray a
+extractWavData = unWavSampleChunk . wbSample . wavBody
+
+testPtiWav :: TestTree
+testPtiWav = testCase "wav" $ do
+  wavBs <- readShort "testdata/drums.wav"
+  ptiBs <- readShort "testdata/testproj/instruments/1 drums.pti"
+  (wav, _) <- runGetIO getWavInt16LE wavBs
+  (pti, _) <- runGetIO (get @Pti) ptiBs
+  let wavData = extractWavData wav
+      ptiData = ptiWav pti
+  -- We expect there is half as many samples because it's converted to mono
+  sizeofPrimArray ptiData @?= div (sizeofPrimArray wavData) 2
+  -- As far as the content, I have no idea what it's doing to the signal...
+  -- Can do FFT and compare frequencies?
+
 testPti :: TestTree
-testPti = testGroup "pti" [testPtiSizes, testPtiWrite, testPtiAux, testPtiMinimal, testPtiDigest]
+testPti = testGroup "pti" [testPtiSizes, testPtiWrite, testPtiAux, testPtiMinimal, testPtiDigest, testPtiWav]
 
 testScrapti :: TestTree
 testScrapti = testGroup "Scrapti" [testWav, testSfont, testPti]
