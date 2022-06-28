@@ -8,6 +8,7 @@ import Dahdit (Binary (..), BinaryRep (..), BoolByte (..), ByteSized (..), Float
                ViaStaticGeneric (..), Word16LE, Word32LE, getRemainingStaticArray, getStaticArray, putStaticArray)
 import Data.Default (Default (..))
 import Data.Int (Int8)
+import Data.Primitive.PrimArray (emptyPrimArray)
 import Data.Word (Word8)
 import GHC.Generics (Generic)
 
@@ -97,11 +98,27 @@ data Preamble = Preamble
   } deriving stock (Eq, Show, Generic)
     deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Preamble)
 
--- instance Default Preamble where
---   def = Preamble (BoolByte False) "" 0 def 0 def 0 1 65534 65535 0
-
--- instance Default AuxPreamble where
---   def = AuxPreamble def def def def def def def
+instance Default Preamble where
+  def = Preamble
+    { preAux0To19 = "TI"
+    , preIsWavetable = BoolByte False
+    , preName = ""
+    , preAux52To59 = def
+    , preSampleLength = 0
+    , preWavetableWindowSize = def
+    , preAux66To67 = 0
+    , preWavetableTotalPositions = 0
+    , preAux70To75 = def
+    , preSamplePlayback = def
+    , preAux77 = 0
+    , prePlaybackStart = 0
+    , preLoopStart = 1
+    , preLoopEnd = 65534
+    , prePlaybackEnd = 65535
+    , preAux86To87 = 0
+    , preWavetablePosition = 0
+    , preAux90To91 = 0
+    }
 
 data AutoEnvelope = AutoEnvelope
   { aeAmount :: !FloatLE
@@ -121,11 +138,8 @@ data AutoEnvelope = AutoEnvelope
   } deriving stock (Eq, Show, Generic)
     deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric AutoEnvelope)
 
--- instance Default AutoEnvelope where
---   def = AutoEnvelope 1.0 0 0 1.0 1000
-
--- instance Default AuxAutoEnvelope where
---   def = AuxAutoEnvelope 0 0
+instance Default AutoEnvelope where
+  def = AutoEnvelope 1.0 0 0 0 0 1.0 1000
 
 data AutoType =
     ATOff
@@ -154,8 +168,8 @@ data Auto = Auto
   } deriving stock (Eq, Show, Generic)
     deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Auto)
 
--- instance Default Auto where
---   def = Auto def def
+instance Default Auto where
+  def = Auto def def
 
 data LfoType =
     LTRevSaw
@@ -214,11 +228,8 @@ data Lfo = Lfo
   } deriving stock (Eq, Show, Generic)
     deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Lfo)
 
--- instance Default Lfo where
---   def = Lfo def def 0.5
-
--- instance Default AuxLfo where
---   def = AuxLfo 0
+instance Default Lfo where
+  def = Lfo def def 0 0.5
 
 data FilterType =
     FTDisabled
@@ -274,11 +285,8 @@ data InstParams = InstParams
   } deriving stock (Eq, Show, Generic)
     deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric InstParams)
 
--- instance Default InstParams where
---   def = InstParams 0 0 50 50 0
-
--- instance Default AuxInstParams where
---   def = AuxInstParams 0 0 0
+instance Default InstParams where
+  def = InstParams 0 0 0 def 50 0 50 0
 
 data Slices = Slices
   { slicesAdjust :: !(StaticArray 48 Word16LE)
@@ -337,11 +345,8 @@ data Effects = Effects
   } deriving stock (Eq, Show, Generic)
     deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Effects)
 
--- instance Default Effects where
---   def = Effects 0 0 16
-
--- instance Default AuxEffects where
---   def = AuxEffects 0 0
+instance Default Effects where
+  def = Effects 0 0 16 0 0
 
 data Block a = Block
   { blockVolume :: !a
@@ -350,11 +355,14 @@ data Block a = Block
   , blockWavetablePosition :: !a
   , blockGranularPosition :: !a
   , blockFinetune :: !a
-  } deriving stock (Eq, Show, Generic)
+  } deriving stock (Eq, Show, Generic, Functor, Foldable, Traversable)
     deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric (Block a))
 
+mkBlock :: a -> Block a
+mkBlock a = Block a a a a a a
+
 instance Default a => Default (Block a) where
-  def = let a = def in Block a a a a a a
+  def = mkBlock def
 
 data Header = Header
   { hdrPreamble :: !Preamble
@@ -368,11 +376,8 @@ data Header = Header
   } deriving stock (Eq, Show, Generic)
     deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Header)
 
--- instance Default Header where
---   def = Header def def def def def def def def
-
--- instance Default AuxHeader where
---   def = AuxHeader def def def def def
+instance Default Header where
+  def = Header def def def def def def def def
 
 data Pti = Pti
   { ptiHeader :: !Header
@@ -393,5 +398,5 @@ instance Binary Pti where
     put header
     putStaticArray wav
 
--- instance Default Pti where
---   def = Pti def def
+instance Default Pti where
+  def = Pti def emptyPrimArray

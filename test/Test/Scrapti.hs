@@ -1,14 +1,14 @@
 module Test.Scrapti (testScrapti) where
 
 import Dahdit (Binary (..), ByteCount, ElementCount, Get, Int16LE, Proxy (..), ShortByteString, StaticByteSized (..),
-               byteSize, getExact, getSkip, runGetIO, runPut)
+               StaticBytes, Word16LE, Word32LE, Word8, byteSize, getExact, getSkip, runGetIO, runPut)
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Short as BSS
 import Data.Primitive.PrimArray (sizeofPrimArray)
 import qualified Data.Sequence as Seq
-import Scrapti.Pti (Auto, AutoEnvelope (..), AutoType, Effects (..), Filter, FilterType, Granular, GranularLoopMode,
-                    GranularShape, Header (..), InstParams, Lfo, LfoSteps, LfoType, Preamble (..), Pti (..),
-                    SamplePlayback, Slices, WavetableWindowSize)
+import Scrapti.Pti (Auto (..), AutoEnvelope (..), AutoType, Block, Effects (..), Filter, FilterType, Granular,
+                    GranularLoopMode, GranularShape, Header (..), InstParams (..), Lfo (..), LfoSteps, LfoType,
+                    Preamble (..), Pti (..), SamplePlayback, Slices, WavetableWindowSize)
 import Scrapti.Riff (Chunk (..), chunkHeaderSize, getChunkSize, getExpectLabel, labelRiff)
 import Scrapti.Sfont (Bag, Gen, InfoChunk (..), Inst, ListChunk (..), Mod, OptChunk (..), PdtaChunk (..), Phdr,
                       Sdta (..), SdtaChunk (..), Sfont (..), Shdr, labelSfbk)
@@ -164,8 +164,57 @@ testPtiWrite = testCase "write" $ do
   let bs' = runPut (put pti)
   bs' @?= bs
 
+type Sel a = Header -> a
+
+selPreAux0To19 :: Sel (StaticBytes 20)
+selPreAux0To19 = preAux0To19 . hdrPreamble
+
+selPreAux52To59 :: Sel (StaticBytes 8)
+selPreAux52To59 = preAux52To59 . hdrPreamble
+
+selPreAux66To67 :: Sel Word16LE
+selPreAux66To67 = preAux66To67 . hdrPreamble
+
+selPreAux70To75 :: Sel (StaticBytes 6)
+selPreAux70To75 = preAux70To75 . hdrPreamble
+
+selPreAux77 :: Sel Word8
+selPreAux77 = preAux77 . hdrPreamble
+
+selPreAux86To87 :: Sel Word16LE
+selPreAux86To87 = preAux86To87 . hdrPreamble
+
+selPreAux90To91 :: Sel Word16LE
+selPreAux90To91 = preAux90To91 . hdrPreamble
+
+selAeAux96To97, selAeAux100To101 :: Sel (Block Word16LE)
+selAeAux96To97 = fmap (aeAux96To97 . autoEnvelope) . hdrAutoBlock
+selAeAux100To101 = fmap (aeAux100To101 . autoEnvelope) . hdrAutoBlock
+
+selLfoAux214To215 :: Sel (Block Word16LE)
+selLfoAux214To215 = fmap lfoAux214To215 . hdrLfoBlock
+
+selIpAux273To275 :: Sel (StaticBytes 3)
+selIpAux273To275 = ipAux273To275 . hdrInstParams
+
+selIpAux277, selIpAux279 :: Sel Word8
+selIpAux277 = ipAux277 . hdrInstParams
+selIpAux279 = ipAux279 . hdrInstParams
+
+selEffAux387 :: Sel Word8
+selEffAux387 = effAux387 . hdrEffects
+
+selEffAux388To391 :: Sel Word32LE
+selEffAux388To391 = effAux388To391 . hdrEffects
+
+testPtiDefaults :: TestTree
+testPtiDefaults = testCase "defaults" $ do
+  bs <- readShort "testdata/testproj/instruments/1 drums.pti"
+  (hdr, _) <- runGetIO (get @Header) bs
+  pure ()
+
 testPti :: TestTree
-testPti = testGroup "pti" [testPtiSizes, testPtiWrite]
+testPti = testGroup "pti" [testPtiSizes, testPtiWrite, testPtiDefaults]
 
 testScrapti :: TestTree
 testScrapti = testGroup "Scrapti" [testWav, testSfont, testPti]
