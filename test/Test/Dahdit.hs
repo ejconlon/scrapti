@@ -4,7 +4,7 @@ import Dahdit (Binary (..), ByteCount, ByteSized (..), FloatLE (..), Generic, Ge
                Put, ShortByteString, StaticByteSized (..), ViaGeneric (..), ViaStaticGeneric (..), Word16LE, Word32LE,
                Word8, getByteString, getFloatLE, getInt16LE, getInt32LE, getInt8, getSeq, getStaticArray, getStaticSeq,
                getWord16LE, getWord32LE, getWord8, putByteString, putFloatLE, putInt16LE, putInt32LE, putInt8, putSeq,
-               putStaticArray, putStaticSeq, putWord16LE, putWord32LE, putWord8, runCount, runGet, runPut)
+               putStaticArray, putStaticSeq, putWord16LE, putWord32LE, putWord8, runCount, runGet, runPut, getSkip, getRemainingSize, getLookAhead, getExact, getWithin)
 import qualified Data.ByteString.Short as BSS
 import Data.Primitive.PrimArray (primArrayFromList)
 import qualified Data.Sequence as Seq
@@ -20,17 +20,18 @@ data StaFoo = StaFoo !Word8 !Word16LE
   deriving stock (Eq, Show, Generic)
   deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric StaFoo)
 
-runGetCase :: (Show a, Eq a) => Get a -> Maybe (ByteCount, a) -> [Word8] -> IO ()
+runGetCase :: (Show a, Eq a) => Get a -> Maybe (ByteCount, ByteCount, a) -> [Word8] -> IO ()
 runGetCase getter mayRes bsl = do
   let bs = BSS.pack bsl
       (result, actBc) = runGet getter bs
   case (result, mayRes) of
     (Left _, Nothing) -> pure ()
-    (Left err, Just (_, expecVal)) -> fail ("Got error <" ++ show err ++ ">, expected value <" ++ show expecVal ++ ">")
+    (Left err, Just (_, _, expecVal)) -> fail ("Got error <" ++ show err ++ ">, expected value <" ++ show expecVal ++ ">")
     (Right actVal, Nothing) -> fail ("Got value <" ++ show actVal ++ ">, expected error")
-    (Right actVal, Just (expecBc, expecVal)) -> do
+    (Right actVal, Just (expecBc, expecLeft, expecVal)) -> do
       actVal @?= expecVal
       actBc @?= expecBc
+      BSS.length bs - fromIntegral actBc @?= fromIntegral expecLeft
 
 runPutCase :: Put -> [Word8] -> IO ()
 runPutCase putter expecList = do
@@ -72,26 +73,34 @@ testDahditStaticByteSize = testGroup "staticByteSize"
 testDahditGet :: TestTree
 testDahditGet = testGroup "get"
   [ testCase "Word8 zero" (runGetCase getWord8 Nothing [])
-  , testCase "Word8 one" (runGetCase getWord8 (Just (1, 0x5D)) [0x5D])
-  , testCase "Word8 two" (runGetCase getWord8 (Just (1, 0x5D)) [0x5D, 0xBB])
-  , testCase "Int8" (runGetCase getInt8 (Just (1, 0x5D)) [0x5D])
+  , testCase "Word8 one" (runGetCase getWord8 (Just (1, 0, 0x5D)) [0x5D])
+  , testCase "Word8 two" (runGetCase getWord8 (Just (1, 1, 0x5D)) [0x5D, 0xBB])
+  , testCase "Int8" (runGetCase getInt8 (Just (1, 0, 0x5D)) [0x5D])
   , testCase "Word16LE zero" (runGetCase getWord16LE Nothing [])
   , testCase "Word16LE one" (runGetCase getWord16LE Nothing [0x5D])
-  , testCase "Word16LE two" (runGetCase getWord16LE (Just (2, 0x5DEC)) [0xEC, 0x5D])
-  , testCase "Word16LE three" (runGetCase getWord16LE (Just (2, 0x5DEC)) [0xEC, 0x5D, 0xBB])
-  , testCase "Int16LE" (runGetCase getInt16LE (Just (2, 0x5DEC)) [0xEC, 0x5D, 0xBB])
-  , testCase "Word32LE" (runGetCase getWord32LE (Just (4, 0x5DEC6EFD)) [0xFD, 0x6E, 0xEC, 0x5D])
-  , testCase "Int32LE" (runGetCase getInt32LE (Just (4, 0x5DEC6EFD)) [0xFD, 0x6E, 0xEC, 0x5D])
-  , testCase "FloatLE" (runGetCase getFloatLE (Just (4, FloatLE (castWord32ToFloat 0x5DEC6EFD))) [0xFD, 0x6E, 0xEC, 0x5D])
-  , testCase "ShortByteString" (runPutCase (putByteString (BSS.pack [0xEC, 0x5D])) [0xEC, 0x5D])
-  , testCase "ShortByteString" (runGetCase (getByteString 2) (Just (2, BSS.pack [0xEC, 0x5D])) [0xEC, 0x5D, 0xBB])
-  , testCase "Two Word8" (runGetCase ((,) <$> getWord8 <*> getWord8) (Just (2, (0x5D, 0xBB))) [0x5D, 0xBB])
-  , testCase "Two Word16LE" (runGetCase ((,) <$> getWord16LE <*> getWord16LE) (Just (4, (0x5DEC, 0x4020))) [0xEC, 0x5D, 0x20, 0x40])
-  , testCase "Seq" (runGetCase (getSeq 2 getWord16LE) (Just (4, Seq.fromList [0x5DEC, 0x4020])) [0xEC, 0x5D, 0x20, 0x40])
-  , testCase "StaticSeq" (runGetCase (getStaticSeq 2 getWord16LE) (Just (4, Seq.fromList [0x5DEC, 0x4020])) [0xEC, 0x5D, 0x20, 0x40])
-  , testCase "StaticArray" (runGetCase (getStaticArray @Word16LE 2) (Just (4, primArrayFromList [0x5DEC, 0x4020])) [0xEC, 0x5D, 0x20, 0x40])
-  , testCase "DynFoo" (runGetCase (get @DynFoo) (Just (3, DynFoo 0xBB 0x5DEC)) [0xBB, 0xEC, 0x5D])
-  , testCase "StaFoo" (runGetCase (get @StaFoo) (Just (3, StaFoo 0xBB 0x5DEC)) [0xBB, 0xEC, 0x5D])
+  , testCase "Word16LE two" (runGetCase getWord16LE (Just (2, 0, 0x5DEC)) [0xEC, 0x5D])
+  , testCase "Word16LE three" (runGetCase getWord16LE (Just (2, 1, 0x5DEC)) [0xEC, 0x5D, 0xBB])
+  , testCase "Int16LE" (runGetCase getInt16LE (Just (2, 1, 0x5DEC)) [0xEC, 0x5D, 0xBB])
+  , testCase "Word32LE" (runGetCase getWord32LE (Just (4, 0, 0x5DEC6EFD)) [0xFD, 0x6E, 0xEC, 0x5D])
+  , testCase "Int32LE" (runGetCase getInt32LE (Just (4, 0, 0x5DEC6EFD)) [0xFD, 0x6E, 0xEC, 0x5D])
+  , testCase "FloatLE" (runGetCase getFloatLE (Just (4, 0, FloatLE (castWord32ToFloat 0x5DEC6EFD))) [0xFD, 0x6E, 0xEC, 0x5D])
+  , testCase "ShortByteString" (runGetCase (getByteString 2) (Just (2, 1, BSS.pack [0xEC, 0x5D])) [0xEC, 0x5D, 0xBB])
+  , testCase "Two Word8" (runGetCase ((,) <$> getWord8 <*> getWord8) (Just (2, 0, (0x5D, 0xBB))) [0x5D, 0xBB])
+  , testCase "Two Word16LE" (runGetCase ((,) <$> getWord16LE <*> getWord16LE) (Just (4, 0, (0x5DEC, 0x4020))) [0xEC, 0x5D, 0x20, 0x40])
+  , testCase "Seq" (runGetCase (getSeq 2 getWord16LE) (Just (4, 0, Seq.fromList [0x5DEC, 0x4020])) [0xEC, 0x5D, 0x20, 0x40])
+  , testCase "StaticSeq" (runGetCase (getStaticSeq 2 getWord16LE) (Just (4, 0, Seq.fromList [0x5DEC, 0x4020])) [0xEC, 0x5D, 0x20, 0x40])
+  , testCase "StaticArray" (runGetCase (getStaticArray @Word16LE 2) (Just (4, 0, primArrayFromList [0x5DEC, 0x4020])) [0xEC, 0x5D, 0x20, 0x40])
+  , testCase "DynFoo" (runGetCase (get @DynFoo) (Just (3, 0, DynFoo 0xBB 0x5DEC)) [0xBB, 0xEC, 0x5D])
+  , testCase "StaFoo" (runGetCase (get @StaFoo) (Just (3, 0, StaFoo 0xBB 0x5DEC)) [0xBB, 0xEC, 0x5D])
+  , testCase "getRemainingSize" (runGetCase getRemainingSize (Just (0, 3, 3)) [0xBB, 0xEC, 0x5D])
+  , testCase "getSkip" (runGetCase (getSkip 2) (Just (2, 1, ())) [0xBB, 0xEC, 0x5D])
+  , testCase "getLookAhead" (runGetCase (getLookAhead getWord16LE) (Just (0, 3, 0x5DEC)) [0xEC, 0x5D, 0xBB])
+  , testCase "getExact eq" (runGetCase (getExact 2 getWord16LE) (Just (2, 1, 0x5DEC)) [0xEC, 0x5D, 0xBB])
+  , testCase "getExact lt" (runGetCase (getExact 1 getWord16LE) Nothing [0xEC, 0x5D, 0xBB])
+  , testCase "getExact gt" (runGetCase (getExact 3 getWord16LE) Nothing [0xEC, 0x5D, 0xBB])
+  , testCase "getWithin eq" (runGetCase (getWithin 2 getWord16LE) (Just (2, 1, 0x5DEC)) [0xEC, 0x5D, 0xBB])
+  , testCase "getWithin lt" (runGetCase (getWithin 1 getWord16LE) Nothing [0xEC, 0x5D, 0xBB])
+  , testCase "getWithin gt" (runGetCase (getWithin 3 getWord16LE) (Just (2, 1, 0x5DEC)) [0xEC, 0x5D, 0xBB])
   ]
 
 testDahditPut :: TestTree

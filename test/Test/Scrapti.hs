@@ -1,6 +1,6 @@
 module Test.Scrapti (testScrapti) where
 
-import Dahdit (Binary (..), ByteCount, ElementCount, Get, Int16LE, ShortByteString, getSkip, runGetIO, runPut)
+import Dahdit (Binary (..), ByteCount, ElementCount, Get, Int16LE, ShortByteString, getSkip, runGetIO, runPut, getExact, Proxy (..), getRemainingSize)
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Short as BSS
 import Data.Primitive.PrimArray (sizeofPrimArray)
@@ -11,6 +11,7 @@ import Scrapti.Wav (Sampled (..), SampledWav (..), Wav (..), WavBody (..), WavCh
                     WavFormatChunk (..), WavHeader (..), WavSampleChunk (..))
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (testCase, (@?=))
+-- import Debug.Trace (traceM)
 
 dataOffset :: ByteCount
 dataOffset = 36
@@ -53,6 +54,21 @@ testWavData = testCase "data" $ do
       WavChunkSample (WavSampleChunk arr) -> pure arr
       _ -> fail "expected samples"
   fromIntegral (sizeofPrimArray arr) @?= drumDataLen
+
+-- testWavManual :: TestTree
+-- testWavManual = testCase "manual" $ do
+--   bs <- readShort "testdata/drums.wav"
+--   ((header, body), bc) <- flip runGetIO bs $ do
+--     initRem <- getRemainingSize
+--     traceM ("XXX INIT REMAINING SIZE: " ++ show initRem)
+--     header@(WavHeader remaining fmt) <- get @WavHeader
+--     headerRem <- getRemainingSize
+--     traceM ("XXX POST HEADER REMAINING SIZE: " ++ show headerRem)
+--     traceM ("XXX HEADER FILE REMAINING SIZE: " ++ show remaining)
+--     body <- getRestOfWav (Proxy :: Proxy Int16LE) remaining fmt
+--     pure (header, body)
+--   header @?= drumHeader
+--   bc @?= dataOffset
 
 testWavWhole :: TestTree
 testWavWhole = testCase "whole" $ do

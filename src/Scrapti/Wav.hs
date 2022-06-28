@@ -11,18 +11,21 @@ module Scrapti.Wav
   , WavBody (..)
   , Wav (..)
   , SampledWav (..)
+  -- TODO REMOVE
+  , getRestOfWav
   ) where
 
 import Control.Monad (unless)
 import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, Int16LE, Int32LE, PrimArray, ShortByteString,
                StaticByteSized (..), Word16LE, Word32LE, byteSizeFoldable, getByteString, getExact, getRemainingSeq,
-               getRemainingStaticArray, getRemainingString, getUnfold, putByteString, putSeq, putStaticArray)
+               getRemainingStaticArray, getRemainingString, getUnfold, putByteString, putSeq, putStaticArray, getRemainingSize)
 import Data.Default (Default (..))
 import Data.Int (Int8)
 import Data.Primitive (Prim)
 import Data.Proxy (Proxy (..))
 import Data.Sequence (Seq (..))
 import Scrapti.Riff (Chunk (..), Label, StaticLabel (..), getChunkSize, getExpectLabel, labelRiff, putChunkSize)
+-- import Debug.Trace (traceM)
 
 labelWave, labelFmt, labelData :: Label
 labelWave = "WAVE"
@@ -73,12 +76,12 @@ instance Binary WavFormat where
     bpsAvg <- get
     bpsSlice <- get
     bps <- get
-    unless (isSupportedBPS bps) (fail ("bad bps: " ++ show bps))
-    unless (bpsSlice == div (fromIntegral bps) 8 * numChannels) (fail ("bad bps slice: " ++ show bpsSlice))
-    unless (bpsAvg == sampleRate * fromIntegral bpsSlice) (fail ("bad average bps: " ++ show bpsAvg))
+    unless (isSupportedBPS bps) (fail ("Bad bps: " ++ show bps))
+    unless (bpsSlice == div (fromIntegral bps) 8 * numChannels) (fail ("Bad bps slice: " ++ show bpsSlice))
+    unless (bpsAvg == sampleRate * fromIntegral bpsSlice) (fail ("Bad average bps: " ++ show bpsAvg))
     extra <- getRemainingString
     let !extraLen = byteSize extra
-    unless (isSupportedFmtExtraSize extraLen) (fail ("bad extra length: " ++ show extraLen))
+    unless (isSupportedFmtExtraSize extraLen) (fail ("Bad extra length: " ++ show extraLen))
     pure $! WavFormat formatType numChannels sampleRate bps extra
   put (WavFormat fty nchan sr bps extra) = do
     let !bpsSlice = div (fromIntegral bps) 8 * nchan
@@ -160,6 +163,7 @@ instance ByteSized WavUnparsedChunk where
 getUnparsedChunkPostLabel :: Label -> Get WavUnparsedChunk
 getUnparsedChunkPostLabel label = do
   chunkSize <- getChunkSize
+  -- traceM ("XXX READING UNPARSED CHUNK SIZE: " ++ show chunkSize)
   bs <- getByteString chunkSize
   pure $! WavUnparsedChunk label bs
 
@@ -185,6 +189,7 @@ instance (Prim a, StaticByteSized a) => ByteSized (WavChunk a) where
 instance (Prim a, StaticByteSized a) => Binary (WavChunk a) where
   get = do
     label <- get
+    -- traceM ("XXX READING CHUNK LABEL: " ++ show label)
     if label == labelData
       then fmap WavChunkSample getSampleChunkPostLabel
       else fmap WavChunkUnparsed (getUnparsedChunkPostLabel label)
@@ -206,6 +211,7 @@ instance (Prim a, StaticByteSized a) => ByteSized (WavBody a) where
 
 instance (Prim a, StaticByteSized a) => Binary (WavBody a) where
   get = do
+    -- traceM ("XXX STARTING BODY READ")
     (!pre, !sam) <- getUnfold Empty $ \pre -> do
       chunk <- get
       pure $! case chunk of
@@ -234,15 +240,11 @@ instance (Prim a, StaticByteSized a) => ByteSized (Wav a) where
 
 getRestOfWav :: (Prim a, StaticByteSized a) => Proxy a -> ByteCount -> WavFormatChunk -> Get (Wav a)
 getRestOfWav _ remainingSize fmtChunk = do
-  getExact remainingSize $ do
-    (!pre, !sam) <- getUnfold Empty $ \pre -> do
-      chunk <- get
-      pure $! case chunk of
-        WavChunkUnparsed wuc -> Left (pre :|> wuc)
-        WavChunkSample wsc -> Right (pre, wsc)
-    post <- getRemainingSeq get
-    let body = WavBody pre sam post
-    pure $! Wav fmtChunk body
+  -- traceM ("XXX GET REST OF WAVE, SIZE: " ++ show remainingSize)
+  -- left <- getRemainingSize
+  -- traceM ("XXX BEFORE WAVE BODY GET LEFT: " ++ show left)
+  body <- getExact remainingSize get
+  pure $! Wav fmtChunk body
 
 instance (Prim a, StaticByteSized a) => Binary (Wav a) where
   get = do
@@ -251,7 +253,7 @@ instance (Prim a, StaticByteSized a) => Binary (Wav a) where
         !fmtBps = fromIntegral (wfBitsPerSample fmt)
         !prox = Proxy :: Proxy a
         !parseBps = staticByteSize prox
-    unless (fmtBps == parseBps) (fail ("bad bps: in header: " ++ show fmtBps ++ " required: " ++ show parseBps))
+    unless (fmtBps == parseBps) (fail ("Bad bps: in header: " ++ show fmtBps ++ " required: " ++ show parseBps))
     getRestOfWav prox remainingSize fmtChunk
   put (Wav fmtChunk body) = do
     let !remainingSize = byteSize body
@@ -270,6 +272,6 @@ instance Binary SampledWav where
     let !fmt = chunkValue (unWavFormatChunk fmtChunk)
         !bps = wfBitsPerSample fmt
     case getSampled bps of
-      Nothing -> fail ("bad bps: " ++ show bps)
+      Nothing -> fail ("Bad bps: " ++ show bps)
       Just (Sampled prox) -> fmap (SampledWav . Sampled) (getRestOfWav prox remainingSize fmtChunk)
   put (SampledWav (Sampled wd)) = put wd

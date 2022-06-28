@@ -2,6 +2,7 @@ module Dahdit.Free
   ( GetStaticSeqF (..)
   , GetStaticArrayF (..)
   , GetLookAheadF (..)
+  , GetScopeF (..)
   , ScopeMode (..)
   , GetF (..)
   , Get (..)
@@ -41,6 +42,12 @@ data GetLookAheadF a where
 instance Functor GetLookAheadF where
   fmap f (GetLookAheadF g k) = GetLookAheadF g (f . k)
 
+data GetScopeF a where
+  GetScopeF :: !ScopeMode -> !ByteCount -> Get z -> (z -> a) -> GetScopeF a
+
+instance Functor GetScopeF where
+  fmap f (GetScopeF sm bc g k) = GetScopeF sm bc g (f . k)
+
 data ScopeMode =
     ScopeModeExact
   | ScopeModeWithin
@@ -57,7 +64,7 @@ data GetF a =
   | GetFShortByteString !ByteCount (ShortByteString -> a)
   | GetFStaticSeq !(GetStaticSeqF a)
   | GetFStaticArray !(GetStaticArrayF a)
-  | GetFScope !ScopeMode !ByteCount a
+  | GetFScope !(GetScopeF a)
   | GetFSkip !ByteCount a
   | GetFLookAhead !(GetLookAheadF a)
   | GetFRemainingSize (ByteCount -> a)

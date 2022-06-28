@@ -15,6 +15,7 @@ module Scrapti.Riff
 import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, Proxy (..), Put, StaticByteSized (..), StaticBytes,
                Word32LE, getExact, getExpect)
 import Data.Default (Default)
+-- import Debug.Trace (traceM)
 
 type Label = StaticBytes 4
 
@@ -54,7 +55,9 @@ instance (StaticLabel a, Binary a) => Binary (Chunk a) where
     let !label = staticLabel (Proxy :: Proxy a)
     getExpectLabel label
     chunkSize <- getChunkSize
+    -- traceM ("XXX get chunkSize for Chunk " ++ show label ++ ": " ++ show chunkSize)
     value <- getExact chunkSize get
+    -- traceM ("XXX value for Chunk" ++ show label ++ ": " ++ show value)
     pure $! Chunk value
   put (Chunk value) = do
     let !label = staticLabel (Proxy :: Proxy a)

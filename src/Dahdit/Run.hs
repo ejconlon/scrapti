@@ -20,7 +20,7 @@ import Control.Monad.Trans (lift)
 import Control.Monad.Trans.Free (FreeT (..), iterT, wrap)
 import Control.Monad.Trans.Maybe (MaybeT (..))
 import Dahdit.Free (Get (..), GetF (..), GetLookAheadF (..), GetStaticArrayF (..), GetStaticSeqF (..), Put, PutF (..),
-                    PutM (..), PutStaticArrayF (..), PutStaticSeqF (..), ScopeMode (..))
+                    PutM (..), PutStaticArrayF (..), PutStaticSeqF (..), ScopeMode (..), GetScopeF (..))
 import Dahdit.Nums (FloatLE, Int16LE (..), Int32LE, LiftedPrim (..), Word16LE (..), Word32LE)
 import Dahdit.Proxy (proxyForF)
 import Dahdit.Sizes (ByteCount (..), staticByteSize)
@@ -35,6 +35,7 @@ import Data.Primitive.PrimArray (PrimArray (..), sizeofPrimArray)
 import qualified Data.Sequence as Seq
 import Data.STRef.Strict (STRef, newSTRef, readSTRef, writeSTRef)
 import Data.Word (Word8)
+-- import Debug.Trace (traceM)
 
 -- Sizes:
 
@@ -94,6 +95,17 @@ newGetEnv sbs@(SBS arr) = do
 newtype GetEff s a = GetEff { unGetEff :: ReaderT (GetEnv s) (ExceptT GetError (ST s)) a }
   deriving newtype (Functor, Applicative, Monad, MonadReader (GetEnv s), MonadError GetError)
 
+-- instance MonadReader (GetEnv s) (GetEff s) where
+--   ask = GetEff ask
+--   local f m = do
+--     traceM ("XXX LOCAL BEFORE")
+--     env <- ask
+--     let !env' = f env
+--     er <- stGetEff (runGetEff m env')
+--     r <- either throwError pure er
+--     traceM ("XXX LOCAL AFTER")
+--     pure r
+
 runGetEff :: GetEff s a -> GetEnv s -> ST s (Either GetError a)
 runGetEff m l = runExceptT (runReaderT (unGetEff m) l)
 
@@ -128,23 +140,25 @@ readBytes nm bc f = do
 readShortByteString :: Int -> ByteArray -> Int -> ShortByteString
 readShortByteString len arr pos = let !(ByteArray frozArr) = cloneByteArray arr pos len in SBS frozArr
 
-readScope :: ScopeMode -> Int -> GetEff s a -> GetEff s a
-readScope sm bc g = do
+readScope :: GetScopeF (GetEff s a) -> GetEff s a
+readScope (GetScopeF sm bc g k) = do
+  let intBc = fromIntegral bc
   GetEnv oldLen posRef _ <- ask
-  if bc > oldLen
-    then throwError (GetErrorParseNeed "scope" (fromIntegral oldLen) (fromIntegral bc))
+  oldPos <- stGetEff (readSTRef posRef)
+  let !oldAvail = oldLen - oldPos
+  if intBc > oldAvail
+    then throwError (GetErrorParseNeed "scope" (fromIntegral oldAvail) bc)
     else do
-      oldPos <- stGetEff (readSTRef posRef)
-      let !newLen = oldLen - bc
-      a <- local (\ge -> ge { geLen = newLen }) g
+      let !newLen = oldPos + intBc
+      a <- local (\ge -> ge { geLen = newLen }) (mkGetEff g)
       case sm of
-        ScopeModeWithin -> pure a
+        ScopeModeWithin -> k a
         ScopeModeExact -> do
           newPos <- stGetEff (readSTRef posRef)
           let !actualBc = newPos - oldPos
-          if actualBc == bc
-            then pure a
-            else throwError (GetErrorScopedMismatch (fromIntegral actualBc) (fromIntegral bc))
+          if actualBc == intBc
+            then k a
+            else throwError (GetErrorScopedMismatch (fromIntegral actualBc) bc)
 
 readStaticSeq :: GetStaticSeqF (GetEff s a) -> GetEff s a
 readStaticSeq gss@(GetStaticSeqF ec g k) = do
@@ -181,7 +195,7 @@ execGetRun = \case
     in readBytes "ShortByteString" len (readShortByteString len) >>= k
   GetFStaticSeq gss -> readStaticSeq gss
   GetFStaticArray gsa -> readStaticArray gsa
-  GetFScope sm bc k -> readScope sm (fromIntegral bc) k
+  GetFScope gs -> readScope gs
   GetFSkip bc k -> readBytes "skip" (fromIntegral bc) (\_ _ -> ()) *> k
   GetFLookAhead gla -> readLookAhead gla
   GetFRemainingSize k -> do
@@ -313,7 +327,7 @@ runPutUnsafe m bc = runST $ do
   st@(PutEnv _ posRef arr) <- newPutEnv len
   runPutRun n st
   pos <- readSTRef posRef
-  unless (pos == len) (error ("Invalid put length: (given " ++ show len ++ ", used " ++ show pos))
+  unless (pos == len) (error ("Invalid put length: (given " ++ show len ++ ", used " ++ show pos ++ ")"))
   ByteArray frozArr <- unsafeFreezeByteArray arr
   pure $! SBS frozArr
 

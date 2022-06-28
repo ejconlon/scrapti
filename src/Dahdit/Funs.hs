@@ -41,7 +41,7 @@ module Dahdit.Funs
 import Control.Monad (replicateM_, unless)
 import Control.Monad.Free.Church (F (..))
 import Dahdit.Free (Get (..), GetF (..), GetLookAheadF (..), GetStaticArrayF (..), GetStaticSeqF (..), Put, PutF (..),
-                    PutM (..), PutStaticArrayF (..), PutStaticSeqF (..), ScopeMode (..))
+                    PutM (..), PutStaticArrayF (..), PutStaticSeqF (..), ScopeMode (..), GetScopeF (..))
 import Dahdit.Nums (FloatLE, Int16LE, Int32LE, Word16LE, Word32LE)
 import Dahdit.Proxy (Proxy (..), proxyForF, proxyForFun)
 import Dahdit.Sizes (ByteCount (..), ElementCount (..), StaticByteSized (..))
@@ -83,10 +83,10 @@ getSkip :: ByteCount -> Get ()
 getSkip bc = Get (F (\x y -> y (GetFSkip bc (x ()))))
 
 getExact :: ByteCount -> Get a -> Get a
-getExact bc (Get (F w)) = Get (F (\x y -> y (GetFScope ScopeModeExact bc (w x y))))
+getExact bc g = Get (F (\x y -> y (GetFScope (GetScopeF ScopeModeExact bc g x))))
 
 getWithin :: ByteCount -> Get a -> Get a
-getWithin bc (Get (F w)) = Get (F (\x y -> y (GetFScope ScopeModeWithin bc (w x y))))
+getWithin bc g = Get (F (\x y -> y (GetFScope (GetScopeF ScopeModeWithin bc g x))))
 
 -- | Get Seq of dynamically-sized elements
 getSeq :: ElementCount -> Get a -> Get (Seq a)
