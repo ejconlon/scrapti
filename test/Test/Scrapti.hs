@@ -9,7 +9,7 @@ import Data.Primitive.PrimArray (sizeofPrimArray)
 import qualified Data.Sequence as Seq
 import Scrapti.Pti (Auto (..), AutoEnvelope (..), AutoType, Block, Effects (..), Filter, FilterType, Granular,
                     GranularLoopMode, GranularShape, Header (..), InstParams (..), Lfo (..), LfoSteps, LfoType,
-                    Preamble (..), Pti (..), SamplePlayback, Slices, WavetableWindowSize)
+                    Postamble (..), Preamble (..), Pti (..), SamplePlayback, Slices, WavetableWindowSize)
 import Scrapti.Riff (Chunk (..), chunkHeaderSize, getChunkSize, getExpectLabel, labelRiff)
 import Scrapti.Sfont (Bag, Gen, InfoChunk (..), Inst, ListChunk (..), Mod, OptChunk (..), PdtaChunk (..), Phdr,
                       Sdta (..), SdtaChunk (..), Sfont (..), Shdr, labelSfbk)
@@ -152,7 +152,8 @@ testPtiSizes = testCase "sizes" $ do
   staticByteSize (Proxy :: Proxy GranularShape) @?= 1
   staticByteSize (Proxy :: Proxy GranularLoopMode) @?= 1
   staticByteSize (Proxy :: Proxy Granular) @?= 6
-  staticByteSize (Proxy :: Proxy Effects) @?= 8
+  staticByteSize (Proxy :: Proxy Effects) @?= 4
+  staticByteSize (Proxy :: Proxy Postamble) @?= 4
   staticByteSize (Proxy :: Proxy Header) @?= 392
 
 testPtiWrite :: TestTree
@@ -205,11 +206,11 @@ selIpAux279 = ipAux279 . hdrInstParams
 selEffAux387 :: Sel Word8
 selEffAux387 = effAux387 . hdrEffects
 
-selEffAux388To391 :: Sel Word32LE
-selEffAux388To391 = effAux388To391 . hdrEffects
+selPostAux388To391 :: Sel Word32LE
+selPostAux388To391 = postAux388To391 . hdrPostamble
 
-testPtiDefaults :: TestTree
-testPtiDefaults = testCase "defaults" $ do
+testPtiAux :: TestTree
+testPtiAux = testCase "aux" $ do
   bs <- readShort "testdata/testproj/instruments/1 drums.pti"
   (actHdr, _) <- runGetIO (get @Header) bs
   let defHdr = def @Header
@@ -230,10 +231,27 @@ testPtiDefaults = testCase "defaults" $ do
   same 279 selIpAux279
   same 387 selEffAux387
   -- I think this is some checksum
-  -- same 388 selEffAux388To391
+  -- same 388 selPostAux388To391
+
+testPtiMinimal :: TestTree
+testPtiMinimal = testCase "minimal" $ do
+  bs <- readShort "testdata/testproj/instruments/1 drums.pti"
+  (actHdr, _) <- runGetIO (get @Header) bs
+  let defHdr = def @Header
+      actPre = hdrPreamble actHdr
+      defPre = hdrPreamble defHdr
+      modDefPre = defPre { preName = preName actPre }
+  actPre @?= modDefPre
+  hdrAutoBlock actHdr @?= hdrAutoBlock defHdr
+  hdrLfoBlock actHdr @?= hdrLfoBlock defHdr
+  hdrFilter actHdr @?= hdrFilter defHdr
+  hdrInstParams actHdr @?= hdrInstParams defHdr
+  hdrSlices actHdr @?= hdrSlices defHdr
+  hdrGranular actHdr @?= hdrGranular defHdr
+  hdrEffects actHdr @?= hdrEffects defHdr
 
 testPti :: TestTree
-testPti = testGroup "pti" [testPtiSizes, testPtiWrite, testPtiDefaults]
+testPti = testGroup "pti" [testPtiSizes, testPtiWrite, testPtiAux, testPtiMinimal]
 
 testScrapti :: TestTree
 testScrapti = testGroup "Scrapti" [testWav, testSfont, testPti]

@@ -22,8 +22,8 @@ data WavetableWindowSize =
   deriving stock (Eq, Ord, Show, Enum, Bounded)
   deriving (ByteSized, StaticByteSized, Binary) via (ViaBinaryRep WavetableWindowSize)
 
-instance Default WavetableWindowSize where
-  def = WWS2048
+-- instance Default WavetableWindowSize where
+--   def = WWS2048
 
 instance BinaryRep Word16LE WavetableWindowSize where
   fromBinaryRep = \case
@@ -55,8 +55,8 @@ data SamplePlayback =
   deriving (BinaryRep Word8) via (ViaBoundedEnum Word8 SamplePlayback)
   deriving (ByteSized, StaticByteSized, Binary) via (ViaBinaryRep SamplePlayback)
 
-instance Default SamplePlayback where
-  def = SPOneShot
+-- instance Default SamplePlayback where
+--   def = SPOneShot
 
 data Preamble = Preamble
   { preAux0To19 :: !(StaticBytes 20)
@@ -105,11 +105,11 @@ instance Default Preamble where
     , preName = ""
     , preAux52To59 = "\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL"
     , preSampleLength = 0
-    , preWavetableWindowSize = def
+    , preWavetableWindowSize = WWS2048
     , preAux66To67 = 0
     , preWavetableTotalPositions = 0
     , preAux70To75 = "\NUL\NUL\NUL\NUL\NUL\NUL"
-    , preSamplePlayback = def
+    , preSamplePlayback = SPOneShot
     , preAux77 = 0
     , prePlaybackStart = 0
     , preLoopStart = 1
@@ -156,8 +156,8 @@ data AutoType =
   deriving stock (Eq, Ord, Show, Enum, Bounded)
   deriving (ByteSized, StaticByteSized, Binary) via (ViaBinaryRep AutoType)
 
-instance Default AutoType where
-  def = ATEnvelope
+-- instance Default AutoType where
+--   def = ATEnvelope
 
 instance BinaryRep Word16LE AutoType where
   fromBinaryRep = \case
@@ -176,8 +176,8 @@ data Auto = Auto
   } deriving stock (Eq, Show, Generic)
     deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Auto)
 
-instance Default Auto where
-  def = Auto def def
+-- instance Default Auto where
+--   def = Auto def def
 
 data LfoType =
     LTRevSaw
@@ -189,8 +189,8 @@ data LfoType =
   deriving (BinaryRep Word8) via (ViaBoundedEnum Word8 LfoType)
   deriving (ByteSized, StaticByteSized, Binary) via (ViaBinaryRep LfoType)
 
-instance Default LfoType where
-  def = LTTriangle
+-- instance Default LfoType where
+--   def = LTTriangle
 
 data LfoSteps =
     LS24
@@ -221,8 +221,8 @@ data LfoSteps =
   deriving (BinaryRep Word8) via (ViaBoundedEnum Word8 LfoSteps)
   deriving (ByteSized, StaticByteSized, Binary) via (ViaBinaryRep LfoSteps)
 
-instance Default LfoSteps where
-  def = LS24
+-- instance Default LfoSteps where
+--   def = LS24
 
 data Lfo = Lfo
   { lfoType :: !LfoType
@@ -238,8 +238,8 @@ data Lfo = Lfo
 
 instance Default Lfo where
   def = Lfo
-    { lfoType = def
-    , lfoSteps = def
+    { lfoType = LTTriangle
+    , lfoSteps = LS24
     , lfoAux214To215 = 0
     , lfoAmount = 0.5
     }
@@ -306,11 +306,11 @@ instance Default InstParams where
   def = InstParams
     { ipTune = 0
     , ipFineTune = 0
-    , ipVolume = 0
+    , ipVolume = 50
     , ipAux273To275 = "\NUL\NUL\NUL"
     , ipPanning = 50
     , ipAux277 = 0
-    , ipDelaySend = 50
+    , ipDelaySend = 0
     , ipAux279 = 0
     }
 
@@ -375,8 +375,6 @@ data Effects = Effects
   -- 386
   , effAux387 :: !Word8
   -- 387
-  , effAux388To391 :: !Word32LE
-  -- 388-391
   } deriving stock (Eq, Show, Generic)
     deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Effects)
 
@@ -386,8 +384,17 @@ instance Default Effects where
     , effOverdrive = 0
     , effBitDepth = 16
     , effAux387 = 0
-    , effAux388To391 = 0
     }
+
+newtype Postamble = Postamble
+  { postAux388To391 :: Word32LE
+  -- 388-391
+  } deriving stock (Show)
+    deriving newtype (Eq, ByteSized, StaticByteSized, Binary)
+
+instance Default Postamble where
+  -- TODO I think this is actually a checksum
+  def = Postamble 0
 
 data Block a = Block
   { blockVolume :: !a
@@ -405,6 +412,15 @@ mkBlock a = Block a a a a a a
 instance Default a => Default (Block a) where
   def = mkBlock def
 
+defAutoBlock :: Block Auto
+defAutoBlock =
+  let envVol = def @AutoEnvelope
+      autoVol = Auto envVol ATEnvelope
+      envRest = envVol { aeAttack = 3000 }
+      autoRest = Auto envRest ATOff
+      block = mkBlock autoRest
+  in block { blockVolume = autoVol }
+
 data Header = Header
   { hdrPreamble :: !Preamble
   , hdrAutoBlock :: !(Block Auto)
@@ -414,11 +430,12 @@ data Header = Header
   , hdrSlices :: !Slices
   , hdrGranular :: !Granular
   , hdrEffects :: !Effects
+  , hdrPostamble :: !Postamble
   } deriving stock (Eq, Show, Generic)
     deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Header)
 
 instance Default Header where
-  def = Header def def def def def def def def
+  def = Header def defAutoBlock def def def def def def def
 
 data Pti = Pti
   { ptiHeader :: !Header
