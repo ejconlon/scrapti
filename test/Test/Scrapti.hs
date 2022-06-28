@@ -7,12 +7,11 @@ import qualified Data.ByteString.Short as BSS
 import Data.Primitive.PrimArray (sizeofPrimArray)
 import qualified Data.Sequence as Seq
 import Scrapti.Pti (Auto, AutoEnvelope (..), AutoType, Effects (..), Filter, FilterType, Granular, GranularLoopMode,
-                    GranularShape, Header (..), InstParams, Lfo, LfoSteps, LfoType, Preamble (..), Pti, SamplePlayback,
-                    Slices, WavetableWindowSize)
+                    GranularShape, Header (..), InstParams, Lfo, LfoSteps, LfoType, Preamble (..), Pti (..),
+                    SamplePlayback, Slices, WavetableWindowSize)
 import Scrapti.Riff (Chunk (..), chunkHeaderSize, getChunkSize, getExpectLabel, labelRiff)
 import Scrapti.Sfont (Bag, Gen, InfoChunk (..), Inst, ListChunk (..), Mod, OptChunk (..), PdtaChunk (..), Phdr,
-                      Sdta (..), SdtaChunk (..), Sfont (..), Shdr)
-import Scrapti.Sfont (labelSfbk)
+                      Sdta (..), SdtaChunk (..), Sfont (..), Shdr, labelSfbk)
 import Scrapti.Wav (Sampled (..), SampledWav (..), Wav (..), WavBody (..), WavChunk (..), WavFormat (..),
                     WavFormatChunk (..), WavHeader (..), WavSampleChunk (..))
 import Test.Tasty (TestTree, testGroup)
@@ -159,7 +158,10 @@ testPtiWrite :: TestTree
 testPtiWrite = testCase "write" $ do
   bs <- readShort "testdata/testproj/instruments/1 drums.pti"
   (pti, bc) <- runGetIO (get @Pti) bs
+  -- print (ptiHeader pti)
   byteSize pti @?= bc
+  fromIntegral bc @?= BSS.length bs
+  sizeofPrimArray (ptiWav pti) @?= div (fromIntegral drumDataLen) 2
   -- TODO fix put
   -- let bs' = runPut (put pti)
   -- bs' @?= bs

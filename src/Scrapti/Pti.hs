@@ -5,7 +5,7 @@ module Scrapti.Pti where
 
 import Dahdit (Binary (..), BinaryRep (..), BoolByte (..), ByteSized (..), FloatLE, Int16LE, PrimArray, Proxy (..),
                StaticArray, StaticByteSized (..), StaticBytes, ViaBinaryRep (..), ViaBoundedEnum (..), ViaGeneric (..),
-               ViaStaticGeneric (..), Word16LE, Word32LE, getRemainingStaticArray, putStaticArray)
+               ViaStaticGeneric (..), Word16LE, Word32LE, getRemainingStaticArray, getStaticArray, putStaticArray)
 import Data.Default (Default (..))
 import Data.Int (Int8)
 import Data.Word (Word8)
@@ -383,7 +383,11 @@ data Pti = Pti
 instance Binary Pti where
   get = do
     header <- get
-    wav <- getRemainingStaticArray (Proxy :: Proxy Int16LE)
+    let !sampleLength = fromIntegral (preSampleLength (hdrPreamble header))
+    wav <-
+      if sampleLength == 0  -- what the heck, it happens
+        then getRemainingStaticArray (Proxy :: Proxy Int16LE)
+        else getStaticArray @Int16LE sampleLength
     pure $! Pti header wav
   put (Pti header wav) = do
     put header
