@@ -16,6 +16,10 @@ module Scrapti.Sfont
   , Bag (..)
   , Mod (..)
   , Gen (..)
+  , GenPair (..)
+  , GenTag (..)
+  , defGenVal
+  , lookupGenVal
   , Inst (..)
   , Shdr (..)
   , buildPdta
@@ -23,19 +27,21 @@ module Scrapti.Sfont
   ) where
 
 import Control.Monad (unless)
-import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, Int16LE, PrimArray, ShortByteString, StaticByteSized (..),
-               StaticBytes, TermBytes, ViaStaticByteSized (..), ViaStaticGeneric (..), Word16LE, Word32LE,
-               byteSizeFoldable, getExact, getRemainingSeq, getRemainingSize, getRemainingStaticSeq, getRemainingString,
-               getSkip, getStaticArray, putByteString, putSeq, putStaticArray)
+import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, Int16LE (..), PrimArray, Put, ShortByteString,
+               StaticByteSized (..), StaticBytes, TermBytes, ViaStaticByteSized (..), ViaStaticGeneric (..), Word16LE,
+               Word32LE, byteSizeFoldable, getExact, getRemainingSeq, getRemainingSize, getRemainingStaticSeq,
+               getRemainingString, getSkip, getStaticArray, putByteString, putSeq, putStaticArray)
 import Data.Foldable (foldl')
 import Data.Int (Int8)
 import Data.Proxy (Proxy (..))
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
+import Data.Type.Equality (testEquality)
 import Data.Word (Word8)
 import GHC.Generics (Generic)
 import Scrapti.Riff (Label, StaticLabel (..), chunkHeaderSize, getChunkSize, getExpectLabel, labelRiff, labelSize,
                      putChunkSize)
+import Type.Reflection ((:~:) (..), TypeRep, Typeable, typeRep)
 
 labelSfbk, labelList, labelInfo, labelIfil, labelIver, labelIsng, labelInam, labelIrom, labelIcrd,
   labelIeng, labelIprd, labelIcop, labelIcmt, labelIsft, labelSdta, labelSmpl, labelSm24,
@@ -431,257 +437,36 @@ data SampleMode =
     SampleModeNoLoop !Int16LE
   | SampleModeContLoop
   | SampleModePressLoop
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Ord, Show)
+  deriving (ByteSized) via (ViaStaticByteSized SampleMode)
 
--- | Generator
-data Gen =
-    GenStartAddressOffset !Int16LE
-  | GenEndAddressOffset !Int16LE
-  | GenLoopStartAddressOffset !Int16LE
-  | GenLoopEndAddressOffset !Int16LE
-  | GenStartAddressCoarseOffset !Int16LE
-  | GenModLfoToPitch !Int16LE
-  | GenVibLfoToPitch !Int16LE
-  | GenModEnvToPitch !Int16LE
-  | GenInitFc !Int16LE
-  | GenInitQ !Int16LE
-  | GenModLfoToFc !Int16LE
-  | GenModEnvToFc !Int16LE
-  | GenEndAddressCoarseOffset !Int16LE
-  | GenModLfoToVol !Int16LE
-  | GenChorus !Int16LE
-  | GenReverb !Int16LE
-  | GenPan !Int16LE
-  | GenDelayModLfo !Int16LE
-  | GenFreqModLfo !Int16LE
-  | GenDelayVibLfo !Int16LE
-  | GenFreqVibLfo !Int16LE
-  | GenDelayModEnv !Int16LE
-  | GenAttackModEnv !Int16LE
-  | GenHoldModEnv !Int16LE
-  | GenDecayModEnv !Int16LE
-  | GenSustainModEnv !Int16LE
-  | GenReleaseModEnv !Int16LE
-  | GenKeyToModEnvHold !Int16LE
-  | GenKeyToModEnvDecay !Int16LE
-  | GenDelayVolEnv !Int16LE
-  | GenAttackVolEnv !Int16LE
-  | GenHoldVolEnv !Int16LE
-  | GenDecayVolEnv !Int16LE
-  | GenSustainVolEnv !Int16LE
-  | GenReleaseVolEnv !Int16LE
-  | GenKeyToVolEnvHold !Int16LE
-  | GenKeyToVolEnvDecay !Int16LE
-  | GenInstIndex !Word16LE
-  | GenKeyRange !Word8 !Word8
-  | GenVelRange !Word8 !Word8
-  | GenLoopStartAddressCoarseOffset !Int16LE
-  | GenKey !Word16LE
-  | GenVel !Word16LE
-  | GenInitAtten !Int16LE
-  | GenLoopEndAddressCoarseOffset !Int16LE
-  | GenCoarseTune !Int16LE
-  | GenFineTune !Int16LE
-  | GenSampleIndex !Word16LE
-  | GenSampleMode !SampleMode
-  | GenScaleTuning !Int16LE
-  | GenExclusiveClass !Int16LE
-  | GenRootKey !Word16LE
-  | GenReserved !Int16LE !Int16LE
-  deriving stock (Eq, Show)
-  deriving (ByteSized) via (ViaStaticByteSized Gen)
+instance StaticByteSized SampleMode where
+  staticByteSize _ = 2
 
-instance StaticByteSized Gen where
-  staticByteSize _ = 4
-
-whichTagGen :: Gen -> Int16LE
-whichTagGen = \case
-  GenStartAddressOffset _ -> 0
-  GenEndAddressOffset _ -> 1
-  GenLoopStartAddressOffset _ -> 2
-  GenLoopEndAddressOffset _ -> 3
-  GenStartAddressCoarseOffset _ -> 4
-  GenModLfoToPitch _ -> 5
-  GenVibLfoToPitch _ -> 6
-  GenModEnvToPitch _ -> 7
-  GenInitFc _ -> 8
-  GenInitQ _ -> 9
-  GenModLfoToFc _ -> 10
-  GenModEnvToFc _ -> 11
-  GenEndAddressCoarseOffset _ -> 12
-  GenModLfoToVol _ -> 13
-  GenChorus _ -> 15
-  GenReverb _ -> 16
-  GenPan _ -> 17
-  GenDelayModLfo _ -> 21
-  GenFreqModLfo _ -> 22
-  GenDelayVibLfo _ -> 23
-  GenFreqVibLfo _ -> 24
-  GenDelayModEnv _ -> 25
-  GenAttackModEnv _ -> 26
-  GenHoldModEnv _ -> 27
-  GenDecayModEnv _ -> 28
-  GenSustainModEnv _ -> 29
-  GenReleaseModEnv _ -> 30
-  GenKeyToModEnvHold _ -> 31
-  GenKeyToModEnvDecay _ -> 32
-  GenDelayVolEnv _ -> 33
-  GenAttackVolEnv _ -> 34
-  GenHoldVolEnv _ -> 35
-  GenDecayVolEnv _ -> 36
-  GenSustainVolEnv _ -> 37
-  GenReleaseVolEnv _ -> 38
-  GenKeyToVolEnvHold _ -> 39
-  GenKeyToVolEnvDecay _ -> 40
-  GenInstIndex _ -> 41
-  GenKeyRange _ _ -> 43
-  GenVelRange _ _ -> 44
-  GenLoopStartAddressCoarseOffset _ -> 45
-  GenKey _ -> 46
-  GenVel _ -> 47
-  GenInitAtten _ -> 48
-  GenLoopEndAddressCoarseOffset _ -> 50
-  GenCoarseTune _ -> 51
-  GenFineTune _ -> 52
-  GenSampleIndex _ -> 53
-  GenSampleMode _ -> 54
-  GenScaleTuning _ -> 56
-  GenExclusiveClass _ -> 57
-  GenRootKey _ -> 58
-  GenReserved t _ -> t
-
-instance Binary Gen where
+instance Binary SampleMode where
   get = do
-    tag <- get
-    if
-      | tag == 0 -> fmap GenStartAddressOffset get
-      | tag == 1 -> fmap GenEndAddressOffset get
-      | tag == 2 -> fmap GenLoopStartAddressOffset get
-      | tag == 3 -> fmap GenLoopEndAddressOffset get
-      | tag == 4 -> fmap GenStartAddressCoarseOffset get
-      | tag == 5 -> fmap GenModLfoToPitch get
-      | tag == 6 -> fmap GenVibLfoToPitch get
-      | tag == 7 -> fmap GenModEnvToPitch get
-      | tag == 8 -> fmap GenInitFc get
-      | tag == 9 -> fmap GenInitQ get
-      | tag == 10 -> fmap GenModLfoToFc get
-      | tag == 11 -> fmap GenModEnvToFc get
-      | tag == 12 -> fmap GenEndAddressCoarseOffset get
-      | tag == 13 -> fmap GenModLfoToVol get
-      | tag == 15 -> fmap GenChorus get
-      | tag == 16 -> fmap GenReverb get
-      | tag == 17 -> fmap GenPan get
-      | tag == 21 -> fmap GenDelayModLfo get
-      | tag == 22 -> fmap GenFreqModLfo get
-      | tag == 23 -> fmap GenDelayVibLfo get
-      | tag == 24 -> fmap GenFreqVibLfo get
-      | tag == 25 -> fmap GenDelayModEnv get
-      | tag == 26 -> fmap GenAttackModEnv get
-      | tag == 27 -> fmap GenHoldModEnv get
-      | tag == 28 -> fmap GenDecayModEnv get
-      | tag == 29 -> fmap GenSustainModEnv get
-      | tag == 30 -> fmap GenReleaseModEnv get
-      | tag == 31 -> fmap GenKeyToModEnvHold get
-      | tag == 32 -> fmap GenKeyToModEnvDecay get
-      | tag == 33 -> fmap GenDelayVolEnv get
-      | tag == 34 -> fmap GenAttackVolEnv get
-      | tag == 35 -> fmap GenHoldVolEnv get
-      | tag == 36 -> fmap GenDecayVolEnv get
-      | tag == 37 -> fmap GenSustainVolEnv get
-      | tag == 38 -> fmap GenReleaseVolEnv get
-      | tag == 39 -> fmap GenKeyToVolEnvHold get
-      | tag == 40 -> fmap GenKeyToVolEnvDecay get
-      | tag == 41 -> fmap GenInstIndex get
-      | tag == 43 -> do
-        a <- get
-        b <- get
-        pure $! GenKeyRange a b
-      | tag == 44 -> do
-        a <- get
-        b <- get
-        pure $! GenVelRange a b
-      | tag == 45 -> fmap GenLoopStartAddressCoarseOffset get
-      | tag == 46 -> fmap GenKey get
-      | tag == 47 -> fmap GenVel get
-      | tag == 48 -> fmap GenInitAtten get
-      | tag == 50 -> fmap GenLoopEndAddressCoarseOffset get
-      | tag == 51 -> fmap GenCoarseTune get
-      | tag == 52 -> fmap GenFineTune get
-      | tag == 53 -> fmap GenSampleIndex get
-      | tag == 54 -> do
-        a <- get
-        let !sm = case a of
-              1 -> SampleModeContLoop
-              3 -> SampleModePressLoop
-              _ -> SampleModeNoLoop a
-        pure $! GenSampleMode sm
-      | tag == 56 -> fmap GenScaleTuning get
-      | tag == 57 -> fmap GenExclusiveClass get
-      | tag == 58 -> fmap GenRootKey get
-      | otherwise -> do
-        a <- get
-        pure $! GenReserved tag a
-  put gen = do
-    put (whichTagGen gen)
-    case gen of
-      GenStartAddressOffset x -> put x
-      GenEndAddressOffset x -> put x
-      GenLoopStartAddressOffset x -> put x
-      GenLoopEndAddressOffset x -> put x
-      GenStartAddressCoarseOffset x -> put x
-      GenModLfoToPitch x -> put x
-      GenVibLfoToPitch x -> put x
-      GenModEnvToPitch x -> put x
-      GenInitFc x -> put x
-      GenInitQ x -> put x
-      GenModLfoToFc x -> put x
-      GenModEnvToFc x -> put x
-      GenEndAddressCoarseOffset x -> put x
-      GenModLfoToVol x -> put x
-      GenChorus x -> put x
-      GenReverb x -> put x
-      GenPan x -> put x
-      GenDelayModLfo x -> put x
-      GenFreqModLfo x -> put x
-      GenDelayVibLfo x -> put x
-      GenFreqVibLfo x -> put x
-      GenDelayModEnv x -> put x
-      GenAttackModEnv x -> put x
-      GenHoldModEnv x -> put x
-      GenDecayModEnv x -> put x
-      GenSustainModEnv x -> put x
-      GenReleaseModEnv x -> put x
-      GenKeyToModEnvHold x -> put x
-      GenKeyToModEnvDecay x -> put x
-      GenDelayVolEnv x -> put x
-      GenAttackVolEnv x -> put x
-      GenHoldVolEnv x -> put x
-      GenDecayVolEnv x -> put x
-      GenSustainVolEnv x -> put x
-      GenReleaseVolEnv x -> put x
-      GenKeyToVolEnvHold x -> put x
-      GenKeyToVolEnvDecay x -> put x
-      GenInstIndex x -> put x
-      GenKeyRange x y -> put x *> put y
-      GenVelRange x y -> put x *> put y
-      GenLoopStartAddressCoarseOffset x -> put x
-      GenKey x -> put x
-      GenVel x -> put x
-      GenInitAtten x -> put x
-      GenLoopEndAddressCoarseOffset x -> put x
-      GenCoarseTune x -> put x
-      GenFineTune x -> put x
-      GenSampleIndex x -> put x
-      GenSampleMode sm ->
-        let !x = case sm of
-              SampleModeContLoop -> 1
-              SampleModePressLoop -> 3
-              SampleModeNoLoop c -> c
-        in put x
-      GenScaleTuning x -> put x
-      GenExclusiveClass x -> put x
-      GenRootKey x -> put x
-      GenReserved _ x -> put x
+    c <- get
+    pure $! case c of
+      1 -> SampleModeContLoop
+      3 -> SampleModePressLoop
+      _ -> SampleModeNoLoop c
+  put sm =
+    put $! case sm of
+      SampleModeContLoop -> 1
+      SampleModePressLoop -> 3
+      SampleModeNoLoop c -> c
+
+data Range = Range
+  { rangeLo :: !Word8
+  , rangeHi :: !Word8
+  } deriving stock (Eq, Ord, Show, Generic)
+    deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Range)
+
+data ReservedGen = ReservedGen
+  { reservedGenTag :: !Word16LE
+  , reservedGetVal :: !Int16LE
+  } deriving stock (Eq, Ord, Show, Generic)
+    deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric ReservedGen)
 
 -- | Instrument
 data Inst = Inst
@@ -744,3 +529,300 @@ buildPdta = foldl' go emptyPdta where
       PdtaCatInst -> p { pdtaIgens = pdtaIgens p <> gens }
     PdtaBlockInst insts -> p { pdtaInsts = pdtaInsts p <> insts }
     PdtaBlockShdr shdrs -> p { pdtaShdrs = pdtaShdrs p <> shdrs }
+
+-- | Tags for generators
+data GenTag a where
+  GenTagStartAddressOffset :: GenTag Int16LE
+  GenTagEndAddressOffset :: GenTag Int16LE
+  GenTagLoopStartAddressOffset :: GenTag Int16LE
+  GenTagLoopEndAddressOffset :: GenTag Int16LE
+  GenTagStartAddressCoarseOffset :: GenTag Int16LE
+  GenTagModLfoToPitch :: GenTag Int16LE
+  GenTagVibLfoToPitch :: GenTag Int16LE
+  GenTagModEnvToPitch :: GenTag Int16LE
+  GenTagInitFc :: GenTag Int16LE
+  GenTagInitQ :: GenTag Int16LE
+  GenTagModLfoToFc :: GenTag Int16LE
+  GenTagModEnvToFc :: GenTag Int16LE
+  GenTagEndAddressCoarseOffset :: GenTag Int16LE
+  GenTagModLfoToVol :: GenTag Int16LE
+  GenTagChorus :: GenTag Int16LE
+  GenTagReverb :: GenTag Int16LE
+  GenTagPan :: GenTag Int16LE
+  GenTagDelayModLfo :: GenTag Int16LE
+  GenTagFreqModLfo :: GenTag Int16LE
+  GenTagDelayVibLfo :: GenTag Int16LE
+  GenTagFreqVibLfo :: GenTag Int16LE
+  GenTagDelayModEnv :: GenTag Int16LE
+  GenTagAttackModEnv :: GenTag Int16LE
+  GenTagHoldModEnv :: GenTag Int16LE
+  GenTagDecayModEnv :: GenTag Int16LE
+  GenTagSustainModEnv :: GenTag Int16LE
+  GenTagReleaseModEnv :: GenTag Int16LE
+  GenTagKeyToModEnvHold :: GenTag Int16LE
+  GenTagKeyToModEnvDecay :: GenTag Int16LE
+  GenTagDelayVolEnv :: GenTag Int16LE
+  GenTagAttackVolEnv :: GenTag Int16LE
+  GenTagHoldVolEnv :: GenTag Int16LE
+  GenTagDecayVolEnv :: GenTag Int16LE
+  GenTagSustainVolEnv :: GenTag Int16LE
+  GenTagReleaseVolEnv :: GenTag Int16LE
+  GenTagKeyToVolEnvHold :: GenTag Int16LE
+  GenTagKeyToVolEnvDecay :: GenTag Int16LE
+  GenTagInstIndex :: GenTag Word16LE
+  GenTagKeyRange :: GenTag Range
+  GenTagVelRange :: GenTag Range
+  GenTagLoopStartAddressCoarseOffset :: GenTag Int16LE
+  GenTagKey :: GenTag Word16LE
+  GenTagVel :: GenTag Word16LE
+  GenTagInitAtten :: GenTag Int16LE
+  GenTagLoopEndAddressCoarseOffset :: GenTag Int16LE
+  GenTagCoarseTune :: GenTag Int16LE
+  GenTagFineTune :: GenTag Int16LE
+  GenTagSampleIndex :: GenTag Word16LE
+  GenTagSampleMode :: GenTag SampleMode
+  GenTagScaleTuning :: GenTag Int16LE
+  GenTagExclusiveClass :: GenTag Int16LE
+  GenTagRootKey :: GenTag Word16LE
+  GenTagReserved :: Word16LE -> GenTag Int16LE
+
+deriving instance Eq (GenTag a)
+deriving instance Ord (GenTag a)
+deriving instance Show (GenTag a)
+
+genTagRep :: GenTag a -> Word16LE
+genTagRep = \case
+   GenTagStartAddressOffset -> 0
+   GenTagEndAddressOffset -> 1
+   GenTagLoopStartAddressOffset -> 2
+   GenTagLoopEndAddressOffset -> 3
+   GenTagStartAddressCoarseOffset -> 4
+   GenTagModLfoToPitch -> 5
+   GenTagVibLfoToPitch -> 6
+   GenTagModEnvToPitch -> 7
+   GenTagInitFc -> 8
+   GenTagInitQ -> 9
+   GenTagModLfoToFc -> 10
+   GenTagModEnvToFc -> 11
+   GenTagEndAddressCoarseOffset -> 12
+   GenTagModLfoToVol -> 13
+   GenTagChorus -> 15
+   GenTagReverb -> 16
+   GenTagPan -> 17
+   GenTagDelayModLfo -> 21
+   GenTagFreqModLfo -> 22
+   GenTagDelayVibLfo -> 23
+   GenTagFreqVibLfo -> 24
+   GenTagDelayModEnv -> 25
+   GenTagAttackModEnv -> 26
+   GenTagHoldModEnv -> 27
+   GenTagDecayModEnv -> 28
+   GenTagSustainModEnv -> 29
+   GenTagReleaseModEnv -> 30
+   GenTagKeyToModEnvHold -> 31
+   GenTagKeyToModEnvDecay -> 32
+   GenTagDelayVolEnv -> 33
+   GenTagAttackVolEnv -> 34
+   GenTagHoldVolEnv -> 35
+   GenTagDecayVolEnv -> 36
+   GenTagSustainVolEnv -> 37
+   GenTagReleaseVolEnv -> 38
+   GenTagKeyToVolEnvHold -> 39
+   GenTagKeyToVolEnvDecay -> 40
+   GenTagInstIndex -> 41
+   GenTagKeyRange -> 43
+   GenTagVelRange -> 44
+   GenTagLoopStartAddressCoarseOffset -> 45
+   GenTagKey -> 46
+   GenTagVel -> 47
+   GenTagInitAtten -> 48
+   GenTagLoopEndAddressCoarseOffset -> 50
+   GenTagCoarseTune -> 51
+   GenTagFineTune -> 52
+   GenTagSampleIndex -> 53
+   GenTagSampleMode -> 54
+   GenTagScaleTuning -> 56
+   GenTagExclusiveClass -> 57
+   GenTagRootKey -> 58
+   GenTagReserved t -> t
+
+data GenPair a = GenPair
+  { genPairTag :: !(GenTag a)
+  , genPairVal :: !a
+  } deriving stock (Eq, Ord, Show)
+
+putGenPair :: Binary a => GenPair a -> Put
+putGenPair (GenPair tag val) = put (genTagRep tag) *> put val
+
+data Gen =
+    GenInt !(GenPair Int16LE)
+  | GenWord !(GenPair Word16LE)
+  | GenRange !(GenPair Range)
+  | GenSampleMode !(GenPair SampleMode)
+  deriving stock (Eq, Ord, Show)
+  deriving (ByteSized) via (ViaStaticByteSized Gen)
+
+getGenInt :: GenTag Int16LE -> Get Gen
+getGenInt tag = fmap (GenInt . GenPair tag) get
+
+getGenWord :: GenTag Word16LE -> Get Gen
+getGenWord tag = fmap (GenWord . GenPair tag) get
+
+getGenRange :: GenTag Range -> Get Gen
+getGenRange tag = fmap (GenRange . GenPair tag) get
+
+getGenSampleMode :: GenTag SampleMode -> Get Gen
+getGenSampleMode tag = fmap (GenSampleMode . GenPair tag) get
+
+instance StaticByteSized Gen where
+  staticByteSize _ = 4
+
+instance Binary Gen where
+  get = do
+    tag <- get
+    case tag of
+      0 -> getGenInt GenTagStartAddressOffset
+      1 -> getGenInt GenTagEndAddressOffset
+      2 -> getGenInt GenTagLoopStartAddressOffset
+      3 -> getGenInt GenTagLoopEndAddressOffset
+      4 -> getGenInt GenTagStartAddressCoarseOffset
+      5 -> getGenInt GenTagModLfoToPitch
+      6 -> getGenInt GenTagVibLfoToPitch
+      7 -> getGenInt GenTagModEnvToPitch
+      8 -> getGenInt GenTagInitFc
+      9 -> getGenInt GenTagInitQ
+      10 -> getGenInt GenTagModLfoToFc
+      11 -> getGenInt GenTagModEnvToFc
+      12 -> getGenInt GenTagEndAddressCoarseOffset
+      13 -> getGenInt GenTagModLfoToVol
+      15 -> getGenInt GenTagChorus
+      16 -> getGenInt GenTagReverb
+      17 -> getGenInt GenTagPan
+      21 -> getGenInt GenTagDelayModLfo
+      22 -> getGenInt GenTagFreqModLfo
+      23 -> getGenInt GenTagDelayVibLfo
+      24 -> getGenInt GenTagFreqVibLfo
+      25 -> getGenInt GenTagDelayModEnv
+      26 -> getGenInt GenTagAttackModEnv
+      27 -> getGenInt GenTagHoldModEnv
+      28 -> getGenInt GenTagDecayModEnv
+      29 -> getGenInt GenTagSustainModEnv
+      30 -> getGenInt GenTagReleaseModEnv
+      31 -> getGenInt GenTagKeyToModEnvHold
+      32 -> getGenInt GenTagKeyToModEnvDecay
+      33 -> getGenInt GenTagDelayVolEnv
+      34 -> getGenInt GenTagAttackVolEnv
+      35 -> getGenInt GenTagHoldVolEnv
+      36 -> getGenInt GenTagDecayVolEnv
+      37 -> getGenInt GenTagSustainVolEnv
+      38 -> getGenInt GenTagReleaseVolEnv
+      39 -> getGenInt GenTagKeyToVolEnvHold
+      40 -> getGenInt GenTagKeyToVolEnvDecay
+      41 -> getGenWord GenTagInstIndex
+      43 -> getGenRange GenTagKeyRange
+      44 -> getGenRange GenTagVelRange
+      45 -> getGenInt GenTagLoopStartAddressCoarseOffset
+      46 -> getGenWord GenTagKey
+      47 -> getGenWord GenTagVel
+      48 -> getGenInt GenTagInitAtten
+      50 -> getGenInt GenTagLoopEndAddressCoarseOffset
+      51 -> getGenInt GenTagCoarseTune
+      52 -> getGenInt GenTagFineTune
+      53 -> getGenWord GenTagSampleIndex
+      54 -> getGenSampleMode GenTagSampleMode
+      56 -> getGenInt GenTagScaleTuning
+      57 -> getGenInt GenTagExclusiveClass
+      58 -> getGenWord GenTagRootKey
+      _ -> getGenInt (GenTagReserved tag)
+  put = \case
+    GenInt gp -> putGenPair gp
+    GenWord gp -> putGenPair gp
+    GenRange gp -> putGenPair gp
+    GenSampleMode gp -> putGenPair gp
+
+defGenVal :: GenTag a -> a
+defGenVal = \case
+  GenTagStartAddressOffset -> 0
+  GenTagEndAddressOffset -> 0
+  GenTagLoopStartAddressOffset -> 0
+  GenTagLoopEndAddressOffset -> 0
+  GenTagStartAddressCoarseOffset -> 0
+  GenTagModLfoToPitch -> 0
+  GenTagVibLfoToPitch -> 0
+  GenTagModEnvToPitch -> 0
+  GenTagInitFc -> 13500
+  GenTagInitQ -> 0
+  GenTagModLfoToFc -> 0
+  GenTagModEnvToFc -> 0
+  GenTagEndAddressCoarseOffset -> 0
+  GenTagModLfoToVol -> 0
+  GenTagChorus -> 0
+  GenTagReverb -> 0
+  GenTagPan -> 0
+  GenTagDelayModLfo -> -12000
+  GenTagFreqModLfo -> 0
+  GenTagDelayVibLfo -> -12000
+  GenTagFreqVibLfo -> 0
+  GenTagDelayModEnv -> -12000
+  GenTagAttackModEnv -> -12000
+  GenTagHoldModEnv -> -12000
+  GenTagDecayModEnv -> -12000
+  GenTagSustainModEnv -> 0
+  GenTagReleaseModEnv -> -12000
+  GenTagKeyToModEnvHold -> 0
+  GenTagKeyToModEnvDecay -> 0
+  GenTagDelayVolEnv -> -12000
+  GenTagAttackVolEnv -> -12000
+  GenTagHoldVolEnv -> -12000
+  GenTagDecayVolEnv -> -12000
+  GenTagSustainVolEnv -> 0
+  GenTagReleaseVolEnv -> -12000
+  GenTagKeyToVolEnvHold -> 0
+  GenTagKeyToVolEnvDecay -> 0
+  GenTagInstIndex -> 0
+  GenTagKeyRange -> Range 0 127
+  GenTagVelRange -> Range 0 127
+  GenTagLoopStartAddressCoarseOffset -> 0
+  GenTagKey -> -1
+  GenTagVel -> -1
+  GenTagInitAtten -> 0
+  GenTagLoopEndAddressCoarseOffset -> 0
+  GenTagCoarseTune -> 0
+  GenTagFineTune -> 0
+  GenTagSampleIndex -> 0
+  GenTagSampleMode -> SampleModeNoLoop 0
+  GenTagScaleTuning -> 100
+  GenTagExclusiveClass -> 0
+  GenTagRootKey -> -1
+  GenTagReserved _ -> 0
+
+genTagTyRep :: Typeable a => GenTag a -> TypeRep a
+genTagTyRep _ = typeRep
+
+genTagTest :: (Typeable a, Typeable b) => GenTag a -> GenTag b -> Maybe (a :~: b)
+genTagTest t s = case testEquality (genTagTyRep t) (genTagTyRep s) of
+  Nothing -> Nothing
+  Just Refl -> if t == s then Just Refl else Nothing
+
+lookupGenVal :: Typeable a => GenTag a -> Seq Gen -> Maybe a
+lookupGenVal t = go where
+  go = \case
+    Empty -> Nothing
+    gp :<| rest ->
+      case gp of
+        GenInt (GenPair s v) ->
+          case genTagTest t s of
+            Just Refl -> Just v
+            Nothing -> go rest
+        GenWord (GenPair s v) ->
+          case genTagTest t s of
+            Just Refl -> Just v
+            Nothing -> go rest
+        GenRange (GenPair s v) ->
+          case genTagTest t s of
+            Just Refl -> Just v
+            Nothing -> go rest
+        GenSampleMode (GenPair s v) ->
+          case genTagTest t s of
+            Just Refl -> Just v
+            Nothing -> go rest

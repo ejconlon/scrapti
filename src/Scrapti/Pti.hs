@@ -1,7 +1,34 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Scrapti.Pti where
+module Scrapti.Pti
+  ( WavetableWindowSize (..)
+  , SamplePlayback (..)
+  , Preamble (..)
+  , AutoEnvelope (..)
+  , AutoType (..)
+  , Auto (..)
+  , LfoType (..)
+  , LfoSteps (..)
+  , Lfo (..)
+  , FilterType (..)
+  , Filter (..)
+  , InstParams (..)
+  , Slices (..)
+  , GranularShape (..)
+  , GranularLoopMode (..)
+  , Granular (..)
+  , Effects (..)
+  , Block (..)
+  , mkBlock
+  , defAutoBlock
+  , Header (..)
+  , Pti (..)
+  , calculateCrc
+  , updateCrc
+  , checkCrc
+  , mkPti
+  ) where
 
 import Dahdit (Binary (..), BinaryRep (..), BoolByte (..), ByteSized (..), FloatLE, Int16LE, PrimArray, Proxy (..),
                StaticArray, StaticByteSized (..), StaticBytes, ViaBinaryRep (..), ViaBoundedEnum (..), ViaGeneric (..),
@@ -464,3 +491,6 @@ instance Default Pti where
   -- NOTE: The default CRC will need to be updated when the default header changes.
   -- There is a unit test that will fail if not
   def = Pti def 222402026 emptyPrimArray
+
+mkPti :: Header -> PrimArray Int16LE -> Pti
+mkPti header = Pti header (calculateCrc header)

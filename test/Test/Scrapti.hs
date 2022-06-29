@@ -282,5 +282,10 @@ testPtiWav = testCase "wav" $ do
 testPti :: TestTree
 testPti = testGroup "pti" [testPtiSizes, testPtiWrite, testPtiAux, testPtiMinimal, testPtiDigest, testPtiWav]
 
+testConvert :: TestTree
+testConvert = testCase "convert" $ do
+  -- TODO test conversion of sfont
+  pure ()
+
 testScrapti :: TestTree
-testScrapti = testGroup "Scrapti" [testWav, testSfont, testPti]
+testScrapti = testGroup "Scrapti" [testWav, testSfont, testPti, testConvert]

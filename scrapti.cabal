@@ -35,6 +35,7 @@ library
       Dahdit.Proxy
       Dahdit.Run
       Dahdit.Sizes
+      Scrapti.Convert
       Scrapti.Dsp
       Scrapti.Main
       Scrapti.Pti
