@@ -1,6 +1,8 @@
 # scrapti
 
-Utility to extract/convert Polyend Tracker PTI files
+WORK IN PROGRESS - Utility to extract/convert Polyend Tracker PTI files
+
+Right now there is code to parse/render Wav/Soundfont/PTI files. The Soundfont to PTI conversion is next.
 
 ## License
 
