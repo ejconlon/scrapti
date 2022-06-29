@@ -1,4 +1,4 @@
-resolver: lts-19.11
+resolver: lts-19.13
 
 ghc-options:
   "$everything": -haddock
@@ -6,5 +6,6 @@ ghc-options:
 packages:
 - .
 
-# extra-deps:
-# - sdl2-mixer-1.2.0.0
+extra-deps:
+- git: git@github.com:ejconlon/dahdit.git
+  commit: fd11a179997d08afe687624df3365a59506070c9

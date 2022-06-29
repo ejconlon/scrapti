@@ -24,17 +24,6 @@ source-repository head
 
 library
   exposed-modules:
-      Dahdit
-      Dahdit.Binary
-      Dahdit.BinaryRep
-      Dahdit.Fancy
-      Dahdit.Free
-      Dahdit.Funs
-      Dahdit.Generic
-      Dahdit.Nums
-      Dahdit.Proxy
-      Dahdit.Run
-      Dahdit.Sizes
       Scrapti.Convert
       Scrapti.Dsp
       Scrapti.Main
@@ -77,9 +66,9 @@ library
       base >=4.12 && <5
     , bytestring
     , containers
+    , dahdit
     , data-default
     , digest
-    , free
     , mtl
     , primitive
     , transformers
@@ -90,7 +79,6 @@ test-suite scrapti-test
   main-is: Main.hs
   other-modules:
       Test.Dahdit
-      Test.Scrapti
       Paths_scrapti
   hs-source-dirs:
       test
@@ -125,9 +113,9 @@ test-suite scrapti-test
       base >=4.12 && <5
     , bytestring
     , containers
+    , dahdit
     , data-default
     , digest
-    , free
     , mtl
     , primitive
     , scrapti

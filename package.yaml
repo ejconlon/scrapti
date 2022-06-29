@@ -16,20 +16,13 @@ description: Please see the README on GitHub at <https://github.com/ejconlon/scr
 dependencies:
 - base >= 4.12 && < 5
 - bytestring
+- dahdit
 - data-default
 - mtl
 - transformers
 - containers
 - primitive
-- free
 - digest
-# - text
-# - binary
-# - resourcet
-# - vector
-# - yaml
-# - sdl2
-# - sdl2-mixer
 
 default-extensions:
 - BangPatterns
