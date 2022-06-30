@@ -8,13 +8,13 @@ import qualified Data.ByteString.Short as BSS
 import Data.Default (def)
 import Data.Primitive.PrimArray (sizeofPrimArray)
 import qualified Data.Sequence as Seq
-import Scrapti.Tracker.Checked (Checked (..), mkCode)
-import Scrapti.Tracker.Pti (Auto (..), AutoEnvelope (..), AutoType, Block, Effects (..), Filter, FilterType, Granular,
-                    GranularLoopMode, GranularShape, Header (..), InstParams (..), Lfo (..), LfoSteps, LfoType,
-                    Preamble (..), Pti (..), SamplePlayback, Slices, WavetableWindowSize)
 import Scrapti.Riff (Chunk (..), chunkHeaderSize, getChunkSize, getExpectLabel, labelRiff)
 import Scrapti.Sfont (Bag, Gen, InfoChunk (..), Inst, ListChunk (..), Mod, OptChunk (..), PdtaChunk (..), Phdr,
                       Sdta (..), SdtaChunk (..), Sfont (..), Shdr, labelSfbk)
+import Scrapti.Tracker.Checked (Checked (..), mkCode)
+import Scrapti.Tracker.Pti (Auto (..), AutoEnvelope (..), AutoType, Block, Effects (..), Filter, FilterType, Granular,
+                            GranularLoopMode, GranularShape, Header (..), InstParams (..), Lfo (..), LfoSteps, LfoType,
+                            Preamble (..), Pti (..), SamplePlayback, Slices, WavetableWindowSize)
 import Scrapti.Wav (Sampled (..), SampledWav (..), Wav (..), WavBody (..), WavChunk (..), WavFormat (..),
                     WavFormatChunk (..), WavHeader (..), WavSampleChunk (..))
 import Test.Tasty (TestTree, defaultMain, testGroup)

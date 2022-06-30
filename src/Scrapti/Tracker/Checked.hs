@@ -6,11 +6,11 @@ module Scrapti.Tracker.Checked
   , verifyCheckedCode
   ) where
 
-import Dahdit (StaticByteSized, Binary, ByteSized, Word32LE, ViaStaticGeneric (..), runPut, put)
-import GHC.Generics (Generic)
+import Dahdit (Binary, ByteSized, StaticByteSized, ViaStaticGeneric (..), Word32LE, put, runPut)
 import qualified Data.ByteString.Short as BSS
-import Data.Digest.CRC32 (crc32)
 import Data.Default (Default (..))
+import Data.Digest.CRC32 (crc32)
+import GHC.Generics (Generic)
 
 data Checked a = Checked
   { checkedVal :: !a

@@ -1,8 +1,9 @@
 module Scrapti.Tracker.Mtp where
 
-import Dahdit (BinaryRep (..), Word8, StaticByteSized, ViaBinaryRep (..), Binary, ByteSized, ViaStaticGeneric (..), StaticBytes, Word32LE, StaticSeq)
-import GHC.Generics (Generic)
+import Dahdit (Binary, BinaryRep (..), ByteSized, StaticByteSized, StaticBytes, StaticSeq, ViaBinaryRep (..),
+               ViaStaticGeneric (..), Word32LE, Word8)
 import Data.Default (Default (..))
+import GHC.Generics (Generic)
 
 data EffectType =
     EffectTypeVolume

@@ -35,7 +35,7 @@ import Data.Int (Int8)
 import Data.Primitive.PrimArray (emptyPrimArray)
 import Data.Word (Word8)
 import GHC.Generics (Generic)
-import Scrapti.Tracker.Checked (Checked (..), updateCheckedCode, verifyCheckedCode, mkChecked)
+import Scrapti.Tracker.Checked (Checked (..), mkChecked, updateCheckedCode, verifyCheckedCode)
 
 data WavetableWindowSize =
     WWS32
