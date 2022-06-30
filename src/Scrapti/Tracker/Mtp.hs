@@ -1,9 +1,11 @@
 module Scrapti.Tracker.Mtp where
 
 import Dahdit (Binary, BinaryRep (..), ByteSized, StaticByteSized, StaticBytes, StaticSeq, ViaBinaryRep (..),
-               ViaStaticGeneric (..), Word32LE, Word8)
+               ViaStaticGeneric (..), Word8)
 import Data.Default (Default (..))
 import GHC.Generics (Generic)
+import Scrapti.Binary (ExactBytes)
+import Scrapti.Tracker.Checked (Checked(..))
 
 data EffectType =
     EffectTypeVolume
@@ -56,14 +58,13 @@ data Track = Track
 instance Default Track where
   def = Track 0 0
 
-newtype Pattern = Pattern
-  { unPattern :: StaticSeq 8 Track
-  } deriving stock (Show)
-    deriving newtype (Eq, ByteSized, StaticByteSized, Binary)
-
-data Mtp = Mtp
-  { mtpAuxHeader :: !(StaticBytes 28)
-  , mtpPattern :: !Pattern
-  , mtpCrc :: !Word32LE
+data MtpBody = MtpBody
+  { mbFileType :: !(ExactBytes "KS")
+  , mbAuxHeader :: !(StaticBytes 26)
+  , mbPattern :: !(StaticSeq 8 Track)
   } deriving stock (Eq, Show, Generic)
-    deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Mtp)
+    deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric MtpBody)
+
+newtype Mtp = Mtp { unMtp :: Checked MtpBody }
+  deriving stock (Show)
+  deriving newtype (Eq, ByteSized, StaticByteSized, Binary)
