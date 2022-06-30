@@ -30,6 +30,7 @@ library
       Scrapti.Sfont
       Scrapti.Tracker.Checked
       Scrapti.Tracker.Convert
+      Scrapti.Tracker.Loader
       Scrapti.Tracker.Mt
       Scrapti.Tracker.Mtp
       Scrapti.Tracker.Pti
@@ -72,8 +73,12 @@ library
     , dahdit ==0.1.*
     , data-default ==0.7.*
     , digest ==0.0.1.*
+    , directory
+    , filepath
     , mtl ==2.2.*
     , primitive ==0.7.*
+    , regex-tdfa
+    , text ==1.2.*
     , transformers ==0.5.*
   default-language: Haskell2010
 
@@ -119,10 +124,14 @@ test-suite scrapti-test
     , dahdit ==0.1.*
     , data-default ==0.7.*
     , digest ==0.0.1.*
+    , directory
+    , filepath
     , mtl ==2.2.*
     , primitive ==0.7.*
+    , regex-tdfa
     , scrapti
     , tasty
     , tasty-hunit
+    , text ==1.2.*
     , transformers ==0.5.*
   default-language: Haskell2010
