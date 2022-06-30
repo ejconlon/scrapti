@@ -1,11 +1,19 @@
 module Scrapti.Tracker.Mt
-  ( Mt (..)
+  ( MtBody (..)
+  , Mt (..)
   ) where
 
-import Dahdit (Binary, ByteSized, StaticByteSized, ViaStaticGeneric (..), Word8)
+import Dahdit (Binary, ByteSized, StaticByteSized, ViaStaticGeneric (..), StaticBytes)
 import GHC.Generics (Generic)
+import Scrapti.Binary (ExactBytes)
+import Scrapti.Tracker.Checked (Checked(..))
 
--- TODO real defn
-data Mt = Mt !Word8 !Word8
-  deriving stock (Eq, Show, Generic)
-  deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Mt)
+data MtBody = MtBody
+  { mtbFileType :: !(ExactBytes "MT")
+  , mtbAux2To1568 :: !(StaticBytes 1566)
+  } deriving stock (Eq, Show, Generic)
+  deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric MtBody)
+
+newtype Mt = Mt { unMt :: Checked MtBody }
+  deriving stock (Show)
+  deriving newtype (Eq, ByteSized, StaticByteSized, Binary)

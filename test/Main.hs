@@ -291,15 +291,13 @@ testProject :: TestTree
 testProject = testCase "project" $ do
   p <- loadRichProject "testdata/testproj"
   withSystemTempDirectory "testproj" $ \path -> do
-    let q = p { projectPath = path }
-    saveRichProject OverwriteYesReally q
+    saveRichProject OverwriteYesReally path p
     songExists <- doesFileExist (path </> "project.mt")
     assertBool "song does not exist" songExists
     -- TODO more assertions
-    _r <- loadRichProject path
+    -- _q <- loadRichProject path
     -- TODO when all parsers round-trip, assert equality
-    -- let s = r { projectPath = "testdata/testproj"}
-    -- s @?= p
+    -- q @?= p
     pure ()
 
 testConvert :: TestTree
