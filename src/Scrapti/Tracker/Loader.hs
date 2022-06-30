@@ -2,16 +2,17 @@ module Scrapti.Tracker.Loader where
 
 import Control.Exception (Exception, throwIO)
 import Control.Monad (unless, (>=>))
-import Dahdit (Binary (..), GetError, runGet)
+import Dahdit (Binary (..), GetError, runGet, runPut)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
+import Data.Foldable (for_)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Traversable (for)
 import Scrapti.Tracker.Mt (Mt)
 import Scrapti.Tracker.Mtp (Mtp)
 import Scrapti.Tracker.Pti (Pti)
-import System.Directory (doesDirectoryExist, doesFileExist, listDirectory)
+import System.Directory (createDirectoryIfMissing, doesDirectoryExist, doesFileExist, doesPathExist, listDirectory)
 import System.FilePath ((</>))
 import Text.Read (readEither)
 import Text.Regex.TDFA ((=~~))
@@ -29,7 +30,6 @@ data Res =
   | ResPat !Int
   deriving stock (Eq, Show)
 
-
 data LoadError =
     LoadErrorMissingProject !FilePath
   | LoadErrorMissingRes !FilePath !Res !FilePath
@@ -38,6 +38,12 @@ data LoadError =
   deriving stock (Eq, Show)
 
 instance Exception LoadError
+
+-- data WithPath a = WithPath !FilePath !a
+--   deriving stock (Eq, Show, Ord, Functor, Foldable, Traversable)
+
+-- data WithName a = WithName !String !a
+--   deriving stock (Eq, Show, Ord, Functor, Foldable, Traversable)
 
 type BareProject = Project FilePath (String, FilePath) FilePath
 type RichProject = Project Mt (String, Pti) Mtp
@@ -54,11 +60,17 @@ parseInstPart part = unM $ do
   num <- M $ readEither @Int numStr
   pure (num, name)
 
+renderInstPart :: Int -> String -> FilePath
+renderInstPart num name = show num ++ " " ++ name ++ ".pti"
+
 parsePatPart :: FilePath -> Either String (Int, ())
 parsePatPart part = unM $ do
   (_, _, _, [numStr]) <- part =~~ "^pattern_0?([[:digit:]]+)\\.mtp" :: M (String, String, String, [String])
   num <- M $ readEither @Int numStr
   pure (num, ())
+
+renderPatPart :: Int -> FilePath
+renderPatPart num = "pattern_" ++ if num < 9 then "0" else "" ++ show num ++ ".mtp"
 
 crawlThingDir :: (FilePath -> Either String (Int, n)) -> FilePath -> FilePath -> IO (Map Int (n, FilePath))
 crawlThingDir extract projDir thingsPart = do
@@ -86,8 +98,8 @@ loadBareProject projDir = do
   pats <- fmap (fmap snd) (crawlThingDir parsePatPart projDir "patterns")
   pure (Project projDir songPart insts pats)
 
-parseBinary :: Binary a => FilePath -> Res -> FilePath -> IO a
-parseBinary pp rs rp = do
+runGetRes :: Binary a => FilePath -> Res -> FilePath -> IO a
+runGetRes pp rs rp = do
   let rf = pp </> rp
   bs <- fmap BSS.toShort (BS.readFile rf)
   let (ea, _) = runGet get bs
@@ -96,18 +108,56 @@ parseBinary pp rs rp = do
     Right a -> pure a
 
 loadSong :: Project FilePath i p -> IO (Project Mt i p)
-loadSong p = fmap (\s -> p { projectSong = s }) (parseBinary (projectPath p) ResSong (projectSong p))
+loadSong p = fmap (\s -> p { projectSong = s }) (runGetRes (projectPath p) ResSong (projectSong p))
 
 loadInstruments :: Project s (String, FilePath) p -> IO (Project s (String, Pti) p)
 loadInstruments p =
-  fmap (\m -> p { projectInsts = m }) (Map.traverseWithKey (\i (n, x) -> fmap (n,) (parseBinary (projectPath p) (ResInst i) x)) (projectInsts p))
+  fmap (\m -> p { projectInsts = m }) (Map.traverseWithKey (\i (n, x) -> fmap (n,) (runGetRes (projectPath p) (ResInst i) x)) (projectInsts p))
 
 loadPatterns :: Project s i FilePath -> IO (Project s i Mtp)
 loadPatterns p =
-  fmap (\m -> p { projectPats = m }) (Map.traverseWithKey (parseBinary (projectPath p) . ResPat) (projectPats p))
+  fmap (\m -> p { projectPats = m }) (Map.traverseWithKey (runGetRes (projectPath p) . ResPat) (projectPats p))
 
 enrichProject :: BareProject -> IO RichProject
 enrichProject = loadSong >=> loadInstruments >=> loadPatterns
 
 loadRichProject :: FilePath -> IO RichProject
 loadRichProject = loadBareProject >=> enrichProject
+
+runPutRes :: Binary a => FilePath -> a -> FilePath -> IO ()
+runPutRes pp a rp =
+  let rf = pp </> rp
+      bs = BSS.fromShort (runPut (put a))
+  in BS.writeFile rf bs
+
+saveSong :: Project Mt i p -> IO ()
+saveSong p = runPutRes (projectPath p) (projectSong p) "project.mt"
+
+saveInstruments :: Project s (String, Pti) p -> IO ()
+saveInstruments p = for_ (Map.toList (projectInsts p)) (\(i, (n, x)) -> runPutRes (projectPath p) x (renderInstPart i n))
+
+savePatterns :: Project s i Mtp -> IO ()
+savePatterns p = for_ (Map.toList (projectPats p)) (\(i, x) -> runPutRes (projectPath p) x (renderPatPart i))
+
+data Overwrite =
+    OverwriteNo
+  | OverwriteYesReally
+  deriving stock (Eq, Show)
+
+saveRichProject :: Overwrite -> RichProject -> IO ()
+saveRichProject o p = do
+  let root = projectPath p
+  guardOverwrite o root
+  createDirectoryIfMissing True root
+  createDirectoryIfMissing True (root </> "instruments")
+  createDirectoryIfMissing True (root </> "patterns")
+  saveSong p
+  saveInstruments p
+  savePatterns p
+
+guardOverwrite :: Overwrite -> FilePath -> IO ()
+guardOverwrite o fp = do
+  exist <- doesPathExist fp
+  case (o, exist) of
+    (OverwriteNo, True) -> fail ("Aborting overwrite of " ++ fp)
+    _ -> pure ()

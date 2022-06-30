@@ -12,13 +12,17 @@ import Scrapti.Riff (Chunk (..), chunkHeaderSize, getChunkSize, getExpectLabel, 
 import Scrapti.Sfont (Bag, Gen, InfoChunk (..), Inst, ListChunk (..), Mod, OptChunk (..), PdtaChunk (..), Phdr,
                       Sdta (..), SdtaChunk (..), Sfont (..), Shdr, labelSfbk)
 import Scrapti.Tracker.Checked (Checked (..), mkCode)
+import Scrapti.Tracker.Loader (Overwrite (..), Project (..), loadRichProject, saveRichProject)
 import Scrapti.Tracker.Pti (Auto (..), AutoEnvelope (..), AutoType, Block, Effects (..), Filter, FilterType, Granular,
                             GranularLoopMode, GranularShape, Header (..), InstParams (..), Lfo (..), LfoSteps, LfoType,
                             Preamble (..), Pti (..), SamplePlayback, Slices, WavetableWindowSize)
 import Scrapti.Wav (Sampled (..), SampledWav (..), Wav (..), WavBody (..), WavChunk (..), WavFormat (..),
                     WavFormatChunk (..), WavHeader (..), WavSampleChunk (..))
+import System.Directory (doesFileExist)
+import System.FilePath ((</>))
+import System.IO.Temp (withSystemTempDirectory)
 import Test.Tasty (TestTree, defaultMain, testGroup)
-import Test.Tasty.HUnit (assertEqual, testCase, (@?=))
+import Test.Tasty.HUnit (assertBool, assertEqual, testCase, (@?=))
 
 dataOffset :: ByteCount
 dataOffset = 36
@@ -283,13 +287,28 @@ testPtiWav = testCase "wav" $ do
 testPti :: TestTree
 testPti = testGroup "pti" [testPtiSizes, testPtiWrite, testPtiAux, testPtiMinimal, testPtiDigest, testPtiWav]
 
+testProject :: TestTree
+testProject = testCase "project" $ do
+  p <- loadRichProject "testdata/testproj"
+  withSystemTempDirectory "testproj" $ \path -> do
+    let q = p { projectPath = path }
+    saveRichProject OverwriteYesReally q
+    songExists <- doesFileExist (path </> "project.mt")
+    assertBool "song does not exist" songExists
+    -- TODO more assertions
+    _r <- loadRichProject path
+    -- TODO when all parsers round-trip, assert equality
+    -- let s = r { projectPath = "testdata/testproj"}
+    -- s @?= p
+    pure ()
+
 testConvert :: TestTree
 testConvert = testCase "convert" $ do
   -- TODO test conversion of sfont
   pure ()
 
 testScrapti :: TestTree
-testScrapti = testGroup "Scrapti" [testWav, testSfont, testPti, testConvert]
+testScrapti = testGroup "Scrapti" [testWav, testSfont, testPti, testProject, testConvert]
 
 main :: IO ()
 main = defaultMain testScrapti

@@ -10,11 +10,11 @@ packages:
     git: git@github.com:ejconlon/dahdit.git
     pantry-tree:
       size: 1484
-      sha256: 8d167e6f8d9843acf6c5a2d932f46773468d32d623977cdc0faa257a862433ef
-    commit: fd11a179997d08afe687624df3365a59506070c9
+      sha256: 1ebfe9c3a558abb3597a8251947755baa36d27cbe0e4b550bc63edd530b1b27f
+    commit: e9a20da721f83c24423a53927b3dad5eadddc5e3
   original:
     git: git@github.com:ejconlon/dahdit.git
-    commit: fd11a179997d08afe687624df3365a59506070c9
+    commit: e9a20da721f83c24423a53927b3dad5eadddc5e3
 snapshots:
 - completed:
     size: 618740
