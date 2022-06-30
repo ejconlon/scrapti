@@ -8,9 +8,10 @@ import qualified Data.ByteString.Short as BSS
 import Data.Default (def)
 import Data.Primitive.PrimArray (sizeofPrimArray)
 import qualified Data.Sequence as Seq
-import Scrapti.Pti (Auto (..), AutoEnvelope (..), AutoType, Block, Effects (..), Filter, FilterType, Granular,
+import Scrapti.Tracker.Checked (Checked (..), mkCode)
+import Scrapti.Tracker.Pti (Auto (..), AutoEnvelope (..), AutoType, Block, Effects (..), Filter, FilterType, Granular,
                     GranularLoopMode, GranularShape, Header (..), InstParams (..), Lfo (..), LfoSteps, LfoType,
-                    Preamble (..), Pti (..), SamplePlayback, Slices, WavetableWindowSize, calculateCrc)
+                    Preamble (..), Pti (..), SamplePlayback, Slices, WavetableWindowSize)
 import Scrapti.Riff (Chunk (..), chunkHeaderSize, getChunkSize, getExpectLabel, labelRiff)
 import Scrapti.Sfont (Bag, Gen, InfoChunk (..), Inst, ListChunk (..), Mod, OptChunk (..), PdtaChunk (..), Phdr,
                       Sdta (..), SdtaChunk (..), Sfont (..), Shdr, labelSfbk)
@@ -251,14 +252,14 @@ testPtiMinimal = testCase "minimal" $ do
   -- Now check altogether
   actHdr @?= modDefHdr
   -- Now check digest
-  let modDefDigest = calculateCrc modDefHdr
+  let modDefDigest = mkCode modDefHdr
   actDigest @?= modDefDigest
 
 testPtiDigest :: TestTree
 testPtiDigest = testCase "digest" $ do
   let defPti = def @Pti
-      expecDigest = calculateCrc (ptiHeader defPti)
-  ptiCrc defPti @?= expecDigest
+      expecDigest = mkCode (checkedVal (ptiHeader defPti))
+  checkedCode (ptiHeader defPti) @?= expecDigest
 
 getWavInt16LE :: Get (Wav Int16LE)
 getWavInt16LE = get

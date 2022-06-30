@@ -24,12 +24,15 @@ source-repository head
 
 library
   exposed-modules:
-      Scrapti.Convert
       Scrapti.Dsp
       Scrapti.Main
-      Scrapti.Pti
       Scrapti.Riff
       Scrapti.Sfont
+      Scrapti.Tracker.Checked
+      Scrapti.Tracker.Convert
+      Scrapti.Tracker.Mt
+      Scrapti.Tracker.Mtp
+      Scrapti.Tracker.Pti
       Scrapti.Wav
   other-modules:
       Paths_scrapti

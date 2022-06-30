@@ -1,4 +1,4 @@
-module Scrapti.Convert
+module Scrapti.Tracker.Convert
   ( ConvertOpts (..)
   -- , convertSfont
   ) where
@@ -7,7 +7,7 @@ import Control.Monad.Reader (MonadReader, ReaderT (..))
 import Control.Monad.Writer.Strict (MonadWriter (..), Writer, runWriter)
 import Data.Default (Default (..))
 import Data.Sequence (Seq)
-import Scrapti.Pti (Pti)
+import Scrapti.Tracker.Pti (Pti)
 -- import Scrapti.Sfont (Sfont)
 import Dahdit (Int16LE (..), Word32LE (..))
 import Data.Primitive.PrimArray (PrimArray)

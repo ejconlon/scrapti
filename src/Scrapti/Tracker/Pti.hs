@@ -1,7 +1,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Scrapti.Pti
+module Scrapti.Tracker.Pti
   ( WavetableWindowSize (..)
   , SamplePlayback (..)
   , Preamble (..)
@@ -24,23 +24,18 @@ module Scrapti.Pti
   , defAutoBlock
   , Header (..)
   , Pti (..)
-  , calculateCrc
-  , updateCrc
-  , checkCrc
   , mkPti
   ) where
 
 import Dahdit (Binary (..), BinaryRep (..), BoolByte (..), ByteSized (..), FloatLE, Int16LE, PrimArray, Proxy (..),
                StaticArray, StaticByteSized (..), StaticBytes, ViaBinaryRep (..), ViaBoundedEnum (..), ViaGeneric (..),
-               ViaStaticGeneric (..), Word16LE, Word32LE, getRemainingStaticArray, getStaticArray, putStaticArray,
-               putWord32LE, runPut)
-import qualified Data.ByteString.Short as BSS
+               ViaStaticGeneric (..), Word16LE, Word32LE, getRemainingStaticArray, getStaticArray, putStaticArray)
 import Data.Default (Default (..))
-import Data.Digest.CRC32 (crc32)
 import Data.Int (Int8)
 import Data.Primitive.PrimArray (emptyPrimArray)
 import Data.Word (Word8)
 import GHC.Generics (Generic)
+import Scrapti.Tracker.Checked (Checked (..), updateCheckedCode, verifyCheckedCode, mkChecked)
 
 data WavetableWindowSize =
     WWS32
@@ -457,40 +452,32 @@ instance Default Header where
   def = Header def defAutoBlock def def def def def def
 
 data Pti = Pti
-  { ptiHeader :: !Header
-  , ptiCrc :: !Word32LE
+  { ptiHeader :: !(Checked Header)
   , ptiWav :: !(PrimArray Int16LE)
   } deriving stock (Eq, Show, Generic)
     deriving (ByteSized) via (ViaGeneric Pti)
 
-calculateCrc :: Header -> Word32LE
-calculateCrc hdr = fromIntegral (crc32 (BSS.fromShort (runPut (put hdr))))
+updatePtiCode :: Pti -> Pti
+updatePtiCode pti = pti { ptiHeader = updateCheckedCode (ptiHeader pti) }
 
-updateCrc :: Pti -> Pti
-updateCrc pti = pti { ptiCrc = calculateCrc (ptiHeader pti) }
-
-checkCrc :: Pti -> Bool
-checkCrc pti = ptiCrc pti == calculateCrc (ptiHeader pti)
+verifyPtiCode :: Pti -> Bool
+verifyPtiCode pti = verifyCheckedCode (ptiHeader pti)
 
 instance Binary Pti where
   get = do
     header <- get
-    crc <- get
-    let !sampleLength = fromIntegral (preSampleLength (hdrPreamble header))
+    let !sampleLength = fromIntegral (preSampleLength (hdrPreamble (checkedVal header)))
     wav <-
       if sampleLength == 0  -- what the heck, it happens
         then getRemainingStaticArray (Proxy :: Proxy Int16LE)
         else getStaticArray @Int16LE sampleLength
-    pure $! Pti header crc wav
-  put (Pti header crc wav) = do
+    pure $! Pti header wav
+  put (Pti header wav) = do
     put header
-    putWord32LE crc
     putStaticArray wav
 
 instance Default Pti where
-  -- NOTE: The default CRC will need to be updated when the default header changes.
-  -- There is a unit test that will fail if not
-  def = Pti def 222402026 emptyPrimArray
+  def = Pti def emptyPrimArray
 
 mkPti :: Header -> PrimArray Int16LE -> Pti
-mkPti header = Pti header (calculateCrc header)
+mkPti = Pti . mkChecked
