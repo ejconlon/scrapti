@@ -174,8 +174,8 @@ testPtiWrite = testCase "write" $ do
 
 type Sel a = Header -> a
 
-selPreAux0To19 :: Sel (StaticBytes 20)
-selPreAux0To19 = preAux0To19 . hdrPreamble
+selPreAux2To19 :: Sel (StaticBytes 18)
+selPreAux2To19 = preAux2To19 . hdrPreamble
 
 selPreAux52To59 :: Sel (StaticBytes 8)
 selPreAux52To59 = preAux52To59 . hdrPreamble
@@ -219,7 +219,7 @@ testPtiAux = testCase "aux" $ do
   let defHdr = def @Header
       same :: (Eq a, Show a) => Int -> Sel a -> IO ()
       same i sel = assertEqual ("aux " ++ show i) (sel defHdr) (sel actHdr)
-  same 0 selPreAux0To19
+  same 2 selPreAux2To19
   same 52 selPreAux52To59
   same 66 selPreAux66To67
   same 70 selPreAux70To75

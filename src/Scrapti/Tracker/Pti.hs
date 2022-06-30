@@ -36,6 +36,7 @@ import Data.Primitive.PrimArray (emptyPrimArray)
 import Data.Word (Word8)
 import GHC.Generics (Generic)
 import Scrapti.Tracker.Checked (Checked (..), mkChecked, updateCheckedCode, verifyCheckedCode)
+import Scrapti.Binary (ExactBytes)
 
 data WavetableWindowSize =
     WWS32
@@ -84,8 +85,10 @@ data SamplePlayback =
 --   def = SPOneShot
 
 data Preamble = Preamble
-  { preAux0To19 :: !(StaticBytes 20)
-  -- 0-19
+  { preFileType :: !(ExactBytes "TI")
+  -- 0-1
+  , preAux2To19 :: !(StaticBytes 18)
+  -- 2-19
   , preIsWavetable :: !BoolByte
   -- 20
   , preName :: !(StaticBytes 31)
@@ -125,7 +128,8 @@ data Preamble = Preamble
 
 instance Default Preamble where
   def = Preamble
-    { preAux0To19 = "TI\SOH\NUL\SOH\ENQ\NUL\SOH\t\t\t\tt\SOHff\SOH\NUL\NUL\NUL"
+    { preFileType = def
+    , preAux2To19 = "\SOH\NUL\SOH\ENQ\NUL\SOH\t\t\t\tt\SOHff\SOH\NUL\NUL\NUL"
     , preIsWavetable = BoolByte False
     , preName = ""
     , preAux52To59 = "\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL"
