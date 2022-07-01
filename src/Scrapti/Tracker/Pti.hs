@@ -28,9 +28,9 @@ module Scrapti.Tracker.Pti
   ) where
 
 import Dahdit (Binary (..), BinaryRep (..), BoolByte (..), ByteSized (..), ExactBytes, FloatLE, Int16LE, PrimArray,
-               Proxy (..), StaticArray, StaticByteSized (..), StaticBytes, ViaBinaryRep (..), ViaBoundedEnum (..),
+               Proxy (..), StaticArray, StaticByteSized (..), StaticBytes (..), ViaBinaryRep (..), ViaBoundedEnum (..),
                ViaGeneric (..), ViaStaticGeneric (..), Word16LE, Word32LE, getRemainingStaticArray, getStaticArray,
-               putStaticArray)
+               putStaticArray, ShortByteString)
 import Data.Default (Default (..))
 import Data.Int (Int8)
 import Data.Word (Word8)
@@ -126,10 +126,14 @@ data Preamble = Preamble
   } deriving stock (Eq, Show, Generic)
     deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Preamble)
 
+fw15Preamble, fw16Preamble :: ShortByteString
+fw15Preamble = "\SOH\NUL\SOH\ENQ\NUL\SOH\t\t\t\tt\SOHff\SOH\NUL\NUL\NUL"
+fw16Preamble = "\SOH\NUL\SOH\ACK\NUL\SOH\t\t\t\tt\SOH\255\255\SOH\NUL\NUL\NUL"
+
 instance Default Preamble where
   def = Preamble
     { preFileType = def
-    , preAux2To19 = "\SOH\NUL\SOH\ENQ\NUL\SOH\t\t\t\tt\SOHff\SOH\NUL\NUL\NUL"
+    , preAux2To19 = StaticBytes fw16Preamble
     , preIsWavetable = BoolByte False
     , preName = ""
     , preAux52To59 = "\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL"

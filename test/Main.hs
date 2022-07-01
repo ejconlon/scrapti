@@ -167,7 +167,7 @@ testPtiSizes = testCase "sizes" $ do
 
 testPtiWrite :: TestTree
 testPtiWrite = testCase "write" $ do
-  bs <- readShort "testdata/testproj/instruments/1 drums.pti"
+  bs <- readShort "testdata/testproj16/instruments/1 drums.pti"
   (pti, bc) <- runGetIO (get @Pti) bs
   byteSize pti @?= bc
   fromIntegral bc @?= BSS.length bs
@@ -217,7 +217,7 @@ selEffAux387 = effAux387 . hdrEffects
 
 testPtiAux :: TestTree
 testPtiAux = testCase "aux" $ do
-  bs <- readShort "testdata/testproj/instruments/1 drums.pti"
+  bs <- readShort "testdata/testproj16/instruments/1 drums.pti"
   (actHdr, _) <- runGetIO (get @Header) bs
   let defHdr = def @Header
       same :: (Eq a, Show a) => Int -> Sel a -> IO ()
@@ -239,7 +239,7 @@ testPtiAux = testCase "aux" $ do
 
 testPtiMinimal :: TestTree
 testPtiMinimal = testCase "minimal" $ do
-  bs <- readShort "testdata/testproj/instruments/1 drums.pti"
+  bs <- readShort "testdata/testproj16/instruments/1 drums.pti"
   ((actHdr, actDigest), _) <- runGetIO ((,) <$> get @Header <*> getWord32LE) bs
   let defHdr = def @Header
       actPre = hdrPreamble actHdr
@@ -277,7 +277,7 @@ extractWavData = unWavSampleChunk . wbSample . wavBody
 testPtiWav :: TestTree
 testPtiWav = testCase "wav" $ do
   wavBs <- readShort "testdata/drums.wav"
-  ptiBs <- readShort "testdata/testproj/instruments/1 drums.pti"
+  ptiBs <- readShort "testdata/testproj16/instruments/1 drums.pti"
   (wav, _) <- runGetIO getWavInt16LE wavBs
   (pti, _) <- runGetIO (get @Pti) ptiBs
   let wavData = extractWavData wav
@@ -292,13 +292,13 @@ testPti = testGroup "pti" [testPtiSizes, testPtiWrite, testPtiAux, testPtiMinima
 
 testOtherSizes :: TestTree
 testOtherSizes = testCase "other sizes" $ do
-  staticByteSize (Proxy :: Proxy Mt) @?= 1572
+  staticByteSize (Proxy :: Proxy Mt) @?= 1796
   staticByteSize (Proxy :: Proxy Mtp) @?= 6184
 
 testProject :: TestTree
 testProject = testCase "project" $ do
-  p <- loadRichProject "testdata/testproj"
-  withSystemTempDirectory "testproj" $ \path -> do
+  p <- loadRichProject "testdata/testproj16"
+  withSystemTempDirectory "testproj16" $ \path -> do
     saveRichProject OverwriteYesReally path p
     songExists <- doesFileExist (path </> "project.mt")
     assertBool "song does not exist" songExists

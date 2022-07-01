@@ -9,7 +9,7 @@ import Scrapti.Tracker.Checked (Checked (..))
 
 data MtBody = MtBody
   { mtbFileType :: !(ExactBytes "MT")
-  , mtbAux2To1568 :: !(StaticBytes 1566)
+  , mtbAux2To1792 :: !(StaticBytes 1790)
   } deriving stock (Eq, Show, Generic)
   deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric MtBody)
 
