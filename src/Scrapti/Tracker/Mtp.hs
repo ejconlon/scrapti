@@ -1,11 +1,10 @@
 module Scrapti.Tracker.Mtp where
 
-import Dahdit (Binary, BinaryRep (..), ByteSized, StaticByteSized, StaticBytes, StaticSeq, ViaBinaryRep (..),
-               ViaStaticGeneric (..), Word8)
+import Dahdit (Binary, BinaryRep (..), ByteSized, ExactBytes, StaticByteSized, StaticBytes, StaticSeq,
+               ViaBinaryRep (..), ViaStaticGeneric (..), Word8)
 import Data.Default (Default (..))
 import GHC.Generics (Generic)
-import Scrapti.Binary (ExactBytes)
-import Scrapti.Tracker.Checked (Checked(..), mkChecked)
+import Scrapti.Tracker.Checked (Checked (..), mkChecked)
 
 data FxType =
     FxTypeVolume
@@ -47,13 +46,13 @@ data Step = Step
 
 -- TODO
 data Track = Track
-  { trackX :: !Word8
-  , trackY :: !Word8
+  { trackUnparsed :: !(StaticBytes 769)
+  , trackFake :: !()
   } deriving stock (Eq, Show, Generic)
     deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Track)
 
 instance Default Track where
-  def = Track 0 0
+  def = Track def def
 
 data MtpBody = MtpBody
   { mtpbFileType :: !(ExactBytes "KS")

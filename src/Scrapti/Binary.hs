@@ -1,30 +1,17 @@
-module Scrapti.Binary where
+module Scrapti.Binary
+  ( QuietArray (..)
+  ) where
 
-import GHC.TypeLits (Symbol, KnownSymbol, symbolVal)
-import Dahdit (ViaStaticByteSized (..), StaticByteSized (..), ByteSized, Binary (..), putByteString, getByteString, getExpect)
-import Data.Proxy (Proxy (..))
-import Data.ByteString.Internal (c2w)
-import qualified Data.ByteString.Short as BSS
+import Dahdit (ByteSized)
 import Data.Default (Default (..))
+import Data.Primitive (Prim)
+import Data.Primitive.PrimArray (PrimArray, emptyPrimArray, sizeofPrimArray)
 
-newtype ExactBytes (s :: Symbol) = ExactBytes { unExactBytes :: () }
-  deriving stock (Show)
-  deriving newtype (Eq)
-  deriving (ByteSized) via (ViaStaticByteSized (ExactBytes s))
+newtype QuietArray a = QuietArray { unQuietArray :: PrimArray a }
+  deriving newtype (Eq, ByteSized)
 
-instance Default (ExactBytes s) where
-  def = ExactBytes ()
+instance Prim a => Show (QuietArray a) where
+  show (QuietArray arr) = "QuietArray{" ++ show (sizeofPrimArray arr) ++ "}"
 
-instance KnownSymbol s => StaticByteSized (ExactBytes s) where
-  staticByteSize _ = fromIntegral (length (symbolVal (Proxy :: Proxy s)))
-
-instance KnownSymbol s => Binary (ExactBytes s) where
-  get = do
-    let !s = symbolVal (Proxy :: Proxy s)
-        !bc = fromIntegral (length s)
-        !bs = BSS.pack (fmap c2w s)
-    getExpect s (getByteString bc) bs
-    pure $! ExactBytes ()
-  put _ = do
-    let !s = symbolVal (Proxy :: Proxy s)
-    putByteString (BSS.pack (fmap c2w s))
+instance Default (QuietArray a) where
+  def = QuietArray emptyPrimArray

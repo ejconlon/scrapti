@@ -3,10 +3,9 @@ module Scrapti.Tracker.Mt
   , Mt (..)
   ) where
 
-import Dahdit (Binary, ByteSized, StaticByteSized, ViaStaticGeneric (..), StaticBytes)
+import Dahdit (Binary, ByteSized, ExactBytes, StaticByteSized, StaticBytes, ViaStaticGeneric (..))
 import GHC.Generics (Generic)
-import Scrapti.Binary (ExactBytes)
-import Scrapti.Tracker.Checked (Checked(..))
+import Scrapti.Tracker.Checked (Checked (..))
 
 data MtBody = MtBody
   { mtbFileType :: !(ExactBytes "MT")

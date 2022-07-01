@@ -9,6 +9,7 @@ import Data.Foldable (for_)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Traversable (for)
+import Scrapti.Tracker.Checked (failCheckedCode)
 import Scrapti.Tracker.Mt (Mt (..))
 import Scrapti.Tracker.Mtp (Mtp (..))
 import Scrapti.Tracker.Pti (Pti (ptiHeader))
@@ -16,7 +17,6 @@ import System.Directory (createDirectoryIfMissing, doesDirectoryExist, doesFileE
 import System.FilePath ((</>))
 import Text.Read (readEither)
 import Text.Regex.TDFA ((=~~))
-import Scrapti.Tracker.Checked (failCheckedCode)
 
 data Project s i p = Project
   { projectSong :: !s
@@ -55,7 +55,7 @@ parseInstPart part = unM $ do
   pure (num, name)
 
 renderInstPart :: Int -> String -> FilePath
-renderInstPart num name = show num ++ " " ++ name ++ ".pti"
+renderInstPart num name = "instruments" </> show num ++ " " ++ name ++ ".pti"
 
 parsePatPart :: FilePath -> Either String (Int, ())
 parsePatPart part = unM $ do
@@ -64,7 +64,7 @@ parsePatPart part = unM $ do
   pure (num, ())
 
 renderPatPart :: Int -> FilePath
-renderPatPart num = "pattern_" ++ if num < 9 then "0" else "" ++ show num ++ ".mtp"
+renderPatPart num = "patterns" </> "pattern_" ++ (if num < 9 then "0" else "") ++ show num ++ ".mtp"
 
 crawlThingDir :: (FilePath -> Either String (Int, n)) -> FilePath -> FilePath -> IO (Map Int (n, FilePath))
 crawlThingDir extract projDir thingsPart = do
@@ -119,7 +119,7 @@ loadPatterns :: FilePath -> Project s i FilePath -> IO (Project s i Mtp)
 loadPatterns projDir proj = do
   m <- flip Map.traverseWithKey (projectPats proj) $ \i x -> do
     y <- runGetRes projDir (ResPat i) x
-    -- failCheckedCode "loaded pattern" (unMtp y)
+    failCheckedCode "loaded pattern" (unMtp y)
     pure y
   pure $! proj { projectPats = m }
 
@@ -149,7 +149,7 @@ saveInstruments projDir proj = for_ (Map.toList (projectInsts proj)) $ \(i, (n, 
 
 savePatterns :: FilePath -> Project s i Mtp -> IO ()
 savePatterns projDir proj = for_ (Map.toList (projectPats proj)) $ \(i, x) -> do
-  -- failCheckedCode "saved pattern" (unMtp x)
+  failCheckedCode "saved pattern" (unMtp x)
   runPutRes projDir x (renderPatPart i)
 
 data Overwrite =

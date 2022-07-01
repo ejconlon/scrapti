@@ -7,12 +7,12 @@ module Scrapti.Tracker.Checked
   , failCheckedCode
   ) where
 
+import Control.Monad (unless)
 import Dahdit (Binary, ByteSized, StaticByteSized, ViaStaticGeneric (..), Word32LE (..), put, runPut)
 import qualified Data.ByteString.Short as BSS
 import Data.Default (Default (..))
 import Data.Digest.CRC32 (crc32)
 import GHC.Generics (Generic)
-import Control.Monad (unless)
 
 data Checked a = Checked
   { checkedVal :: !a

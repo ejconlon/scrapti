@@ -27,16 +27,16 @@ module Scrapti.Tracker.Pti
   , mkPti
   ) where
 
-import Dahdit (Binary (..), BinaryRep (..), BoolByte (..), ByteSized (..), FloatLE, Int16LE, PrimArray, Proxy (..),
-               StaticArray, StaticByteSized (..), StaticBytes, ViaBinaryRep (..), ViaBoundedEnum (..), ViaGeneric (..),
-               ViaStaticGeneric (..), Word16LE, Word32LE, getRemainingStaticArray, getStaticArray, putStaticArray)
+import Dahdit (Binary (..), BinaryRep (..), BoolByte (..), ByteSized (..), ExactBytes, FloatLE, Int16LE, PrimArray,
+               Proxy (..), StaticArray, StaticByteSized (..), StaticBytes, ViaBinaryRep (..), ViaBoundedEnum (..),
+               ViaGeneric (..), ViaStaticGeneric (..), Word16LE, Word32LE, getRemainingStaticArray, getStaticArray,
+               putStaticArray)
 import Data.Default (Default (..))
 import Data.Int (Int8)
-import Data.Primitive.PrimArray (emptyPrimArray)
 import Data.Word (Word8)
 import GHC.Generics (Generic)
+import Scrapti.Binary (QuietArray (..))
 import Scrapti.Tracker.Checked (Checked (..), mkChecked, updateCheckedCode, verifyCheckedCode)
-import Scrapti.Binary (ExactBytes)
 
 data WavetableWindowSize =
     WWS32
@@ -457,7 +457,7 @@ instance Default Header where
 
 data Pti = Pti
   { ptiHeader :: !(Checked Header)
-  , ptiWav :: !(PrimArray Int16LE)
+  , ptiWav :: !(QuietArray Int16LE)
   } deriving stock (Eq, Show, Generic)
     deriving (ByteSized) via (ViaGeneric Pti)
 
@@ -475,13 +475,13 @@ instance Binary Pti where
       if sampleLength == 0  -- what the heck, it happens
         then getRemainingStaticArray (Proxy :: Proxy Int16LE)
         else getStaticArray @Int16LE sampleLength
-    pure $! Pti header wav
-  put (Pti header wav) = do
+    pure $! Pti header (QuietArray wav)
+  put (Pti header (QuietArray wav)) = do
     put header
     putStaticArray wav
 
 instance Default Pti where
-  def = Pti def emptyPrimArray
+  def = Pti def def
 
 mkPti :: Header -> PrimArray Int16LE -> Pti
-mkPti = Pti . mkChecked
+mkPti hdr arr = Pti (mkChecked hdr) (QuietArray arr)

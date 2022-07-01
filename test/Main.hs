@@ -8,11 +8,14 @@ import qualified Data.ByteString.Short as BSS
 import Data.Default (def)
 import Data.Primitive.PrimArray (sizeofPrimArray)
 import qualified Data.Sequence as Seq
+import Scrapti.Binary (QuietArray (..))
 import Scrapti.Riff (Chunk (..), chunkHeaderSize, getChunkSize, getExpectLabel, labelRiff)
 import Scrapti.Sfont (Bag, Gen, InfoChunk (..), Inst, ListChunk (..), Mod, OptChunk (..), PdtaChunk (..), Phdr,
                       Sdta (..), SdtaChunk (..), Sfont (..), Shdr, labelSfbk)
 import Scrapti.Tracker.Checked (Checked (..), mkCode)
-import Scrapti.Tracker.Loader (Overwrite (..), Project (..), loadRichProject, saveRichProject)
+import Scrapti.Tracker.Loader (Overwrite (..), loadRichProject, saveRichProject)
+import Scrapti.Tracker.Mt (Mt)
+import Scrapti.Tracker.Mtp (Mtp)
 import Scrapti.Tracker.Pti (Auto (..), AutoEnvelope (..), AutoType, Block, Effects (..), Filter, FilterType, Granular,
                             GranularLoopMode, GranularShape, Header (..), InstParams (..), Lfo (..), LfoSteps, LfoType,
                             Preamble (..), Pti (..), SamplePlayback, Slices, WavetableWindowSize)
@@ -168,7 +171,7 @@ testPtiWrite = testCase "write" $ do
   (pti, bc) <- runGetIO (get @Pti) bs
   byteSize pti @?= bc
   fromIntegral bc @?= BSS.length bs
-  sizeofPrimArray (ptiWav pti) @?= div (fromIntegral drumDataLen) 2
+  sizeofPrimArray (unQuietArray (ptiWav pti)) @?= div (fromIntegral drumDataLen) 2
   let bs' = runPut (put pti)
   bs' @?= bs
 
@@ -278,7 +281,7 @@ testPtiWav = testCase "wav" $ do
   (wav, _) <- runGetIO getWavInt16LE wavBs
   (pti, _) <- runGetIO (get @Pti) ptiBs
   let wavData = extractWavData wav
-      ptiData = ptiWav pti
+      ptiData = unQuietArray (ptiWav pti)
   -- We expect there is half as many samples because it's converted to mono
   sizeofPrimArray ptiData @?= div (sizeofPrimArray wavData) 2
   -- As far as the content, I have no idea what it's doing to the signal...
@@ -287,6 +290,11 @@ testPtiWav = testCase "wav" $ do
 testPti :: TestTree
 testPti = testGroup "pti" [testPtiSizes, testPtiWrite, testPtiAux, testPtiMinimal, testPtiDigest, testPtiWav]
 
+testOtherSizes :: TestTree
+testOtherSizes = testCase "other sizes" $ do
+  staticByteSize (Proxy :: Proxy Mt) @?= 1572
+  staticByteSize (Proxy :: Proxy Mtp) @?= 6184
+
 testProject :: TestTree
 testProject = testCase "project" $ do
   p <- loadRichProject "testdata/testproj"
@@ -294,11 +302,8 @@ testProject = testCase "project" $ do
     saveRichProject OverwriteYesReally path p
     songExists <- doesFileExist (path </> "project.mt")
     assertBool "song does not exist" songExists
-    -- TODO more assertions
-    -- _q <- loadRichProject path
-    -- TODO when all parsers round-trip, assert equality
-    -- q @?= p
-    pure ()
+    q <- loadRichProject path
+    q @?= p
 
 testConvert :: TestTree
 testConvert = testCase "convert" $ do
@@ -306,7 +311,7 @@ testConvert = testCase "convert" $ do
   pure ()
 
 testScrapti :: TestTree
-testScrapti = testGroup "Scrapti" [testWav, testSfont, testPti, testProject, testConvert]
+testScrapti = testGroup "Scrapti" [testWav, testSfont, testPti, testProject, testConvert, testOtherSizes]
 
 main :: IO ()
 main = defaultMain testScrapti
