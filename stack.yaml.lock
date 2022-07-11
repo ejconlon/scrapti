@@ -10,14 +10,14 @@ packages:
     git: git@github.com:ejconlon/dahdit.git
     pantry-tree:
       size: 1484
-      sha256: 3a2052b521b962e6e33082921bbfc28605c5e99418dc34a176ae0aae0c282d69
-    commit: 9fb839d01da6737b7256758bcced9efd5ee12567
+      sha256: 9ddd521f54f40035f79b4e83e6ed89861f8ad756becca54a8b53af33aab8ecba
+    commit: 5cde80d4ec818bcbc9a42b677e40f94bfb6a7d0c
   original:
     git: git@github.com:ejconlon/dahdit.git
-    commit: 9fb839d01da6737b7256758bcced9efd5ee12567
+    commit: 5cde80d4ec818bcbc9a42b677e40f94bfb6a7d0c
 snapshots:
 - completed:
-    size: 618740
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/19/13.yaml
-    sha256: ef98d70e4018bf01feb00ccdcd33ab26d056dbb71b38057c78fdd0d1ec671c85
-  original: lts-19.13
+    size: 618952
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/19/15.yaml
+    sha256: 82e5ccb47b068521de4055034e8aa278eab430b586881d9cc29ba8b382ce3253
+  original: lts-19.15

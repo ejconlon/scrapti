@@ -28,9 +28,9 @@ module Scrapti.Tracker.Pti
   ) where
 
 import Dahdit (Binary (..), BinaryRep (..), BoolByte (..), ByteSized (..), ExactBytes, FloatLE, Int16LE, PrimArray,
-               Proxy (..), StaticArray, StaticByteSized (..), StaticBytes (..), ViaBinaryRep (..), ViaBoundedEnum (..),
-               ViaGeneric (..), ViaStaticGeneric (..), Word16LE, Word32LE, getRemainingStaticArray, getStaticArray,
-               putStaticArray, ShortByteString)
+               Proxy (..), ShortByteString, StaticArray, StaticByteSized (..), StaticBytes (..), ViaBinaryRep (..),
+               ViaBoundedEnum (..), ViaGeneric (..), ViaStaticGeneric (..), Word16LE, Word32LE, getRemainingStaticArray,
+               getStaticArray, putStaticArray)
 import Data.Default (Default (..))
 import Data.Int (Int8)
 import Data.Word (Word8)
@@ -47,9 +47,6 @@ data WavetableWindowSize =
   | WWS2048
   deriving stock (Eq, Ord, Show, Enum, Bounded)
   deriving (ByteSized, StaticByteSized, Binary) via (ViaBinaryRep WavetableWindowSize)
-
--- instance Default WavetableWindowSize where
---   def = WWS2048
 
 instance BinaryRep Word16LE WavetableWindowSize where
   fromBinaryRep = \case
@@ -80,9 +77,6 @@ data SamplePlayback =
   deriving stock (Eq, Ord, Show, Enum, Bounded)
   deriving (BinaryRep Word8) via (ViaBoundedEnum Word8 SamplePlayback)
   deriving (ByteSized, StaticByteSized, Binary) via (ViaBinaryRep SamplePlayback)
-
--- instance Default SamplePlayback where
---   def = SPOneShot
 
 data Preamble = Preamble
   { preFileType :: !(ExactBytes "TI")
@@ -189,9 +183,6 @@ data AutoType =
   deriving stock (Eq, Ord, Show, Enum, Bounded)
   deriving (ByteSized, StaticByteSized, Binary) via (ViaBinaryRep AutoType)
 
--- instance Default AutoType where
---   def = ATEnvelope
-
 instance BinaryRep Word16LE AutoType where
   fromBinaryRep = \case
     0x0000 -> Right ATOff
@@ -209,9 +200,6 @@ data Auto = Auto
   } deriving stock (Eq, Show, Generic)
     deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Auto)
 
--- instance Default Auto where
---   def = Auto def def
-
 data LfoType =
     LTRevSaw
   | LTSaw
@@ -221,9 +209,6 @@ data LfoType =
   deriving stock (Eq, Ord, Show, Enum, Bounded)
   deriving (BinaryRep Word8) via (ViaBoundedEnum Word8 LfoType)
   deriving (ByteSized, StaticByteSized, Binary) via (ViaBinaryRep LfoType)
-
--- instance Default LfoType where
---   def = LTTriangle
 
 data LfoSteps =
     LS24
@@ -253,9 +238,6 @@ data LfoSteps =
   deriving stock (Eq, Ord, Show, Enum, Bounded)
   deriving (BinaryRep Word8) via (ViaBoundedEnum Word8 LfoSteps)
   deriving (ByteSized, StaticByteSized, Binary) via (ViaBinaryRep LfoSteps)
-
--- instance Default LfoSteps where
---   def = LS24
 
 data Lfo = Lfo
   { lfoType :: !LfoType

@@ -1,4 +1,4 @@
-resolver: lts-19.13
+resolver: lts-19.15
 
 ghc-options:
   "$everything": -haddock
@@ -8,4 +8,4 @@ packages:
 
 extra-deps:
 - git: git@github.com:ejconlon/dahdit.git
-  commit: 9fb839d01da6737b7256758bcced9efd5ee12567
+  commit: 5cde80d4ec818bcbc9a42b677e40f94bfb6a7d0c
