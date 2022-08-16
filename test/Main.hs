@@ -19,8 +19,8 @@ import Scrapti.Tracker.Mtp (Mtp)
 import Scrapti.Tracker.Pti (Auto (..), AutoEnvelope (..), AutoType, Block, Effects (..), Filter, FilterType, Granular,
                             GranularLoopMode, GranularShape, Header (..), InstParams (..), Lfo (..), LfoSteps, LfoType,
                             Preamble (..), Pti (..), SamplePlayback, Slices, WavetableWindowSize)
-import Scrapti.Wav (Sampled (..), SampledWav (..), Wav (..), WavBody (..), WavChunk (..), WavFormat (..),
-                    WavFormatChunk (..), WavHeader (..), WavSampleChunk (..))
+import Scrapti.Wav (Sampled (..), SampledWav (..), Wav (..), WavBody (..), WavChunk (..), WavDataChunk (..),
+                    WavFormat (..), WavFormatChunk (..), WavHeader (..))
 import System.Directory (doesFileExist)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
@@ -65,8 +65,8 @@ testWavData = testCase "data" $ do
     getSkip dataOffset
     chunk <- getChunkInt16LE
     case chunk of
-      WavChunkSample (WavSampleChunk arr) -> pure arr
-      _ -> fail "expected samples"
+      WavChunkData (WavDataChunk arr) -> pure arr
+      _ -> fail "expected data"
   fromIntegral (sizeofPrimArray arr) @?= drumDataLen
 
 testWavWhole :: TestTree
@@ -272,7 +272,7 @@ getWavInt16LE :: Get (Wav Int16LE)
 getWavInt16LE = get
 
 extractWavData :: Wav a -> PrimArray a
-extractWavData = unWavSampleChunk . wbSample . wavBody
+extractWavData = unWavDataChunk . wbSample . wavBody
 
 testPtiWav :: TestTree
 testPtiWav = testCase "wav" $ do

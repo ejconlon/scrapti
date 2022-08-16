@@ -5,7 +5,7 @@ module Scrapti.Wav
   , WavFormat (..)
   , WavFormatChunk (..)
   , WavHeader (..)
-  , WavSampleChunk (..)
+  , WavDataChunk (..)
   , WavUnparsedChunk (..)
   , WavChunk (..)
   , WavBody (..)
@@ -100,31 +100,31 @@ newtype WavFormatChunk = WavFormatChunk { unWavFormatChunk :: Chunk WavFormat }
   deriving stock (Show)
   deriving newtype (Eq, Binary, ByteSized, Default)
 
-newtype WavSampleChunk a = WavSampleChunk { unWavSampleChunk :: PrimArray a }
+newtype WavDataChunk a = WavDataChunk { unWavDataChunk :: PrimArray a }
   deriving stock (Show)
   deriving newtype (Eq)
 
-instance (Prim a, StaticByteSized a) => ByteSized (WavSampleChunk a) where
-  byteSize (WavSampleChunk vec) = 8 + byteSize vec
+instance (Prim a, StaticByteSized a) => ByteSized (WavDataChunk a) where
+  byteSize (WavDataChunk vec) = 8 + byteSize vec
 
-instance (Prim a, StaticByteSized a) => Binary (WavSampleChunk a) where
+instance (Prim a, StaticByteSized a) => Binary (WavDataChunk a) where
   get = do
     getExpectLabel labelData
-    getSampleChunkPostLabel
-  put (WavSampleChunk arr) = do
+    getDataChunkPostLabel
+  put (WavDataChunk arr) = do
     put labelData
     let !chunkSize = byteSize arr
     putChunkSize chunkSize
     putStaticArray arr
 
-getSampleChunkPostLabel :: (Prim a, StaticByteSized a) => Get (WavSampleChunk a)
-getSampleChunkPostLabel = do
+getDataChunkPostLabel :: (Prim a, StaticByteSized a) => Get (WavDataChunk a)
+getDataChunkPostLabel = do
   chunkSize <- getChunkSize
   arr <- getExact chunkSize (getRemainingStaticArray (Proxy :: Proxy a))
-  pure $! WavSampleChunk arr
+  pure $! WavDataChunk arr
 
-instance Default (WavSampleChunk a) where
-  def = WavSampleChunk mempty
+instance Default (WavDataChunk a) where
+  def = WavDataChunk mempty
 
 data WavHeader = WavHeader
   { wavHeaderRemainingSize :: !ByteCount
@@ -176,27 +176,27 @@ instance Binary WavUnparsedChunk where
 
 data WavChunk a =
     WavChunkUnparsed !WavUnparsedChunk
-  | WavChunkSample !(WavSampleChunk a)
+  | WavChunkData !(WavDataChunk a)
   deriving stock (Eq, Show)
 
 instance (Prim a, StaticByteSized a) => ByteSized (WavChunk a) where
   byteSize = \case
     WavChunkUnparsed wuc -> byteSize wuc
-    WavChunkSample wsc -> byteSize wsc
+    WavChunkData wsc -> byteSize wsc
 
 instance (Prim a, StaticByteSized a) => Binary (WavChunk a) where
   get = do
     label <- get
     if label == labelData
-      then fmap WavChunkSample getSampleChunkPostLabel
+      then fmap WavChunkData getDataChunkPostLabel
       else fmap WavChunkUnparsed (getUnparsedChunkPostLabel label)
   put = \case
     WavChunkUnparsed wuc -> put wuc
-    WavChunkSample wsc -> put wsc
+    WavChunkData wdc -> put wdc
 
 data WavBody a = WavBody
   { wbUnparsedPre :: !(Seq WavUnparsedChunk)
-  , wbSample :: !(WavSampleChunk a)
+  , wbSample :: !(WavDataChunk a)
   , wbUnparsedPost :: !(Seq WavUnparsedChunk)
   } deriving stock (Eq, Show)
 
@@ -212,7 +212,7 @@ instance (Prim a, StaticByteSized a) => Binary (WavBody a) where
       chunk <- get
       pure $! case chunk of
         WavChunkUnparsed wuc -> Left (pre :|> wuc)
-        WavChunkSample wsc -> Right (pre, wsc)
+        WavChunkData wdc -> Right (pre, wdc)
     post <- getRemainingSeq get
     pure $! WavBody pre sam post
   put (WavBody pre sam post) = do
