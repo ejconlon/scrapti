@@ -39,7 +39,7 @@ import qualified Data.Sequence as Seq
 import Data.Type.Equality (testEquality)
 import Data.Word (Word8)
 import GHC.Generics (Generic)
-import Scrapti.Riff (Label, StaticLabel (..), chunkHeaderSize, getChunkSize, getExpectLabel, labelRiff, labelSize,
+import Scrapti.Riff (KnownLabel (..), Label, chunkHeaderSize, getChunkSize, getExpectLabel, labelRiff, labelSize,
                      putChunkSize)
 import Type.Reflection ((:~:) (..), TypeRep, Typeable, typeRep)
 
@@ -90,12 +90,12 @@ newtype ListChunk a = ListChunk { listChunkElems :: Seq a }
 instance ByteSized a => ByteSized (ListChunk a) where
   byteSize (ListChunk elems) = listChunkHeaderSize + byteSizeFoldable elems
 
-instance (StaticLabel a, Binary a) => Binary (ListChunk a) where
+instance (KnownLabel a, Binary a) => Binary (ListChunk a) where
   get = do
     getExpectLabel labelList
     chunkSize <- getChunkSize
     getExact chunkSize $ do
-      let !label = staticLabel (Proxy :: Proxy a)
+      let !label = knownLabel (Proxy :: Proxy a)
       getExpectLabel label
       elems <- getRemainingSeq get
       pure $! ListChunk elems
@@ -103,7 +103,7 @@ instance (StaticLabel a, Binary a) => Binary (ListChunk a) where
     put labelList
     let !chunkSize = byteSizeFoldable elems + labelSize
     putChunkSize chunkSize
-    let !label = staticLabel (Proxy :: Proxy a)
+    let !label = knownLabel (Proxy :: Proxy a)
     put label
     putSeq put elems
 
@@ -114,12 +114,12 @@ newtype OptChunk a = OptChunk { optChunkElem :: Maybe a }
 instance ByteSized a => ByteSized (OptChunk a) where
   byteSize (OptChunk mayElem) = listChunkHeaderSize + byteSizeFoldable mayElem
 
-instance (StaticLabel a, Binary a) => Binary (OptChunk a) where
+instance (KnownLabel a, Binary a) => Binary (OptChunk a) where
   get = do
     getExpectLabel labelList
     chunkSize <- getChunkSize
     getExact chunkSize $ do
-      let !label = staticLabel (Proxy :: Proxy a)
+      let !label = knownLabel (Proxy :: Proxy a)
       getExpectLabel label
       mayElem <-
         if chunkSize == labelSize
@@ -130,7 +130,7 @@ instance (StaticLabel a, Binary a) => Binary (OptChunk a) where
     put labelList
     let !chunkSize = byteSizeFoldable mayElem + labelSize
     putChunkSize chunkSize
-    let !label = staticLabel (Proxy :: Proxy a)
+    let !label = knownLabel (Proxy :: Proxy a)
     put label
     maybe (pure ()) put mayElem
 
@@ -185,8 +185,8 @@ data Info =
   | InfoReserved !Label !ShortByteString
   deriving stock (Eq, Show)
 
-instance StaticLabel Info where
-  staticLabel _ = labelInfo
+instance KnownLabel Info where
+  knownLabel _ = labelInfo
 
 instance ByteSized Info where
   byteSize info = chunkHeaderSize + case info of
@@ -275,8 +275,8 @@ instance ByteSized Sdta where
     sizeHigh = chunkHeaderSize + byteSize high
     sizeLow = maybe 0 (\low -> chunkHeaderSize + byteSize low) mlow
 
-instance StaticLabel Sdta where
-  staticLabel _ = labelSdta
+instance KnownLabel Sdta where
+  knownLabel _ = labelSdta
 
 getHighBits :: SampleCount -> Get (PrimArray Int16LE)
 getHighBits numSamples = getStaticArray (fromIntegral numSamples)
@@ -332,8 +332,8 @@ data PdtaBlock =
   | PdtaBlockShdr !(Seq Shdr)
   deriving stock (Eq, Show)
 
-instance StaticLabel PdtaBlock where
-  staticLabel _ = labelPdta
+instance KnownLabel PdtaBlock where
+  knownLabel _ = labelPdta
 
 instance ByteSized PdtaBlock where
   byteSize block = res where
