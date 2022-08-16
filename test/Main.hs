@@ -9,7 +9,7 @@ import Data.Default (def)
 import Data.Primitive.PrimArray (sizeofPrimArray)
 import qualified Data.Sequence as Seq
 import Scrapti.Binary (QuietArray (..))
-import Scrapti.Riff (ChunkPair (..), KnownChunkPair (..), chunkHeaderSize, getChunkSize, getExpectLabel, labelRiff)
+import Scrapti.Riff (Chunk (..), KnownChunk (..), chunkHeaderSize, getChunkSize, getExpectLabel, labelRiff)
 import Scrapti.Sfont (Bag, Gen, InfoChunk (..), Inst, ListChunk (..), Mod, OptChunk (..), PdtaChunk (..), Phdr,
                       Sdta (..), SdtaChunk (..), Sfont (..), Shdr, labelSfbk)
 import Scrapti.Tracker.Checked (Checked (..), mkCode)
@@ -31,7 +31,7 @@ dataOffset :: ByteCount
 dataOffset = 36
 
 drumFmt :: WavFormatChunk
-drumFmt = WavFormatChunk (KnownChunkPair (WavFormatBody 1 2 44100 16 mempty))
+drumFmt = WavFormatChunk (KnownChunk (WavFormatBody 1 2 44100 16 mempty))
 
 drumFileSize :: ByteCount
 drumFileSize = 497896
@@ -55,7 +55,7 @@ testWavHeader = testCase "header" $ do
   header @?= drumHeader
   bc @?= dataOffset
 
-getChoiceChunkInt16LE :: Get (ChunkPair (WavChoice Int16LE))
+getChoiceChunkInt16LE :: Get (Chunk (WavChoice Int16LE))
 getChoiceChunkInt16LE = get
 
 testWavData :: TestTree
@@ -63,7 +63,7 @@ testWavData = testCase "data" $ do
   bs <- readShort "testdata/drums.wav"
   (arr, _) <- flip runGetIO bs $ do
     getSkip dataOffset
-    ChunkPair _ choice <- getChoiceChunkInt16LE
+    Chunk _ choice <- getChoiceChunkInt16LE
     case choice of
       WavChoiceData (WavDataBody arr) -> pure arr
       _ -> fail "expected data"
@@ -72,7 +72,7 @@ testWavData = testCase "data" $ do
 testWavWhole :: TestTree
 testWavWhole = testCase "whole" $ do
   bs <- readShort "testdata/drums.wav"
-  (SampledWav (Sampled (Wav fmt (WavBody pre (KnownChunkPair (WavDataBody arr)) post))), _) <- runGetIO (get @SampledWav) bs
+  (SampledWav (Sampled (Wav fmt (WavBody pre (KnownChunk (WavDataBody arr)) post))), _) <- runGetIO (get @SampledWav) bs
   fmt @?= drumFmt
   Seq.length pre @?= 0
   fromIntegral (sizeofPrimArray arr) @?= drumDataLen
@@ -273,7 +273,7 @@ getWavInt16LE :: Get (Wav Int16LE)
 getWavInt16LE = get
 
 extractWavData :: Wav a -> PrimArray a
-extractWavData = unWavDataBody . kcpBody . wbSample . wavBody
+extractWavData = unWavDataBody . knownChunkBody . wbSample . wavBody
 
 testPtiWav :: TestTree
 testPtiWav = testCase "wav" $ do

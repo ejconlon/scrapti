@@ -27,10 +27,10 @@ module Scrapti.Sfont
   ) where
 
 import Control.Monad (unless)
-import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, Int16LE (..), PrimArray, Put, ShortByteString,
-               StaticByteSized (..), StaticBytes, TermBytes, ViaStaticByteSized (..), ViaStaticGeneric (..), Word16LE,
-               Word32LE, byteSizeFoldable, getExact, getRemainingSeq, getRemainingSize, getRemainingStaticSeq,
-               getRemainingString, getSkip, getStaticArray, putByteString, putSeq, putStaticArray)
+import Dahdit (Binary (..), ByteSized (..), Get, Int16LE (..), PrimArray, Put, ShortByteString, StaticByteSized (..),
+               StaticBytes, TermBytes, ViaStaticByteSized (..), ViaStaticGeneric (..), Word16LE, Word32LE,
+               byteSizeFoldable, getExact, getRemainingSeq, getRemainingSize, getRemainingStaticSeq, getRemainingString,
+               getSkip, getStaticArray, putByteString, putSeq, putStaticArray)
 import Data.Foldable (foldl')
 import Data.Int (Int8)
 import Data.Proxy (Proxy (..))
@@ -39,15 +39,14 @@ import qualified Data.Sequence as Seq
 import Data.Type.Equality (testEquality)
 import Data.Word (Word8)
 import GHC.Generics (Generic)
-import Scrapti.Riff (KnownLabel (..), Label, chunkHeaderSize, getChunkSize, getExpectLabel, labelRiff, labelSize,
-                     putChunkSize)
+import Scrapti.Riff (KnownLabel (..), Label, chunkHeaderSize, getChunkSize, getExpectLabel, labelList, labelRiff,
+                     labelSize, listChunkHeaderSize, putChunkSize)
 import Type.Reflection ((:~:) (..), TypeRep, Typeable, typeRep)
 
-labelSfbk, labelList, labelInfo, labelIfil, labelIver, labelIsng, labelInam, labelIrom, labelIcrd,
+labelSfbk, labelInfo, labelIfil, labelIver, labelIsng, labelInam, labelIrom, labelIcrd,
   labelIeng, labelIprd, labelIcop, labelIcmt, labelIsft, labelSdta, labelSmpl, labelSm24,
   labelPdta, labelPhdr, labelPbag, labelPmod, labelPgen, labelInst, labelIbag, labelImod, labelIgen, labelShdr :: Label
 labelSfbk = "sfbk"
-labelList = "LIST"
 labelInfo = "INFO"
 labelIfil = "ifil"
 labelIver = "iver"
@@ -79,9 +78,6 @@ newtype SampleCount = SampleCount { unSampleCount :: Word32LE }
   deriving newtype (Eq, Ord, Num, Enum, Real, Integral, ByteSized, StaticByteSized, Binary)
 
 type ShortText = StaticBytes 20
-
-listChunkHeaderSize :: ByteCount
-listChunkHeaderSize = chunkHeaderSize + labelSize
 
 newtype ListChunk a = ListChunk { listChunkElems :: Seq a }
   deriving stock (Show)

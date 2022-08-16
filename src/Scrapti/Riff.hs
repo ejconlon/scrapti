@@ -5,20 +5,26 @@ module Scrapti.Riff
   ( Label
   , labelSize
   , labelRiff
+  , labelList
   , getExpectLabel
   , getChunkSize
   , expectChunkSize
   , putChunkSize
   , chunkHeaderSize
-  , ChunkPair (..)
+  , listChunkHeaderSize
+  , Chunk (..)
   , KnownLabel (..)
-  , KnownChunkPair (..)
+  , KnownChunk (..)
+  , ListChunkBody (..)
+  , ListChunk (..)
+  , KnownListChunk (..)
   ) where
 
-import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, Put, StaticByteSized (..), StaticBytes, Word32LE, getExact,
-               getExpect)
+import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, Put, StaticByteSized (..), StaticBytes, Word32LE,
+               byteSizeFoldable, getExact, getExpect, getRemainingSeq, putSeq)
 import Data.Default (Default)
 import Data.Proxy (Proxy (..))
+import Data.Sequence (Seq)
 import Scrapti.Binary (DepBinary (..))
 
 type Label = StaticBytes 4
@@ -26,8 +32,9 @@ type Label = StaticBytes 4
 labelSize :: ByteCount
 labelSize = 4
 
-labelRiff :: Label
+labelRiff, labelList :: Label
 labelRiff = "RIFF"
+labelList = "LIST"
 
 getExpectLabel :: Label -> Get ()
 getExpectLabel = getExpect "label" get
@@ -43,6 +50,9 @@ putChunkSize = put @Word32LE . fromIntegral
 
 chunkHeaderSize :: ByteCount
 chunkHeaderSize = 8
+
+listChunkHeaderSize :: ByteCount
+listChunkHeaderSize = chunkHeaderSize + labelSize
 
 -- data ChunkHeader = ChunkHeader
 --   { chLabel :: !Label
@@ -64,27 +74,24 @@ chunkHeaderSize = 8
 --     put lab
 --     putChunkSize sz
 
-data ChunkPair a = ChunkPair
-  { cpLabel :: !Label
-  , cpBody :: !a
+data Chunk a = Chunk
+  { chunkLabel :: !Label
+  , chunkBody :: !a
   } deriving stock (Eq, Show)
 
-instance ByteSized a => ByteSized (ChunkPair a) where
-  byteSize (ChunkPair _ body) = chunkHeaderSize + byteSize body
+instance ByteSized a => ByteSized (Chunk a) where
+  byteSize (Chunk _ body) = chunkHeaderSize + byteSize body
 
-instance StaticByteSized a => StaticByteSized (ChunkPair a) where
+instance StaticByteSized a => StaticByteSized (Chunk a) where
   staticByteSize _ = chunkHeaderSize + staticByteSize (Proxy :: Proxy a)
 
--- cpHeader :: ByteSized a => ChunkPair a -> ChunkHeader
--- cpHeader (ChunkPair lab body) = ChunkHeader lab (byteSize body)
-
-instance DepBinary Label a => Binary (ChunkPair a) where
+instance DepBinary Label a => Binary (Chunk a) where
   get = do
     lab <- get
     sz <- getChunkSize
     body <- getExact sz (getDep lab)
-    pure $! ChunkPair lab body
-  put (ChunkPair lab body) = do
+    pure $! Chunk lab body
+  put (Chunk lab body) = do
     put lab
     putChunkSize (byteSize body)
     putDep lab body
@@ -92,24 +99,75 @@ instance DepBinary Label a => Binary (ChunkPair a) where
 class KnownLabel a where
   knownLabel :: Proxy a -> Label
 
-newtype KnownChunkPair a = KnownChunkPair
-  { kcpBody :: a
+newtype KnownChunk a = KnownChunk
+  { knownChunkBody :: a
   } deriving stock (Show)
     deriving newtype (Eq, Default)
 
-instance ByteSized a => ByteSized (KnownChunkPair a) where
-  byteSize (KnownChunkPair body) = chunkHeaderSize + byteSize body
+instance ByteSized a => ByteSized (KnownChunk a) where
+  byteSize (KnownChunk body) = chunkHeaderSize + byteSize body
 
-instance StaticByteSized a => StaticByteSized (KnownChunkPair a) where
+instance StaticByteSized a => StaticByteSized (KnownChunk a) where
   staticByteSize _ = chunkHeaderSize + staticByteSize (Proxy :: Proxy a)
 
-instance (Binary a, KnownLabel a) => Binary (KnownChunkPair a) where
+instance (Binary a, KnownLabel a) => Binary (KnownChunk a) where
   get = do
     getExpectLabel (knownLabel (Proxy :: Proxy a))
     sz <- getChunkSize
     body <- getExact sz get
-    pure $! KnownChunkPair body
-  put (KnownChunkPair body) = do
+    pure $! KnownChunk body
+  put (KnownChunk body) = do
     put (knownLabel (Proxy :: Proxy a))
     putChunkSize (byteSize body)
     put body
+
+data ListChunkBody a = ListChunkBody
+  { lcbLabel :: !Label
+  , lcbItems :: !(Seq a)
+  } deriving stock (Eq, Show)
+
+instance ByteSized a => ByteSized (ListChunkBody a) where
+  byteSize (ListChunkBody _ items) = labelSize + byteSizeFoldable items
+
+instance DepBinary Label a => Binary (ListChunkBody a) where
+  get = do
+    label <- get
+    items <- getRemainingSeq (getDep label)
+    pure $! ListChunkBody label items
+  put (ListChunkBody label items) = do
+    put label
+    putSeq (putDep label) items
+
+instance KnownLabel (ListChunkBody a) where
+  knownLabel _ = labelList
+
+newtype ListChunk a = ListChunk { unListChunk :: KnownChunk (ListChunkBody a) }
+  deriving stock (Show)
+  deriving newtype (Eq, ByteSized)
+
+deriving newtype instance DepBinary Label a => Binary (ListChunk a)
+
+newtype KnownListChunk a = KnownListChunk
+  { klcItems :: Seq a
+  } deriving stock (Show)
+    deriving newtype (Eq, Default)
+
+instance ByteSized a => ByteSized (KnownListChunk a) where
+  byteSize (KnownListChunk body) = listChunkHeaderSize + byteSizeFoldable body
+
+instance (Binary a, KnownLabel a) => Binary (KnownListChunk a) where
+  get = do
+    getExpectLabel labelList
+    sz <- getChunkSize
+    let !label = knownLabel (Proxy :: Proxy a)
+    items <- getExact sz $ getRemainingSeq $ do
+      getExpectLabel label
+      get
+    pure $! KnownListChunk items
+  put (KnownListChunk items) = do
+    put labelList
+    putChunkSize (byteSizeFoldable items)
+    let !label = knownLabel (Proxy :: Proxy a)
+    flip putSeq items $ \item -> do
+      put label
+      put item

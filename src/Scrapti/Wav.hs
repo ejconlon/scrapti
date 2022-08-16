@@ -25,8 +25,8 @@ import Data.Primitive (Prim)
 import Data.Proxy (Proxy (..))
 import Data.Sequence (Seq (..))
 import Scrapti.Binary (DepBinary (..))
-import Scrapti.Riff (ChunkPair (..), KnownChunkPair (..), KnownLabel (..), Label, chunkHeaderSize, getChunkSize,
-                     getExpectLabel, labelRiff, labelSize, putChunkSize)
+import Scrapti.Riff (Chunk (..), KnownChunk (..), KnownLabel (..), Label, chunkHeaderSize, getChunkSize, getExpectLabel,
+                     labelRiff, labelSize, putChunkSize)
 
 labelWave, labelFmt, labelData :: Label
 labelWave = "WAVE"
@@ -98,7 +98,7 @@ instance Binary WavFormatBody where
 instance KnownLabel WavFormatBody where
   knownLabel _ = labelFmt
 
-newtype WavFormatChunk = WavFormatChunk { unWavFormatChunk :: KnownChunkPair WavFormatBody }
+newtype WavFormatChunk = WavFormatChunk { unWavFormatChunk :: KnownChunk WavFormatBody }
   deriving stock (Show)
   deriving newtype (Eq, Binary, ByteSized, Default)
 
@@ -161,6 +161,7 @@ instance Binary WavUnparsedBody where
 
 newtype WavInfoBody =
     WavInfoBodyUnparsed WavUnparsedBody
+  -- | WavInfoBodyMetadata
   deriving stock (Eq, Show)
 
 instance ByteSized WavInfoBody where
@@ -192,9 +193,9 @@ instance (Prim a, StaticByteSized a) => DepBinary Label (WavChoice a) where
     WavChoiceData wcd -> put wcd
 
 data WavBody a = WavBody
-  { wbUnparsedPre :: !(Seq (ChunkPair WavInfoBody))
-  , wbSample :: !(KnownChunkPair (WavDataBody a))
-  , wbUnparsedPost :: !(Seq (ChunkPair WavInfoBody))
+  { wbUnparsedPre :: !(Seq (Chunk WavInfoBody))
+  , wbSample :: !(KnownChunk (WavDataBody a))
+  , wbUnparsedPost :: !(Seq (Chunk WavInfoBody))
   } deriving stock (Eq, Show)
 
 instance Default (WavBody a) where
@@ -206,12 +207,12 @@ instance (Prim a, StaticByteSized a) => ByteSized (WavBody a) where
 instance (Prim a, StaticByteSized a) => Binary (WavBody a) where
   get = do
     (!pre, !datBody) <- getUnfold Empty $ \pre -> do
-      ChunkPair lab body <- get
+      Chunk lab body <- get
       pure $! case body of
-        WavChoiceInfo wci -> Left (pre :|> ChunkPair lab wci)
+        WavChoiceInfo wci -> Left (pre :|> Chunk lab wci)
         WavChoiceData wcd -> Right (pre, wcd)
     post <- getRemainingSeq get
-    pure $! WavBody pre (KnownChunkPair datBody) post
+    pure $! WavBody pre (KnownChunk datBody) post
   put (WavBody pre dat post) = do
     putSeq put pre
     put dat
@@ -239,7 +240,7 @@ getRestOfWav _ remainingSize fmtChunk = do
 instance (Prim a, StaticByteSized a) => Binary (Wav a) where
   get = do
     WavHeader remainingSize fmtChunk <- get
-    let !fmt = kcpBody (unWavFormatChunk fmtChunk)
+    let !fmt = knownChunkBody (unWavFormatChunk fmtChunk)
         !fmtBps = fromIntegral (wfbBitsPerSample fmt)
         !prox = Proxy :: Proxy a
         !parseBps = staticByteSize prox * 8
@@ -259,7 +260,7 @@ instance ByteSized SampledWav where
 instance Binary SampledWav where
   get = do
     WavHeader remainingSize fmtChunk <- get
-    let !fmt = kcpBody (unWavFormatChunk fmtChunk)
+    let !fmt = knownChunkBody (unWavFormatChunk fmtChunk)
         !bps = wfbBitsPerSample fmt
     case getSampled bps of
       Nothing -> fail ("Bad bps: " ++ show bps)
