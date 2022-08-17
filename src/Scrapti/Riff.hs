@@ -4,6 +4,7 @@
 module Scrapti.Riff
   ( Label
   , labelSize
+  , countSize
   , labelRiff
   , labelList
   , getExpectLabel
@@ -19,18 +20,21 @@ module Scrapti.Riff
   , ListChunk (..)
   , KnownListChunk (..)
   , KnownOptChunk (..)
+  , ChunkLabel (..)
+  , peekChunkLabel
   ) where
 
 import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, Put, StaticByteSized (..), StaticBytes, Word32LE,
-               byteSizeFoldable, getExact, getExpect, getRemainingSeq, putSeq)
+               byteSizeFoldable, getExact, getExpect, getLookAhead, getRemainingSeq, getSkip, putSeq)
 import Data.Default (Default)
 import Data.Proxy (Proxy (..))
 import Data.Sequence (Seq)
 
 type Label = StaticBytes 4
 
-labelSize :: ByteCount
+labelSize, countSize :: ByteCount
 labelSize = 4
+countSize = 4
 
 labelRiff, labelList :: Label
 labelRiff = "RIFF"
@@ -191,3 +195,15 @@ instance (Binary a, KnownLabel a) => Binary (KnownOptChunk a) where
     putChunkSize (labelSize + byteSizeFoldable item)
     put (knownLabel (Proxy :: Proxy a))
     maybe (pure ()) put item
+
+data ChunkLabel =
+    ChunkLabelSingle !Label
+  | ChunkLabelList !Label
+  deriving stock (Eq, Show)
+
+peekChunkLabel :: Get ChunkLabel
+peekChunkLabel = getLookAhead $ do
+  label <- get
+  if label == labelList
+    then getSkip countSize *> fmap ChunkLabelList get
+    else pure (ChunkLabelSingle label)

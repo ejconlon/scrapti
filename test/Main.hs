@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Main (main) where
 
 import Dahdit (Binary (..), ByteCount, ElementCount, Get, Int16LE, PrimArray, Proxy (..), ShortByteString,
@@ -21,15 +23,18 @@ import Scrapti.Tracker.Pti (Auto (..), AutoEnvelope (..), AutoType, Block, Effec
                             GranularLoopMode, GranularShape, Header (..), InstParams (..), Lfo (..), LfoSteps, LfoType,
                             Preamble (..), Pti (..), SamplePlayback, Slices, WavetableWindowSize)
 import Scrapti.Wav (Sampled (..), SampledWav (..), Wav (..), WavBody (..), WavChoiceChunk (..), WavDataBody (..),
-                    WavFormatBody (..), WavFormatChunk, WavHeader (..))
+                    WavExtraChunk (..), WavFormatBody (..), WavFormatChunk, WavHeader (..), WavInfoElem (..))
 import System.Directory (doesFileExist)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, testCase, (@?=))
 
-dataOffset :: ByteCount
-dataOffset = 36
+drumDataOffset :: ByteCount
+drumDataOffset = 36
+
+drumPostDataOffset :: ByteCount
+drumPostDataOffset = 497816
 
 drumFmt :: WavFormatChunk
 drumFmt = KnownChunk (WavFormatBody 1 2 44100 16 mempty)
@@ -54,7 +59,7 @@ testWavHeader = testCase "header" $ do
   bs <- readShort "testdata/drums.wav"
   (header, bc) <- runGetIO get bs
   header @?= drumHeader
-  bc @?= dataOffset
+  bc @?= drumDataOffset
 
 getChoiceChunkInt16LE :: Get (WavChoiceChunk Int16LE)
 getChoiceChunkInt16LE = get
@@ -63,12 +68,23 @@ testWavData :: TestTree
 testWavData = testCase "data" $ do
   bs <- readShort "testdata/drums.wav"
   (arr, _) <- flip runGetIO bs $ do
-    getSkip dataOffset
+    getSkip drumDataOffset
     choice <- getChoiceChunkInt16LE
     case choice of
       WavChoiceChunkData (KnownChunk (WavDataBody arr)) -> pure arr
       _ -> fail "expected data"
   fromIntegral (sizeofPrimArray arr) @?= drumDataLen
+
+testWavInfo :: TestTree
+testWavInfo = testCase "info" $ do
+  bs <- readShort "testdata/drums.wav"
+  (info, _) <- flip runGetIO bs $ do
+    getSkip drumPostDataOffset
+    choice <- getChoiceChunkInt16LE
+    case choice of
+      WavChoiceChunkExtra (WavExtraChunkInfo info) -> pure info
+      _ -> fail "expected info"
+  info @?= KnownListChunk (Seq.fromList [WavInfoElem "IART" "freewavesamples.com\NUL"])
 
 testWavWhole :: TestTree
 testWavWhole = testCase "whole" $ do
@@ -87,7 +103,7 @@ testWavWrite = testCase "write" $ do
   bs' @?= bs
 
 testWav :: TestTree
-testWav = testGroup "wav" [testWavHeader, testWavData, testWavWhole, testWavWrite]
+testWav = testGroup "wav" [testWavHeader, testWavData, testWavInfo, testWavWhole, testWavWrite]
 
 testSfontWhole :: TestTree
 testSfontWhole = testCase "whole" $ do

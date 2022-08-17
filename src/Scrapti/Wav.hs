@@ -8,6 +8,7 @@ module Scrapti.Wav
   , WavDataBody (..)
   , WavDataChunk
   , WavUnparsedBody (..)
+  , WavInfoElem (..)
   , WavExtraChunk (..)
   , WavChoiceChunk (..)
   , WavBody (..)
@@ -18,17 +19,17 @@ module Scrapti.Wav
 
 import Control.Monad (unless)
 import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, Int16LE, Int32LE, PrimArray, ShortByteString,
-               StaticByteSized (..), Word16LE, Word32LE, byteSizeFoldable, getByteString, getExact, getLookAhead,
-               getRemainingSeq, getRemainingStaticArray, getRemainingString, getUnfold, putByteString, putSeq,
-               putStaticArray)
+               StaticByteSized (..), Word16LE, Word32LE, byteSizeFoldable, getByteString, getExact, getRemainingSeq,
+               getRemainingStaticArray, getRemainingString, getUnfold, putByteString, putSeq, putStaticArray)
 import qualified Data.ByteString.Short as BSS
 import Data.Default (Default (..))
 import Data.Int (Int8)
 import Data.Primitive (Prim)
 import Data.Proxy (Proxy (..))
 import Data.Sequence (Seq (..))
-import Scrapti.Riff (Chunk (..), KnownChunk (..), KnownLabel (..), Label, ListChunkBody, chunkHeaderSize, getChunkSize,
-                     getExpectLabel, labelRiff, labelSize, putChunkSize)
+import Scrapti.Riff (Chunk (..), ChunkLabel (..), KnownChunk (..), KnownLabel (..), KnownListChunk, Label,
+                     chunkHeaderSize, countSize, getChunkSize, getExpectLabel, labelRiff, labelSize, peekChunkLabel,
+                     putChunkSize)
 
 labelWave, labelFmt, labelData, labelInfo :: Label
 labelWave = "WAVE"
@@ -162,34 +163,29 @@ instance Binary WavUnparsedBody where
   get = fmap WavUnparsedBody getRemainingString
   put (WavUnparsedBody bs) = putByteString bs
 
-data WavInfoAttr = WavInfoAttr
-  { wiaKey :: !Label
-  , wiaVal :: !ShortByteString
+data WavInfoElem = WavInfoElem
+  { wieKey :: !Label
+  , wieVal :: !ShortByteString
   } deriving stock (Eq, Show)
 
-instance ByteSized WavInfoAttr where
-  byteSize (WavInfoAttr _ val) = labelSize + 4 + fromIntegral (BSS.length val)
+instance ByteSized WavInfoElem where
+  byteSize (WavInfoElem _ val) = labelSize + countSize + fromIntegral (BSS.length val)
 
-instance Binary WavInfoAttr where
+instance Binary WavInfoElem where
   get = do
     key <- get
     sz <- getChunkSize
     val <- getByteString sz
-    pure $! WavInfoAttr key val
-  put (WavInfoAttr key val) = do
+    pure $! WavInfoElem key val
+  put (WavInfoElem key val) = do
     put key
     putChunkSize (fromIntegral (BSS.length val) :: ByteCount)
     putByteString val
 
-newtype WavInfoBody = WavInfoBody
-  { unWavInfoBody :: ListChunkBody WavInfoAttr
-  } deriving stock (Show)
-    deriving newtype (Eq, ByteSized, Binary)
-
-instance KnownLabel WavInfoBody where
+instance KnownLabel WavInfoElem where
   knownLabel _ = labelInfo
 
-type WavInfoChunk = KnownChunk WavInfoBody
+type WavInfoChunk = KnownListChunk WavInfoElem
 
 data WavExtraChunk =
     WavExtraChunkUnparsed !(Chunk WavUnparsedBody)
@@ -201,12 +197,13 @@ instance ByteSized WavExtraChunk where
     WavExtraChunkUnparsed x -> byteSize x
     WavExtraChunkInfo x -> byteSize x
 
+getExtra :: ChunkLabel -> Get WavExtraChunk
+getExtra = \case
+  ChunkLabelList label | label == labelInfo -> fmap WavExtraChunkInfo get
+  _ -> fmap WavExtraChunkUnparsed get
+
 instance Binary WavExtraChunk where
-  get = do
-    label <- getLookAhead get
-    if label == labelInfo
-      then fmap WavExtraChunkInfo get
-      else fmap WavExtraChunkUnparsed get
+  get = peekChunkLabel >>= getExtra
   put = \case
     WavExtraChunkUnparsed x -> put x
     WavExtraChunkInfo x -> put x
@@ -223,10 +220,10 @@ instance (Prim a, StaticByteSized a) => ByteSized (WavChoiceChunk a) where
 
 instance (Prim a, StaticByteSized a) => Binary (WavChoiceChunk a) where
   get = do
-    label <- getLookAhead get
-    if label == labelData
-      then fmap WavChoiceChunkData get
-      else fmap WavChoiceChunkExtra get
+    chunkLab <- peekChunkLabel
+    case chunkLab of
+      ChunkLabelSingle label | label == labelData -> fmap WavChoiceChunkData get
+      _ -> fmap WavChoiceChunkExtra (getExtra chunkLab)
   put = \case
     WavChoiceChunkExtra wce -> put wce
     WavChoiceChunkData wcd -> put wcd
