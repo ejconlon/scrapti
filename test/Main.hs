@@ -9,8 +9,8 @@ import Data.Default (def)
 import Data.Primitive.PrimArray (sizeofPrimArray)
 import qualified Data.Sequence as Seq
 import Scrapti.Binary (QuietArray (..))
-import Scrapti.Riff (Chunk (..), KnownChunk (..), KnownListChunk (..), KnownOptChunk (..), chunkHeaderSize,
-                     getChunkSize, getExpectLabel, labelRiff)
+import Scrapti.Riff (KnownChunk (..), KnownListChunk (..), KnownOptChunk (..), chunkHeaderSize, getChunkSize,
+                     getExpectLabel, labelRiff)
 import Scrapti.Sfont (Bag, Gen, InfoChunk (..), Inst, Mod, PdtaChunk (..), Phdr, Sdta (..), SdtaChunk (..), Sfont (..),
                       Shdr, labelSfbk)
 import Scrapti.Tracker.Checked (Checked (..), mkCode)
@@ -20,8 +20,8 @@ import Scrapti.Tracker.Mtp (Mtp)
 import Scrapti.Tracker.Pti (Auto (..), AutoEnvelope (..), AutoType, Block, Effects (..), Filter, FilterType, Granular,
                             GranularLoopMode, GranularShape, Header (..), InstParams (..), Lfo (..), LfoSteps, LfoType,
                             Preamble (..), Pti (..), SamplePlayback, Slices, WavetableWindowSize)
-import Scrapti.Wav (Sampled (..), SampledWav (..), Wav (..), WavBody (..), WavChoice (..), WavDataBody (..),
-                    WavFormatBody (..), WavFormatChunk (..), WavHeader (..))
+import Scrapti.Wav (Sampled (..), SampledWav (..), Wav (..), WavBody (..), WavChoiceChunk (..), WavDataBody (..),
+                    WavFormatBody (..), WavFormatChunk, WavHeader (..))
 import System.Directory (doesFileExist)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
@@ -32,7 +32,7 @@ dataOffset :: ByteCount
 dataOffset = 36
 
 drumFmt :: WavFormatChunk
-drumFmt = WavFormatChunk (KnownChunk (WavFormatBody 1 2 44100 16 mempty))
+drumFmt = KnownChunk (WavFormatBody 1 2 44100 16 mempty)
 
 drumFileSize :: ByteCount
 drumFileSize = 497896
@@ -56,7 +56,7 @@ testWavHeader = testCase "header" $ do
   header @?= drumHeader
   bc @?= dataOffset
 
-getChoiceChunkInt16LE :: Get (Chunk (WavChoice Int16LE))
+getChoiceChunkInt16LE :: Get (WavChoiceChunk Int16LE)
 getChoiceChunkInt16LE = get
 
 testWavData :: TestTree
@@ -64,9 +64,9 @@ testWavData = testCase "data" $ do
   bs <- readShort "testdata/drums.wav"
   (arr, _) <- flip runGetIO bs $ do
     getSkip dataOffset
-    Chunk _ choice <- getChoiceChunkInt16LE
+    choice <- getChoiceChunkInt16LE
     case choice of
-      WavChoiceData (WavDataBody arr) -> pure arr
+      WavChoiceChunkData (KnownChunk (WavDataBody arr)) -> pure arr
       _ -> fail "expected data"
   fromIntegral (sizeofPrimArray arr) @?= drumDataLen
 

@@ -26,7 +26,6 @@ import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, Put, StaticByteSized
 import Data.Default (Default)
 import Data.Proxy (Proxy (..))
 import Data.Sequence (Seq)
-import Scrapti.Binary (DepBinary (..))
 
 type Label = StaticBytes 4
 
@@ -86,16 +85,16 @@ instance ByteSized a => ByteSized (Chunk a) where
 instance StaticByteSized a => StaticByteSized (Chunk a) where
   staticByteSize _ = chunkHeaderSize + staticByteSize (Proxy :: Proxy a)
 
-instance DepBinary Label a => Binary (Chunk a) where
+instance Binary a => Binary (Chunk a) where
   get = do
     lab <- get
     sz <- getChunkSize
-    body <- getExact sz (getDep lab)
+    body <- getExact sz get
     pure $! Chunk lab body
   put (Chunk lab body) = do
     put lab
     putChunkSize (byteSize body)
-    putDep lab body
+    put body
 
 class KnownLabel a where
   knownLabel :: Proxy a -> Label
@@ -130,23 +129,21 @@ data ListChunkBody a = ListChunkBody
 instance ByteSized a => ByteSized (ListChunkBody a) where
   byteSize (ListChunkBody _ items) = labelSize + byteSizeFoldable items
 
-instance DepBinary Label a => Binary (ListChunkBody a) where
+instance Binary a => Binary (ListChunkBody a) where
   get = do
     label <- get
-    items <- getRemainingSeq (getDep label)
+    items <- getRemainingSeq get
     pure $! ListChunkBody label items
   put (ListChunkBody label items) = do
     put label
-    putSeq (putDep label) items
+    putSeq put items
 
 instance KnownLabel (ListChunkBody a) where
   knownLabel _ = labelList
 
 newtype ListChunk a = ListChunk { unListChunk :: KnownChunk (ListChunkBody a) }
   deriving stock (Show)
-  deriving newtype (Eq, ByteSized)
-
-deriving newtype instance DepBinary Label a => Binary (ListChunk a)
+  deriving newtype (Eq, ByteSized, Binary)
 
 newtype KnownListChunk a = KnownListChunk
   { klcItems :: Seq a
