@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Scrapti.Wav
   ( Sampled (..)
@@ -8,7 +9,15 @@ module Scrapti.Wav
   , WavDataBody (..)
   , WavDataChunk
   , WavUnparsedBody (..)
+  , WavUnparsedChunk
   , WavInfoElem (..)
+  , WavInfoChunk
+  , WavAdtlData (..)
+  , WavAdtlElem (..)
+  , WavAdtlChunk
+  , WavCuePoint (..)
+  , WavCueBody (..)
+  , WavCueChunk
   , WavExtraChunk (..)
   , WavChoiceChunk (..)
   , WavBody (..)
@@ -21,6 +30,9 @@ module Scrapti.Wav
   , WavDspErr (..)
   , monoWav
   , setWavInfo
+  , SimpleCuePoint (..)
+  , toSimpleCuePoint
+  , fromSimpleCuePoint
   ) where
 
 import Control.Exception (Exception)
@@ -28,7 +40,7 @@ import Control.Monad (join, unless)
 import Control.Monad.Identity (Identity (..))
 import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, Int16LE, Int32LE, PrimArray, ShortByteString,
                StaticByteSized (..), Word16LE, Word32LE, byteSizeFoldable, getByteString, getExact, getRemainingSeq,
-               getRemainingStaticArray, getRemainingString, getUnfold, putByteString, putSeq, putStaticArray)
+               getRemainingStaticArray, getRemainingString, getSeq, getUnfold, putByteString, putSeq, putStaticArray)
 import Data.Default (Default (..))
 import Data.Int (Int8)
 import Data.Primitive (Prim)
@@ -177,6 +189,8 @@ instance Binary WavUnparsedBody where
   get = fmap WavUnparsedBody getRemainingString
   put (WavUnparsedBody bs) = putByteString bs
 
+type WavUnparsedChunk = Chunk WavUnparsedBody
+
 data WavInfoElem = WavInfoElem
   { wieKey :: !Label
   , wieVal :: !ShortByteString
@@ -254,10 +268,67 @@ instance KnownLabel WavAdtlElem where
 
 type WavAdtlChunk = KnownListChunk WavAdtlElem
 
+data WavCuePoint = WavCuePoint
+  { wcpPointId :: !Word32LE
+  , wcpPosition :: !Word32LE
+  , wcpChunkId :: !Word32LE
+  , wcpChunkStart :: !Word32LE
+  , wcpBlockStart :: !Word32LE
+  , wcpSampleStart :: !Word32LE
+  } deriving stock (Eq, Show)
+
+cuePointSize :: ByteCount
+cuePointSize = 24
+
+instance ByteSized WavCuePoint where
+  byteSize _ = cuePointSize
+
+instance StaticByteSized WavCuePoint where
+  staticByteSize _ = cuePointSize
+
+instance Binary WavCuePoint where
+  get = do
+    wcpPointId <- get
+    wcpPosition <- get
+    wcpChunkId <- get
+    wcpChunkStart <- get
+    wcpBlockStart <- get
+    wcpSampleStart <- get
+    pure $! WavCuePoint {..}
+  put (WavCuePoint {..}) = do
+    put wcpPointId
+    put wcpPosition
+    put wcpChunkId
+    put wcpChunkStart
+    put wcpBlockStart
+    put wcpSampleStart
+
+newtype WavCueBody = WavCueBody
+  { wcbPoints :: Seq WavCuePoint
+  } deriving stock (Eq, Show)
+
+instance ByteSized WavCueBody where
+  byteSize (WavCueBody points) = countSize + fromIntegral (Seq.length points) * cuePointSize
+
+instance Binary WavCueBody where
+  get = do
+    count <- get @Word32LE
+    points <- getSeq (fromIntegral count) get
+    pure $! WavCueBody points
+  put (WavCueBody points) = do
+    put (fromIntegral (Seq.length points) :: Word32LE)
+    putSeq put points
+
+instance KnownLabel WavCueBody where
+  knownLabel _ = labelCue
+
+type WavCueChunk = KnownChunk WavCueBody
+
 data WavExtraChunk =
     WavExtraChunkUnparsed !(Chunk WavUnparsedBody)
   | WavExtraChunkInfo !WavInfoChunk
   | WavExtraChunkAdtl !WavAdtlChunk
+  | WavExtraChunkCue !WavCueChunk
   deriving stock (Eq, Show)
 
 instance ByteSized WavExtraChunk where
@@ -265,11 +336,13 @@ instance ByteSized WavExtraChunk where
     WavExtraChunkUnparsed x -> byteSize x
     WavExtraChunkInfo x -> byteSize x
     WavExtraChunkAdtl x -> byteSize x
+    WavExtraChunkCue x -> byteSize x
 
 getExtra :: ChunkLabel -> Get WavExtraChunk
 getExtra = \case
   ChunkLabelList label | label == labelInfo -> fmap WavExtraChunkInfo get
   ChunkLabelList label | label == labelAdtl -> fmap WavExtraChunkAdtl get
+  ChunkLabelSingle label | label == labelCue -> fmap WavExtraChunkCue get
   _ -> fmap WavExtraChunkUnparsed get
 
 instance Binary WavExtraChunk where
@@ -278,6 +351,7 @@ instance Binary WavExtraChunk where
     WavExtraChunkUnparsed x -> put x
     WavExtraChunkInfo x -> put x
     WavExtraChunkAdtl x -> put x
+    WavExtraChunkCue x -> put x
 
 data WavChoiceChunk a =
     WavChoiceChunkExtra !WavExtraChunk
@@ -406,3 +480,14 @@ monoWav sel (Wav (KnownChunk fmt) (WavBody pre (KnownChunk (WavDataBody arr)) po
 setWavInfo :: WavInfoChunk -> WavBody a -> WavBody a
 setWavInfo info = appendWavExtra (WavExtraChunkInfo info) . filterWavExtra (not . isInfo) where
   isInfo = \case { WavExtraChunkInfo _ -> True; _ -> False }
+
+data SimpleCuePoint = SimpleCuePoint
+  { scpPointId :: !Word32LE
+  , scpSampleStart :: !Word32LE
+  } deriving stock (Eq, Show)
+
+toSimpleCuePoint :: WavCuePoint -> SimpleCuePoint
+toSimpleCuePoint wcp = SimpleCuePoint (wcpPointId wcp) (wcpSampleStart wcp)
+
+fromSimpleCuePoint :: SimpleCuePoint -> WavCuePoint
+fromSimpleCuePoint scp = WavCuePoint (scpPointId scp) (scpSampleStart scp) 0 0 0 (scpSampleStart scp)
