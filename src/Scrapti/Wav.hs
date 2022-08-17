@@ -7,7 +7,7 @@ module Scrapti.Wav
   , WavHeader (..)
   , WavDataBody (..)
   , WavUnparsedBody (..)
-  , WavInfoBody (..)
+  , WavExtraBody (..)
   , WavChoice (..)
   , WavBody (..)
   , Wav (..)
@@ -159,43 +159,43 @@ instance Binary WavUnparsedBody where
   get = fmap WavUnparsedBody getRemainingString
   put (WavUnparsedBody bs) = putByteString bs
 
-newtype WavInfoBody =
-    WavInfoBodyUnparsed WavUnparsedBody
-  -- | WavInfoBodyMetadata
+newtype WavExtraBody =
+    WavExtraBodyUnparsed WavUnparsedBody
+  -- | WavExtraBodyMetadata
   deriving stock (Eq, Show)
 
-instance ByteSized WavInfoBody where
+instance ByteSized WavExtraBody where
   byteSize = \case
-    WavInfoBodyUnparsed wub -> byteSize wub
+    WavExtraBodyUnparsed wub -> byteSize wub
 
-instance DepBinary Label WavInfoBody where
-  getDep _ = fmap WavInfoBodyUnparsed get
+instance DepBinary Label WavExtraBody where
+  getDep _ = fmap WavExtraBodyUnparsed get
   putDep _ = \case
-    WavInfoBodyUnparsed wub -> put wub
+    WavExtraBodyUnparsed wub -> put wub
 
 data WavChoice a =
-    WavChoiceInfo !WavInfoBody
+    WavChoiceExtra !WavExtraBody
   | WavChoiceData !(WavDataBody a)
   deriving stock (Eq, Show)
 
 instance (Prim a, StaticByteSized a) => ByteSized (WavChoice a) where
   byteSize = \case
-    WavChoiceInfo wci -> byteSize wci
+    WavChoiceExtra wce -> byteSize wce
     WavChoiceData wcd -> byteSize wcd
 
 instance (Prim a, StaticByteSized a) => DepBinary Label (WavChoice a) where
   getDep label = do
     if label == labelData
       then fmap WavChoiceData get
-      else fmap WavChoiceInfo (getDep label)
+      else fmap WavChoiceExtra (getDep label)
   putDep label = \case
-    WavChoiceInfo wci -> putDep label wci
+    WavChoiceExtra wce -> putDep label wce
     WavChoiceData wcd -> put wcd
 
 data WavBody a = WavBody
-  { wbUnparsedPre :: !(Seq (Chunk WavInfoBody))
+  { wbUnparsedPre :: !(Seq (Chunk WavExtraBody))
   , wbSample :: !(KnownChunk (WavDataBody a))
-  , wbUnparsedPost :: !(Seq (Chunk WavInfoBody))
+  , wbUnparsedPost :: !(Seq (Chunk WavExtraBody))
   } deriving stock (Eq, Show)
 
 instance Default (WavBody a) where
@@ -209,7 +209,7 @@ instance (Prim a, StaticByteSized a) => Binary (WavBody a) where
     (!pre, !datBody) <- getUnfold Empty $ \pre -> do
       Chunk lab body <- get
       pure $! case body of
-        WavChoiceInfo wci -> Left (pre :|> Chunk lab wci)
+        WavChoiceExtra wce -> Left (pre :|> Chunk lab wce)
         WavChoiceData wcd -> Right (pre, wcd)
     post <- getRemainingSeq get
     pure $! WavBody pre (KnownChunk datBody) post
