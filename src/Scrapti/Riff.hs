@@ -18,6 +18,7 @@ module Scrapti.Riff
   , ListChunkBody (..)
   , ListChunk (..)
   , KnownListChunk (..)
+  , KnownOptChunk (..)
   ) where
 
 import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, Put, StaticByteSized (..), StaticBytes, Word32LE,
@@ -159,15 +160,37 @@ instance (Binary a, KnownLabel a) => Binary (KnownListChunk a) where
   get = do
     getExpectLabel labelList
     sz <- getChunkSize
-    let !label = knownLabel (Proxy :: Proxy a)
-    items <- getExact sz $ getRemainingSeq $ do
-      getExpectLabel label
-      get
+    items <- getExact sz $ do
+      getExpectLabel (knownLabel (Proxy :: Proxy a))
+      getRemainingSeq get
     pure $! KnownListChunk items
   put (KnownListChunk items) = do
     put labelList
-    putChunkSize (byteSizeFoldable items)
-    let !label = knownLabel (Proxy :: Proxy a)
-    flip putSeq items $ \item -> do
-      put label
-      put item
+    putChunkSize (labelSize + byteSizeFoldable items)
+    put (knownLabel (Proxy :: Proxy a))
+    putSeq put items
+
+newtype KnownOptChunk a = KnownOptChunk
+  { kocItem :: Maybe a
+  } deriving stock (Show)
+    deriving newtype (Eq, Default)
+
+instance ByteSized a => ByteSized (KnownOptChunk a) where
+  byteSize (KnownOptChunk item) = listChunkHeaderSize + byteSizeFoldable item
+
+instance (Binary a, KnownLabel a) => Binary (KnownOptChunk a) where
+  get = do
+    getExpectLabel labelList
+    sz <- getChunkSize
+    item <- getExact sz $ do
+      let !label = knownLabel (Proxy :: Proxy a)
+      getExpectLabel label
+      if sz == labelSize
+        then pure Nothing
+        else fmap Just get
+    pure $! KnownOptChunk item
+  put (KnownOptChunk item) = do
+    put labelList
+    putChunkSize (labelSize + byteSizeFoldable item)
+    put (knownLabel (Proxy :: Proxy a))
+    maybe (pure ()) put item

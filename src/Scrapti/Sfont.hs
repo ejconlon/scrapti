@@ -1,9 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Scrapti.Sfont
-  ( ListChunk (..)
-  , OptChunk (..)
-  , Sfont (..)
+  ( Sfont (..)
   , InfoChunk (..)
   , PdtaChunk (..)
   , SdtaChunk (..)
@@ -28,9 +26,9 @@ module Scrapti.Sfont
 
 import Control.Monad (unless)
 import Dahdit (Binary (..), ByteSized (..), Get, Int16LE (..), PrimArray, Put, ShortByteString, StaticByteSized (..),
-               StaticBytes, TermBytes, ViaStaticByteSized (..), ViaStaticGeneric (..), Word16LE, Word32LE,
-               byteSizeFoldable, getExact, getRemainingSeq, getRemainingSize, getRemainingStaticSeq, getRemainingString,
-               getSkip, getStaticArray, putByteString, putSeq, putStaticArray)
+               StaticBytes, TermBytes, ViaStaticByteSized (..), ViaStaticGeneric (..), Word16LE, Word32LE, getExact,
+               getRemainingSeq, getRemainingSize, getRemainingStaticSeq, getRemainingString, getSkip, getStaticArray,
+               putByteString, putSeq, putStaticArray)
 import Data.Foldable (foldl')
 import Data.Int (Int8)
 import Data.Proxy (Proxy (..))
@@ -39,8 +37,8 @@ import qualified Data.Sequence as Seq
 import Data.Type.Equality (testEquality)
 import Data.Word (Word8)
 import GHC.Generics (Generic)
-import Scrapti.Riff (KnownLabel (..), Label, chunkHeaderSize, getChunkSize, getExpectLabel, labelList, labelRiff,
-                     labelSize, listChunkHeaderSize, putChunkSize)
+import Scrapti.Riff (KnownLabel (..), KnownListChunk, KnownOptChunk, Label, chunkHeaderSize, getChunkSize,
+                     getExpectLabel, labelRiff, labelSize, putChunkSize)
 import Type.Reflection ((:~:) (..), TypeRep, Typeable, typeRep)
 
 labelSfbk, labelInfo, labelIfil, labelIver, labelIsng, labelInam, labelIrom, labelIcrd,
@@ -79,56 +77,56 @@ newtype SampleCount = SampleCount { unSampleCount :: Word32LE }
 
 type ShortText = StaticBytes 20
 
-newtype ListChunk a = ListChunk { listChunkElems :: Seq a }
-  deriving stock (Show)
-  deriving newtype (Eq)
+-- newtype ListChunk a = ListChunk { listChunkElems :: Seq a }
+--   deriving stock (Show)
+--   deriving newtype (Eq)
 
-instance ByteSized a => ByteSized (ListChunk a) where
-  byteSize (ListChunk elems) = listChunkHeaderSize + byteSizeFoldable elems
+-- instance ByteSized a => ByteSized (ListChunk a) where
+--   byteSize (ListChunk elems) = listChunkHeaderSize + byteSizeFoldable elems
 
-instance (KnownLabel a, Binary a) => Binary (ListChunk a) where
-  get = do
-    getExpectLabel labelList
-    chunkSize <- getChunkSize
-    getExact chunkSize $ do
-      let !label = knownLabel (Proxy :: Proxy a)
-      getExpectLabel label
-      elems <- getRemainingSeq get
-      pure $! ListChunk elems
-  put (ListChunk elems) = do
-    put labelList
-    let !chunkSize = byteSizeFoldable elems + labelSize
-    putChunkSize chunkSize
-    let !label = knownLabel (Proxy :: Proxy a)
-    put label
-    putSeq put elems
+-- instance (KnownLabel a, Binary a) => Binary (ListChunk a) where
+--   get = do
+--     getExpectLabel labelList
+--     chunkSize <- getChunkSize
+--     getExact chunkSize $ do
+--       let !label = knownLabel (Proxy :: Proxy a)
+--       getExpectLabel label
+--       elems <- getRemainingSeq get
+--       pure $! ListChunk elems
+--   put (ListChunk elems) = do
+--     put labelList
+--     let !chunkSize = byteSizeFoldable elems + labelSize
+--     putChunkSize chunkSize
+--     let !label = knownLabel (Proxy :: Proxy a)
+--     put label
+--     putSeq put elems
 
-newtype OptChunk a = OptChunk { optChunkElem :: Maybe a }
-  deriving stock (Show)
-  deriving newtype (Eq)
+-- newtype OptChunk a = OptChunk { optChunkElem :: Maybe a }
+--   deriving stock (Show)
+--   deriving newtype (Eq)
 
-instance ByteSized a => ByteSized (OptChunk a) where
-  byteSize (OptChunk mayElem) = listChunkHeaderSize + byteSizeFoldable mayElem
+-- instance ByteSized a => ByteSized (OptChunk a) where
+--   byteSize (OptChunk mayElem) = listChunkHeaderSize + byteSizeFoldable mayElem
 
-instance (KnownLabel a, Binary a) => Binary (OptChunk a) where
-  get = do
-    getExpectLabel labelList
-    chunkSize <- getChunkSize
-    getExact chunkSize $ do
-      let !label = knownLabel (Proxy :: Proxy a)
-      getExpectLabel label
-      mayElem <-
-        if chunkSize == labelSize
-          then pure Nothing
-          else fmap Just get
-      pure $! OptChunk mayElem
-  put (OptChunk mayElem) = do
-    put labelList
-    let !chunkSize = byteSizeFoldable mayElem + labelSize
-    putChunkSize chunkSize
-    let !label = knownLabel (Proxy :: Proxy a)
-    put label
-    maybe (pure ()) put mayElem
+-- instance (KnownLabel a, Binary a) => Binary (OptChunk a) where
+--   get = do
+--     getExpectLabel labelList
+--     chunkSize <- getChunkSize
+--     getExact chunkSize $ do
+--       let !label = knownLabel (Proxy :: Proxy a)
+--       getExpectLabel label
+--       mayElem <-
+--         if chunkSize == labelSize
+--           then pure Nothing
+--           else fmap Just get
+--       pure $! OptChunk mayElem
+--   put (OptChunk mayElem) = do
+--     put labelList
+--     let !chunkSize = byteSizeFoldable mayElem + labelSize
+--     putChunkSize chunkSize
+--     let !label = knownLabel (Proxy :: Proxy a)
+--     put label
+--     maybe (pure ()) put mayElem
 
 data Sfont = Sfont
   { sfontInfo :: !InfoChunk
@@ -158,11 +156,11 @@ instance Binary Sfont where
     put sdta
     put pdta
 
-newtype InfoChunk = InfoChunk { unInfoChunk :: ListChunk Info }
+newtype InfoChunk = InfoChunk { unInfoChunk :: KnownListChunk Info }
   deriving stock (Show)
   deriving newtype (Eq, ByteSized, Binary)
 
-newtype PdtaChunk = PdtaChunk { unPdtaChunk :: ListChunk PdtaBlock }
+newtype PdtaChunk = PdtaChunk { unPdtaChunk :: KnownListChunk PdtaBlock }
   deriving stock (Show)
   deriving newtype (Eq, ByteSized, Binary)
 
@@ -310,7 +308,7 @@ instance Binary Sdta where
         putChunkSize (byteSize lowBits)
         putStaticArray lowBits
 
-newtype SdtaChunk = SdtaChunk { unSdtaChunk :: OptChunk Sdta }
+newtype SdtaChunk = SdtaChunk { unSdtaChunk :: KnownOptChunk Sdta }
   deriving stock (Show)
   deriving newtype (Eq, ByteSized, Binary)
 

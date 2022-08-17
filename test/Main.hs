@@ -9,9 +9,10 @@ import Data.Default (def)
 import Data.Primitive.PrimArray (sizeofPrimArray)
 import qualified Data.Sequence as Seq
 import Scrapti.Binary (QuietArray (..))
-import Scrapti.Riff (Chunk (..), KnownChunk (..), chunkHeaderSize, getChunkSize, getExpectLabel, labelRiff)
-import Scrapti.Sfont (Bag, Gen, InfoChunk (..), Inst, ListChunk (..), Mod, OptChunk (..), PdtaChunk (..), Phdr,
-                      Sdta (..), SdtaChunk (..), Sfont (..), Shdr, labelSfbk)
+import Scrapti.Riff (Chunk (..), KnownChunk (..), KnownListChunk (..), KnownOptChunk (..), chunkHeaderSize,
+                     getChunkSize, getExpectLabel, labelRiff)
+import Scrapti.Sfont (Bag, Gen, InfoChunk (..), Inst, Mod, PdtaChunk (..), Phdr, Sdta (..), SdtaChunk (..), Sfont (..),
+                      Shdr, labelSfbk)
 import Scrapti.Tracker.Checked (Checked (..), mkCode)
 import Scrapti.Tracker.Loader (Overwrite (..), loadRichProject, saveRichProject)
 import Scrapti.Tracker.Mt (Mt)
@@ -91,7 +92,7 @@ testWav = testGroup "wav" [testWavHeader, testWavData, testWavWhole, testWavWrit
 testSfontWhole :: TestTree
 testSfontWhole = testCase "whole" $ do
   bs <- readShort "testdata/timpani.sf2"
-  (Sfont (InfoChunk (ListChunk infos)) (SdtaChunk (OptChunk maySdta)) (PdtaChunk (ListChunk pdtaBlocks)), _) <- runGetIO (get @Sfont) bs
+  (Sfont (InfoChunk (KnownListChunk infos)) (SdtaChunk (KnownOptChunk maySdta)) (PdtaChunk (KnownListChunk pdtaBlocks)), _) <- runGetIO (get @Sfont) bs
   Seq.length infos @?= 5
   case maySdta of
     Nothing -> fail "Missing sdta"
