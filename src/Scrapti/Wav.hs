@@ -18,20 +18,23 @@ module Scrapti.Wav
 
 import Control.Monad (unless)
 import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, Int16LE, Int32LE, PrimArray, ShortByteString,
-               StaticByteSized (..), Word16LE, Word32LE, byteSizeFoldable, getExact, getLookAhead, getRemainingSeq,
-               getRemainingStaticArray, getRemainingString, getUnfold, putByteString, putSeq, putStaticArray)
+               StaticByteSized (..), Word16LE, Word32LE, byteSizeFoldable, getByteString, getExact, getLookAhead,
+               getRemainingSeq, getRemainingStaticArray, getRemainingString, getUnfold, putByteString, putSeq,
+               putStaticArray)
+import qualified Data.ByteString.Short as BSS
 import Data.Default (Default (..))
 import Data.Int (Int8)
 import Data.Primitive (Prim)
 import Data.Proxy (Proxy (..))
 import Data.Sequence (Seq (..))
-import Scrapti.Riff (Chunk (..), KnownChunk (..), KnownLabel (..), Label, chunkHeaderSize, getChunkSize, getExpectLabel,
-                     labelRiff, labelSize, putChunkSize)
+import Scrapti.Riff (Chunk (..), KnownChunk (..), KnownLabel (..), Label, ListChunkBody, chunkHeaderSize, getChunkSize,
+                     getExpectLabel, labelRiff, labelSize, putChunkSize)
 
-labelWave, labelFmt, labelData :: Label
+labelWave, labelFmt, labelData, labelInfo :: Label
 labelWave = "WAVE"
 labelFmt = "fmt "
 labelData = "data"
+labelInfo = "INFO"
 
 newtype BitLength = BitLength { unBitLength :: Word16LE }
   deriving stock (Show)
@@ -159,19 +162,54 @@ instance Binary WavUnparsedBody where
   get = fmap WavUnparsedBody getRemainingString
   put (WavUnparsedBody bs) = putByteString bs
 
+data WavInfoAttr = WavInfoAttr
+  { wiaKey :: !Label
+  , wiaVal :: !ShortByteString
+  } deriving stock (Eq, Show)
+
+instance ByteSized WavInfoAttr where
+  byteSize (WavInfoAttr _ val) = labelSize + 4 + fromIntegral (BSS.length val)
+
+instance Binary WavInfoAttr where
+  get = do
+    key <- get
+    sz <- getChunkSize
+    val <- getByteString sz
+    pure $! WavInfoAttr key val
+  put (WavInfoAttr key val) = do
+    put key
+    putChunkSize (fromIntegral (BSS.length val) :: ByteCount)
+    putByteString val
+
+newtype WavInfoBody = WavInfoBody
+  { unWavInfoBody :: ListChunkBody WavInfoAttr
+  } deriving stock (Show)
+    deriving newtype (Eq, ByteSized, Binary)
+
+instance KnownLabel WavInfoBody where
+  knownLabel _ = labelInfo
+
+type WavInfoChunk = KnownChunk WavInfoBody
+
 data WavExtraChunk =
     WavExtraChunkUnparsed !(Chunk WavUnparsedBody)
-  -- | WavExtraBodyMetadata
+  | WavExtraChunkInfo !WavInfoChunk
   deriving stock (Eq, Show)
 
 instance ByteSized WavExtraChunk where
   byteSize = \case
     WavExtraChunkUnparsed x -> byteSize x
+    WavExtraChunkInfo x -> byteSize x
 
 instance Binary WavExtraChunk where
-  get = fmap WavExtraChunkUnparsed get
+  get = do
+    label <- getLookAhead get
+    if label == labelInfo
+      then fmap WavExtraChunkInfo get
+      else fmap WavExtraChunkUnparsed get
   put = \case
     WavExtraChunkUnparsed x -> put x
+    WavExtraChunkInfo x -> put x
 
 data WavChoiceChunk a =
     WavChoiceChunkExtra !WavExtraChunk
