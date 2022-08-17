@@ -29,7 +29,6 @@ import Control.Monad.Identity (Identity (..))
 import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, Int16LE, Int32LE, PrimArray, ShortByteString,
                StaticByteSized (..), Word16LE, Word32LE, byteSizeFoldable, getByteString, getExact, getRemainingSeq,
                getRemainingStaticArray, getRemainingString, getUnfold, putByteString, putSeq, putStaticArray)
-import qualified Data.ByteString.Short as BSS
 import Data.Default (Default (..))
 import Data.Int (Int8)
 import Data.Primitive (Prim)
@@ -37,15 +36,20 @@ import Data.Proxy (Proxy (..))
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
 import Scrapti.Dsp (DspErr, Sel, monoFromSel)
-import Scrapti.Riff (Chunk (..), ChunkLabel (..), KnownChunk (..), KnownLabel (..), KnownListChunk, Label,
+import Scrapti.Riff (Chunk (..), ChunkLabel (..), KnownChunk (..), KnownLabel (..), KnownListChunk (..), Label,
                      chunkHeaderSize, countSize, getChunkSize, getExpectLabel, labelRiff, labelSize, peekChunkLabel,
                      putChunkSize)
 
-labelWave, labelFmt, labelData, labelInfo :: Label
+labelWave, labelFmt, labelData, labelInfo, labelAdtl, labelCue, labelNote, labelLabl, labelLtxt :: Label
 labelWave = "WAVE"
 labelFmt = "fmt "
 labelData = "data"
 labelInfo = "INFO"
+labelAdtl = "adtl"
+labelCue = "cue "
+labelNote = "note"
+labelLabl = "labl"
+labelLtxt = "ltxt"
 
 newtype BitLength = BitLength { unBitLength :: Word16LE }
   deriving stock (Show)
@@ -179,7 +183,7 @@ data WavInfoElem = WavInfoElem
   } deriving stock (Eq, Show)
 
 instance ByteSized WavInfoElem where
-  byteSize (WavInfoElem _ val) = labelSize + countSize + fromIntegral (BSS.length val)
+  byteSize (WavInfoElem _ val) = labelSize + countSize + byteSize val
 
 instance Binary WavInfoElem where
   get = do
@@ -189,7 +193,7 @@ instance Binary WavInfoElem where
     pure $! WavInfoElem key val
   put (WavInfoElem key val) = do
     put key
-    putChunkSize (fromIntegral (BSS.length val) :: ByteCount)
+    putChunkSize (byteSize val)
     putByteString val
 
 instance KnownLabel WavInfoElem where
@@ -197,19 +201,75 @@ instance KnownLabel WavInfoElem where
 
 type WavInfoChunk = KnownListChunk WavInfoElem
 
+-- NOTE: these are all the same for now, but ltxt has additional
+-- structure that could be parsed out later
+data WavAdtlData =
+    WavAdtlDataLabl !ShortByteString
+  | WavAdtlDataNote !ShortByteString
+  | WavAdtlDataLtxt !ShortByteString
+  deriving stock (Eq, Show)
+
+instance ByteSized WavAdtlData where
+  byteSize = \case
+    WavAdtlDataLabl bs -> byteSize bs
+    WavAdtlDataNote bs -> byteSize bs
+    WavAdtlDataLtxt bs -> byteSize bs
+
+data WavAdtlElem = WavAdtlElem
+  { waeCueId :: !Word32LE
+  , waeData :: !WavAdtlData
+  } deriving stock (Eq, Show)
+
+instance ByteSized WavAdtlElem where
+  byteSize (WavAdtlElem _ dat) = 4 + countSize + byteSize dat
+
+instance Binary WavAdtlElem where
+  get = do
+    lab <- get
+    sz <- getChunkSize
+    (cueId, bs) <- getExact sz $ do
+      cueId <- get
+      bs <- getRemainingString
+      pure (cueId, bs)
+    dat <- if
+      | lab == labelNote -> pure $! WavAdtlDataNote bs
+      | lab == labelLabl -> pure $! WavAdtlDataLabl bs
+      | lab == labelLtxt -> pure $! WavAdtlDataLtxt bs
+      | otherwise -> fail ("Unknown adtl sub-chunk: " ++ show lab)
+    pure $! WavAdtlElem cueId dat
+  put (WavAdtlElem cueId dat) = do
+    put $! case dat of
+      WavAdtlDataLabl _ -> labelLabl
+      WavAdtlDataNote _ -> labelNote
+      WavAdtlDataLtxt _ -> labelLtxt
+    putChunkSize (byteSize dat)
+    put cueId
+    putByteString $! case dat of
+      WavAdtlDataLabl bs -> bs
+      WavAdtlDataNote bs -> bs
+      WavAdtlDataLtxt bs -> bs
+
+instance KnownLabel WavAdtlElem where
+  knownLabel _ = labelAdtl
+
+type WavAdtlChunk = KnownListChunk WavAdtlElem
+
 data WavExtraChunk =
     WavExtraChunkUnparsed !(Chunk WavUnparsedBody)
   | WavExtraChunkInfo !WavInfoChunk
+  | WavExtraChunkAdtl !WavAdtlChunk
   deriving stock (Eq, Show)
 
 instance ByteSized WavExtraChunk where
   byteSize = \case
     WavExtraChunkUnparsed x -> byteSize x
     WavExtraChunkInfo x -> byteSize x
+    WavExtraChunkAdtl x -> byteSize x
 
 getExtra :: ChunkLabel -> Get WavExtraChunk
 getExtra = \case
   ChunkLabelList label | label == labelInfo -> fmap WavExtraChunkInfo get
+  ChunkLabelList label | label == labelAdtl -> fmap WavExtraChunkAdtl get
   _ -> fmap WavExtraChunkUnparsed get
 
 instance Binary WavExtraChunk where
@@ -217,6 +277,7 @@ instance Binary WavExtraChunk where
   put = \case
     WavExtraChunkUnparsed x -> put x
     WavExtraChunkInfo x -> put x
+    WavExtraChunkAdtl x -> put x
 
 data WavChoiceChunk a =
     WavChoiceChunkExtra !WavExtraChunk
