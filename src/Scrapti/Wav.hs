@@ -15,9 +15,17 @@ module Scrapti.Wav
   , Wav (..)
   , SampledWav (..)
   , labelWave
+  , bindWavExtra
+  , filterWavExtra
+  , appendWavExtra
+  , WavDspErr (..)
+  , monoWav
+  , setWavInfo
   ) where
 
-import Control.Monad (unless)
+import Control.Exception (Exception)
+import Control.Monad (join, unless)
+import Control.Monad.Identity (Identity (..))
 import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, Int16LE, Int32LE, PrimArray, ShortByteString,
                StaticByteSized (..), Word16LE, Word32LE, byteSizeFoldable, getByteString, getExact, getRemainingSeq,
                getRemainingStaticArray, getRemainingString, getUnfold, putByteString, putSeq, putStaticArray)
@@ -27,6 +35,8 @@ import Data.Int (Int8)
 import Data.Primitive (Prim)
 import Data.Proxy (Proxy (..))
 import Data.Sequence (Seq (..))
+import qualified Data.Sequence as Seq
+import Scrapti.Dsp (DspErr, Sel, monoFromSel)
 import Scrapti.Riff (Chunk (..), ChunkLabel (..), KnownChunk (..), KnownLabel (..), KnownListChunk, Label,
                      chunkHeaderSize, countSize, getChunkSize, getExpectLabel, labelRiff, labelSize, peekChunkLabel,
                      putChunkSize)
@@ -302,3 +312,36 @@ instance Binary SampledWav where
       Nothing -> fail ("Bad bps: " ++ show bps)
       Just (Sampled prox) -> fmap (SampledWav . Sampled) (getRestOfWav prox remainingSize fmtChunk)
   put (SampledWav (Sampled wd)) = put wd
+
+bindWavExtraM :: Applicative m => (WavExtraChunk -> m (Seq WavExtraChunk)) -> WavBody a -> m (WavBody a)
+bindWavExtraM f (WavBody pre dat post) = (`WavBody` dat) <$> fmap join (traverse f pre) <*> fmap join (traverse f post)
+
+bindWavExtra :: (WavExtraChunk -> Seq WavExtraChunk) -> WavBody a -> WavBody a
+bindWavExtra f = runIdentity . bindWavExtraM (Identity . f)
+
+filterWavExtra :: (WavExtraChunk -> Bool) -> WavBody a -> WavBody a
+filterWavExtra p = bindWavExtra (\c -> if p c then Seq.singleton c else Empty)
+
+appendWavExtra :: WavExtraChunk -> WavBody a -> WavBody a
+appendWavExtra c (WavBody pre dat post) = WavBody pre dat (post :|> c)
+
+data WavDspErr =
+    WavDspErrEmbed !DspErr
+  | WavDspErrCannotMono !Word16LE
+  deriving stock (Eq, Show)
+
+instance Exception WavDspErr
+
+monoWav :: Prim a => Sel a -> Wav a -> Either WavDspErr (Wav a)
+monoWav sel (Wav (KnownChunk fmt) (WavBody pre (KnownChunk (WavDataBody arr)) post)) =
+  case wfbNumChannels fmt of
+    2 -> case monoFromSel sel arr of
+      Left dspErr -> Left (WavDspErrEmbed dspErr)
+      Right arr' ->
+        let fmt' = fmt { wfbNumChannels = 1 }
+        in Right (Wav (KnownChunk fmt') (WavBody pre (KnownChunk (WavDataBody arr')) post))
+    x -> Left (WavDspErrCannotMono x)
+
+setWavInfo :: WavInfoChunk -> WavBody a -> WavBody a
+setWavInfo info = appendWavExtra (WavExtraChunkInfo info) . filterWavExtra (not . isInfo) where
+  isInfo = \case { WavExtraChunkInfo _ -> True; _ -> False }
