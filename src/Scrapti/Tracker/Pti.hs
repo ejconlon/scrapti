@@ -27,10 +27,10 @@ module Scrapti.Tracker.Pti
   , mkPti
   ) where
 
-import Dahdit (Binary (..), BinaryRep (..), BoolByte (..), ByteSized (..), ExactBytes, FloatLE, Int16LE, PrimArray,
-               Proxy (..), ShortByteString, StaticArray, StaticByteSized (..), StaticBytes (..), ViaBinaryRep (..),
-               ViaBoundedEnum (..), ViaGeneric (..), ViaStaticGeneric (..), Word16LE, Word32LE, getRemainingStaticArray,
-               getStaticArray, putStaticArray)
+import Dahdit (Binary (..), BinaryRep (..), BoolByte (..), ByteSized (..), ExactBytes, FloatLE, Int16LE,
+               LiftedPrimArray, Proxy (..), ShortByteString, StaticArray, StaticByteSized (..), StaticBytes (..),
+               ViaBinaryRep (..), ViaBoundedEnum (..), ViaGeneric (..), ViaStaticGeneric (..), Word16LE, Word32LE,
+               getLiftedPrimArray, getRemainingLiftedPrimArray, putLiftedPrimArray)
 import Data.Default (Default (..))
 import Data.Int (Int8)
 import Data.Word (Word8)
@@ -459,15 +459,15 @@ instance Binary Pti where
     let !sampleLength = fromIntegral (preSampleLength (hdrPreamble (checkedVal header)))
     wav <-
       if sampleLength == 0  -- what the heck, it happens
-        then getRemainingStaticArray (Proxy :: Proxy Int16LE)
-        else getStaticArray @Int16LE sampleLength
+        then getRemainingLiftedPrimArray (Proxy :: Proxy Int16LE)
+        else getLiftedPrimArray (Proxy :: Proxy Int16LE) sampleLength
     pure $! Pti header (QuietArray wav)
   put (Pti header (QuietArray wav)) = do
     put header
-    putStaticArray wav
+    putLiftedPrimArray wav
 
 instance Default Pti where
   def = Pti def def
 
-mkPti :: Header -> PrimArray Int16LE -> Pti
+mkPti :: Header -> LiftedPrimArray Int16LE -> Pti
 mkPti hdr arr = Pti (mkChecked hdr) (QuietArray arr)

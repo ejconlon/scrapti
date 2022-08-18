@@ -5,13 +5,11 @@ module Scrapti.Tracker.Convert
 
 import Control.Monad.Reader (MonadReader, ReaderT (..))
 import Control.Monad.Writer.Strict (MonadWriter (..), Writer, runWriter)
+import Dahdit (Int16LE (..), LiftedPrimArray, Word32LE (..))
 import Data.Default (Default (..))
 import Data.Sequence (Seq)
-import Scrapti.Tracker.Pti (Pti)
--- import Scrapti.Sfont (Sfont)
-import Dahdit (Int16LE (..), Word32LE (..))
-import Data.Primitive.PrimArray (PrimArray)
 import qualified Data.Sequence as Seq
+import Scrapti.Tracker.Pti (Pti)
 
 data ConvertOpts = ConvertOpts
   deriving stock (Eq, Show)
@@ -21,7 +19,7 @@ instance Default ConvertOpts where
 
 data ConvertEnv = ConvertEnv
   { ceOpts :: !ConvertOpts
-  , ceSamples :: !(PrimArray Int16LE)
+  , ceSamples :: !(LiftedPrimArray Int16LE)
   } deriving stock (Eq, Show)
 
 data NamedPti = NamedPti !FilePath !Pti

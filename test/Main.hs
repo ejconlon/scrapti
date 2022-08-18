@@ -2,13 +2,12 @@
 
 module Main (main) where
 
-import Dahdit (Binary (..), ByteCount, ElementCount, Get, Int16LE, PrimArray, Proxy (..), ShortByteString,
+import Dahdit (Binary (..), ByteCount, ElementCount, Get, Int16LE, LiftedPrimArray, Proxy (..), ShortByteString,
                StaticByteSized (..), StaticBytes, Word16LE, Word8, byteSize, getExact, getSkip, getWord32LE, runGetIO,
-               runPut)
+               runPut, sizeofLiftedPrimArray)
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Short as BSS
 import Data.Default (def)
-import Data.Primitive.PrimArray (sizeofPrimArray)
 import qualified Data.Sequence as Seq
 import Scrapti.Binary (QuietArray (..))
 import Scrapti.Riff (KnownChunk (..), KnownListChunk (..), KnownOptChunk (..), chunkHeaderSize, getChunkSize,
@@ -73,7 +72,7 @@ testWavData = testCase "data" $ do
     case choice of
       WavChoiceChunkData (KnownChunk (WavDataBody arr)) -> pure arr
       _ -> fail "expected data"
-  fromIntegral (sizeofPrimArray arr) @?= drumDataLen
+  fromIntegral (sizeofLiftedPrimArray arr) @?= drumDataLen
 
 testWavInfo :: TestTree
 testWavInfo = testCase "info" $ do
@@ -92,7 +91,7 @@ testWavWhole = testCase "whole" $ do
   (SampledWav (Sampled (Wav fmt (WavBody pre (KnownChunk (WavDataBody arr)) post))), _) <- runGetIO (get @SampledWav) bs
   fmt @?= drumFmt
   Seq.length pre @?= 0
-  fromIntegral (sizeofPrimArray arr) @?= drumDataLen
+  fromIntegral (sizeofLiftedPrimArray arr) @?= drumDataLen
   Seq.length post @?= 2
 
 testWavWrite :: TestTree
@@ -113,7 +112,7 @@ testSfontWhole = testCase "whole" $ do
   case maySdta of
     Nothing -> fail "Missing sdta"
     Just sdta -> do
-      sizeofPrimArray (sdtaHighBits sdta) @?= 1365026
+      sizeofLiftedPrimArray (sdtaHighBits sdta) @?= 1365026
       sdtaLowBits sdta @?= Nothing
   Seq.length pdtaBlocks @?= 9
 
@@ -189,7 +188,7 @@ testPtiWrite = testCase "write" $ do
   (pti, bc) <- runGetIO (get @Pti) bs
   byteSize pti @?= bc
   fromIntegral bc @?= BSS.length bs
-  sizeofPrimArray (unQuietArray (ptiWav pti)) @?= div (fromIntegral drumDataLen) 2
+  sizeofLiftedPrimArray (unQuietArray (ptiWav pti)) @?= div (fromIntegral drumDataLen) 2
   let bs' = runPut (put pti)
   bs' @?= bs
 
@@ -289,7 +288,7 @@ testPtiDigest = testCase "digest" $ do
 getWavInt16LE :: Get (Wav Int16LE)
 getWavInt16LE = get
 
-extractWavData :: Wav a -> PrimArray a
+extractWavData :: Wav a -> LiftedPrimArray a
 extractWavData = unWavDataBody . knownChunkBody . wbSample . wavBody
 
 testPtiWav :: TestTree
@@ -301,7 +300,7 @@ testPtiWav = testCase "wav" $ do
   let wavData = extractWavData wav
       ptiData = unQuietArray (ptiWav pti)
   -- We expect there is half as many samples because it's converted to mono
-  sizeofPrimArray ptiData @?= div (sizeofPrimArray wavData) 2
+  sizeofLiftedPrimArray ptiData @?= div (sizeofLiftedPrimArray wavData) 2
   -- As far as the content, I have no idea what it's doing to the signal...
   -- Can do FFT and compare frequencies?
 

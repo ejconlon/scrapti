@@ -38,12 +38,12 @@ module Scrapti.Wav
 import Control.Exception (Exception)
 import Control.Monad (join, unless)
 import Control.Monad.Identity (Identity (..))
-import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, Int16LE, Int32LE, PrimArray, ShortByteString,
-               StaticByteSized (..), Word16LE, Word32LE, byteSizeFoldable, getByteString, getExact, getRemainingSeq,
-               getRemainingStaticArray, getRemainingString, getSeq, getUnfold, putByteString, putSeq, putStaticArray)
+import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, Int16LE, Int24LE, Int32LE, LiftedPrim, LiftedPrimArray,
+               ShortByteString, StaticByteSized (..), Word16LE, Word32LE, byteSizeFoldable, getByteString, getExact,
+               getRemainingLiftedPrimArray, getRemainingSeq, getRemainingString, getSeq, getUnfold, putByteString,
+               putLiftedPrimArray, putSeq)
 import Data.Default (Default (..))
 import Data.Int (Int8)
-import Data.Primitive (Prim)
 import Data.Proxy (Proxy (..))
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
@@ -68,13 +68,13 @@ newtype BitLength = BitLength { unBitLength :: Word16LE }
   deriving newtype (Eq, Ord, Num, Enum, Real, Integral, Default, Binary, ByteSized)
 
 data Sampled f where
-  Sampled :: (Prim a, Binary a, StaticByteSized a) => !(f a) -> Sampled f
+  Sampled :: (LiftedPrim a, Binary a, StaticByteSized a) => !(f a) -> Sampled f
 
 getSampled :: BitLength -> Maybe (Sampled Proxy)
 getSampled = \case
   8 -> Just (Sampled (Proxy :: Proxy Int8))
   16 -> Just (Sampled (Proxy :: Proxy Int16LE))
-  -- 24 -> Just (Sampled (Proxy :: Proxy Int24LE))
+  24 -> Just (Sampled (Proxy :: Proxy Int24LE))
   32 -> Just (Sampled (Proxy :: Proxy Int32LE))
   -- 64 -> Just (Sampled (Proxy :: Proxy Int64LE))
   _ -> Nothing
@@ -130,22 +130,22 @@ instance KnownLabel WavFormatBody where
 
 type WavFormatChunk = KnownChunk WavFormatBody
 
-newtype WavDataBody a = WavDataBody { unWavDataBody :: PrimArray a }
+newtype WavDataBody a = WavDataBody { unWavDataBody :: LiftedPrimArray a }
   deriving stock (Show)
   deriving newtype (Eq)
 
 instance KnownLabel (WavDataBody a) where
   knownLabel _ = labelData
 
-instance (Prim a, StaticByteSized a) => ByteSized (WavDataBody a) where
+instance (LiftedPrim a, StaticByteSized a) => ByteSized (WavDataBody a) where
   byteSize (WavDataBody vec) = byteSize vec
 
-instance (Prim a, StaticByteSized a) => Binary (WavDataBody a) where
+instance (LiftedPrim a, StaticByteSized a) => Binary (WavDataBody a) where
   get = do
-    arr <- getRemainingStaticArray (Proxy :: Proxy a)
+    arr <- getRemainingLiftedPrimArray (Proxy :: Proxy a)
     pure $! WavDataBody arr
   put (WavDataBody arr) = do
-    putStaticArray arr
+    putLiftedPrimArray arr
 
 instance Default (WavDataBody a) where
   def = WavDataBody mempty
@@ -358,12 +358,12 @@ data WavChoiceChunk a =
   | WavChoiceChunkData !(WavDataChunk a)
   deriving stock (Eq, Show)
 
-instance (Prim a, StaticByteSized a) => ByteSized (WavChoiceChunk a) where
+instance (LiftedPrim a, StaticByteSized a) => ByteSized (WavChoiceChunk a) where
   byteSize = \case
     WavChoiceChunkExtra wce -> byteSize wce
     WavChoiceChunkData wcd -> byteSize wcd
 
-instance (Prim a, StaticByteSized a) => Binary (WavChoiceChunk a) where
+instance (LiftedPrim a, StaticByteSized a) => Binary (WavChoiceChunk a) where
   get = do
     chunkLab <- peekChunkLabel
     case chunkLab of
@@ -382,10 +382,10 @@ data WavBody a = WavBody
 instance Default (WavBody a) where
   def = WavBody Empty def Empty
 
-instance (Prim a, StaticByteSized a) => ByteSized (WavBody a) where
+instance (LiftedPrim a, StaticByteSized a) => ByteSized (WavBody a) where
   byteSize (WavBody pre sam post) = byteSizeFoldable pre + byteSize sam + byteSizeFoldable post
 
-instance (Prim a, StaticByteSized a) => Binary (WavBody a) where
+instance (LiftedPrim a, StaticByteSized a) => Binary (WavBody a) where
   get = do
     (!pre, !dat) <- getUnfold Empty $ \pre -> do
       choice <- get
@@ -407,18 +407,18 @@ data Wav a = Wav
 instance Default (Wav a) where
   def = Wav def def
 
-instance (Prim a, StaticByteSized a) => ByteSized (Wav a) where
+instance (LiftedPrim a, StaticByteSized a) => ByteSized (Wav a) where
   byteSize (Wav fmt body) =
     let !remainingSize = byteSize body
         !header = WavHeader remainingSize fmt
     in byteSize header + byteSize body
 
-getRestOfWav :: (Prim a, StaticByteSized a) => Proxy a -> ByteCount -> WavFormatChunk -> Get (Wav a)
+getRestOfWav :: (LiftedPrim a, StaticByteSized a) => Proxy a -> ByteCount -> WavFormatChunk -> Get (Wav a)
 getRestOfWav _ remainingSize fmtChunk = do
   body <- getExact remainingSize get
   pure $! Wav fmtChunk body
 
-instance (Prim a, StaticByteSized a) => Binary (Wav a) where
+instance (LiftedPrim a, StaticByteSized a) => Binary (Wav a) where
   get = do
     WavHeader remainingSize fmtChunk <- get
     let !fmt = knownChunkBody fmtChunk
@@ -467,7 +467,7 @@ data WavDspErr =
 
 instance Exception WavDspErr
 
-monoWav :: Prim a => Sel a -> Wav a -> Either WavDspErr (Wav a)
+monoWav :: LiftedPrim a => Sel a -> Wav a -> Either WavDspErr (Wav a)
 monoWav sel (Wav (KnownChunk fmt) (WavBody pre (KnownChunk (WavDataBody arr)) post)) =
   case wfbNumChannels fmt of
     2 -> case monoFromSel sel arr of

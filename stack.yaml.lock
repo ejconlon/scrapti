@@ -9,12 +9,12 @@ packages:
     version: 0.1.0
     git: git@github.com:ejconlon/dahdit.git
     pantry-tree:
-      size: 1615
-      sha256: 76900f907b133affdc2093d78cc254b3d4d595a11c3d6d267fa06a66985b7d0f
-    commit: fa891130c32554bf651395f5bc4e751b4f780062
+      size: 1616
+      sha256: e1fa339ea984f3ddb94fd4ecd500b664e39046bf0761b4b3074a77473e1fb79b
+    commit: b0ec56fd6d72ccd38a5e8d39a811ed994c3b22fb
   original:
     git: git@github.com:ejconlon/dahdit.git
-    commit: fa891130c32554bf651395f5bc4e751b4f780062
+    commit: b0ec56fd6d72ccd38a5e8d39a811ed994c3b22fb
 - completed:
     name: data-sword
     version: 0.3.0.0

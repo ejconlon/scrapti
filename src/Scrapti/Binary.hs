@@ -2,16 +2,14 @@ module Scrapti.Binary
   ( QuietArray (..)
   ) where
 
-import Dahdit (ByteSized (..))
+import Dahdit (ByteSized (..), LiftedPrim, LiftedPrimArray, emptyLiftedPrimArray, sizeofLiftedPrimArray)
 import Data.Default (Default (..))
-import Data.Primitive (Prim)
-import Data.Primitive.PrimArray (PrimArray, emptyPrimArray, sizeofPrimArray)
 
-newtype QuietArray a = QuietArray { unQuietArray :: PrimArray a }
+newtype QuietArray a = QuietArray { unQuietArray :: LiftedPrimArray a }
   deriving newtype (Eq, ByteSized)
 
-instance Prim a => Show (QuietArray a) where
-  show (QuietArray arr) = "QuietArray{" ++ show (sizeofPrimArray arr) ++ "}"
+instance LiftedPrim a => Show (QuietArray a) where
+  show (QuietArray arr) = "QuietArray{" ++ show (sizeofLiftedPrimArray arr) ++ "}"
 
 instance Default (QuietArray a) where
-  def = QuietArray emptyPrimArray
+  def = QuietArray emptyLiftedPrimArray

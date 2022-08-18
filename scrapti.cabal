@@ -24,6 +24,7 @@ source-repository head
 
 library
   exposed-modules:
+      Scrapti.Aiff
       Scrapti.Binary
       Scrapti.Dsp
       Scrapti.Main
@@ -78,7 +79,6 @@ library
     , directory ==1.3.*
     , filepath ==1.4.*
     , mtl ==2.2.*
-    , primitive ==0.7.*
     , regex-tdfa ==1.3.*
     , text ==1.2.*
     , transformers ==0.5.*
@@ -129,7 +129,6 @@ test-suite scrapti-test
     , directory ==1.3.*
     , filepath ==1.4.*
     , mtl ==2.2.*
-    , primitive ==0.7.*
     , regex-tdfa ==1.3.*
     , scrapti
     , tasty ==1.4.*

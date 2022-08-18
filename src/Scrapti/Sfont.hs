@@ -25,10 +25,10 @@ module Scrapti.Sfont
   ) where
 
 import Control.Monad (unless)
-import Dahdit (Binary (..), ByteSized (..), Get, Int16LE (..), PrimArray, Put, ShortByteString, StaticByteSized (..),
-               StaticBytes, TermBytes, ViaStaticByteSized (..), ViaStaticGeneric (..), Word16LE, Word32LE, getExact,
-               getRemainingSeq, getRemainingSize, getRemainingStaticSeq, getRemainingString, getSkip, getStaticArray,
-               putByteString, putSeq, putStaticArray)
+import Dahdit (Binary (..), ByteSized (..), Get, Int16LE (..), LiftedPrimArray, Put, ShortByteString,
+               StaticByteSized (..), StaticBytes, TermBytes, ViaStaticByteSized (..), ViaStaticGeneric (..), Word16LE,
+               Word32LE, getExact, getLiftedPrimArray, getRemainingSeq, getRemainingSize, getRemainingStaticSeq,
+               getRemainingString, getSkip, putByteString, putLiftedPrimArray, putSeq)
 import Data.Foldable (foldl')
 import Data.Int (Int8)
 import Data.Proxy (Proxy (..))
@@ -76,57 +76,6 @@ newtype SampleCount = SampleCount { unSampleCount :: Word32LE }
   deriving newtype (Eq, Ord, Num, Enum, Real, Integral, ByteSized, StaticByteSized, Binary)
 
 type ShortText = StaticBytes 20
-
--- newtype ListChunk a = ListChunk { listChunkElems :: Seq a }
---   deriving stock (Show)
---   deriving newtype (Eq)
-
--- instance ByteSized a => ByteSized (ListChunk a) where
---   byteSize (ListChunk elems) = listChunkHeaderSize + byteSizeFoldable elems
-
--- instance (KnownLabel a, Binary a) => Binary (ListChunk a) where
---   get = do
---     getExpectLabel labelList
---     chunkSize <- getChunkSize
---     getExact chunkSize $ do
---       let !label = knownLabel (Proxy :: Proxy a)
---       getExpectLabel label
---       elems <- getRemainingSeq get
---       pure $! ListChunk elems
---   put (ListChunk elems) = do
---     put labelList
---     let !chunkSize = byteSizeFoldable elems + labelSize
---     putChunkSize chunkSize
---     let !label = knownLabel (Proxy :: Proxy a)
---     put label
---     putSeq put elems
-
--- newtype OptChunk a = OptChunk { optChunkElem :: Maybe a }
---   deriving stock (Show)
---   deriving newtype (Eq)
-
--- instance ByteSized a => ByteSized (OptChunk a) where
---   byteSize (OptChunk mayElem) = listChunkHeaderSize + byteSizeFoldable mayElem
-
--- instance (KnownLabel a, Binary a) => Binary (OptChunk a) where
---   get = do
---     getExpectLabel labelList
---     chunkSize <- getChunkSize
---     getExact chunkSize $ do
---       let !label = knownLabel (Proxy :: Proxy a)
---       getExpectLabel label
---       mayElem <-
---         if chunkSize == labelSize
---           then pure Nothing
---           else fmap Just get
---       pure $! OptChunk mayElem
---   put (OptChunk mayElem) = do
---     put labelList
---     let !chunkSize = byteSizeFoldable mayElem + labelSize
---     putChunkSize chunkSize
---     let !label = knownLabel (Proxy :: Proxy a)
---     put label
---     maybe (pure ()) put mayElem
 
 data Sfont = Sfont
   { sfontInfo :: !InfoChunk
@@ -260,8 +209,8 @@ instance Binary Info where
       InfoReserved _ bs -> putByteString bs
 
 data Sdta = Sdta
-  { sdtaHighBits :: !(PrimArray Int16LE)
-  , sdtaLowBits :: !(Maybe (PrimArray Word8))
+  { sdtaHighBits :: !(LiftedPrimArray Int16LE)
+  , sdtaLowBits :: !(Maybe (LiftedPrimArray Word8))
   } deriving stock (Eq, Show)
 
 instance ByteSized Sdta where
@@ -272,11 +221,11 @@ instance ByteSized Sdta where
 instance KnownLabel Sdta where
   knownLabel _ = labelSdta
 
-getHighBits :: SampleCount -> Get (PrimArray Int16LE)
-getHighBits numSamples = getStaticArray (fromIntegral numSamples)
+getHighBits :: SampleCount -> Get (LiftedPrimArray Int16LE)
+getHighBits numSamples = getLiftedPrimArray (Proxy :: Proxy Int16LE) (fromIntegral numSamples)
 
-getLowBits :: SampleCount -> Get (PrimArray Word8)
-getLowBits numSamples = getStaticArray (fromIntegral numSamples)
+getLowBits :: SampleCount -> Get (LiftedPrimArray Word8)
+getLowBits numSamples = getLiftedPrimArray (Proxy :: Proxy Word8) (fromIntegral numSamples)
 
 instance Binary Sdta where
   get = do
@@ -300,13 +249,13 @@ instance Binary Sdta where
   put (Sdta highBits mayLowBits) = do
     put labelSmpl
     putChunkSize (byteSize highBits)
-    putStaticArray highBits
+    putLiftedPrimArray highBits
     case mayLowBits of
       Nothing -> pure ()
       Just lowBits -> do
         put labelSm24
         putChunkSize (byteSize lowBits)
-        putStaticArray lowBits
+        putLiftedPrimArray lowBits
 
 newtype SdtaChunk = SdtaChunk { unSdtaChunk :: KnownOptChunk Sdta }
   deriving stock (Show)
