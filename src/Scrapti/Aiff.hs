@@ -4,13 +4,15 @@
 module Scrapti.Aiff where
 
 import Control.Monad (unless)
-import Dahdit (Binary (..), ByteCount (..), ByteSized (..), Get, LiftedPrim, LiftedPrimArray, Put, ShortByteString,
-               StaticByteSized (..), StaticBytes, ViaGeneric (..), ViaStaticByteSized (..), Word16BE, Word32BE,
-               getByteString, getExact, getLookAhead, getRemainingLiftedPrimArray, getRemainingSize, getSkip, getWord8,
-               putByteString, putLiftedPrimArray, putWord8)
+import Dahdit (Binary (..), ByteArray, ByteCount (..), ByteSized (..), ShortByteString, StaticByteSized (..),
+               StaticBytes, ViaGeneric (..), ViaStaticByteSized (..), Word16BE, Word32BE, byteSizeFoldable,
+               getByteString, getExact, getLookAhead, getRemainingByteArray, getRemainingSeq, getSkip, getWord8,
+               putByteArray, putByteString, putSeq, putWord8)
 import qualified Data.ByteString.Short as BSS
 import Data.Default (Default (..))
+import Data.Primitive.ByteArray (sizeofByteArray)
 import Data.Proxy (Proxy (..))
+import Data.Sequence (Seq)
 import GHC.Generics (Generic)
 import Scrapti.Common (KnownLabel (..), Label, UnparsedBody, chunkHeaderSize, countSize, getChunkSizeBE, getExpectLabel,
                        labelSize, padCount, putChunkSizeBE)
@@ -66,10 +68,10 @@ newtype KnownChunk a = KnownChunk
     deriving newtype (Eq, Default)
 
 knownChunkUnpaddedByteSize :: ByteSized a => KnownChunk a -> ByteCount
-knownChunkUnpaddedByteSize (KnownChunk body) = chunkHeaderSize + byteSize body
+knownChunkUnpaddedByteSize (KnownChunk body) = byteSize body
 
 instance ByteSized a => ByteSized (KnownChunk a) where
-  byteSize = padCount . knownChunkUnpaddedByteSize
+  byteSize kc = padCount (chunkHeaderSize + knownChunkUnpaddedByteSize kc)
 
 instance StaticByteSized a => StaticByteSized (KnownChunk a) where
   staticByteSize _ = padCount (chunkHeaderSize + staticByteSize (Proxy :: Proxy a))
@@ -100,19 +102,17 @@ instance Default PascalString where
 instance ByteSized PascalString where
   byteSize (PascalString sbs) = padCount (byteSize sbs + 1)
 
--- TODO does the size include the padding byte?
--- We assume it doesn't here - change to be like PaddedString if so
 instance Binary PascalString where
   get = do
     usz <- fmap fromIntegral getWord8
     sbs <- getByteString usz
-    unless (even usz) (getSkip 1)
+    unless (odd usz) (getSkip 1)
     pure $! PascalString sbs
   put (PascalString sbs) = do
     let !usz = fromIntegral (BSS.length sbs)
     putWord8 usz
     putByteString sbs
-    unless (even usz) (putWord8 0)
+    unless (odd usz) (putWord8 0)
 
 -- | "80 bit IEEE Standard 754 floating point number"
 newtype ExtendedFloat = ExtendedFloat { unExtendedFloat :: StaticBytes 10 }
@@ -134,52 +134,71 @@ instance KnownLabel AiffCommonBody where
 
 type AiffCommonChunk = KnownChunk AiffCommonBody
 
-data AiffDataBody a = AiffDataBody
+data AiffDataBody = AiffDataBody
   { adbOffset :: !Word32BE
   , adbBlockSize :: !Word32BE
-  , adbSoundData :: !(LiftedPrimArray a)
+  , adbSoundData :: !ByteArray
   } deriving stock (Eq, Show, Generic)
-    deriving (ByteSized) via (ViaGeneric (AiffDataBody a))
 
-instance (StaticByteSized a, LiftedPrim a) => Binary (AiffDataBody a) where
+instance ByteSized AiffDataBody where
+  byteSize (AiffDataBody _ _ arr) = 8 + fromIntegral (sizeofByteArray arr)
+
+instance Binary AiffDataBody where
   get = do
     adbOffset <- get
     adbBlockSize <- get
-    adbSoundData <- getRemainingLiftedPrimArray (Proxy :: Proxy a)
+    adbSoundData <- getRemainingByteArray
     pure $! AiffDataBody {..}
   put (AiffDataBody {..}) = do
     put adbOffset
     put adbBlockSize
-    putLiftedPrimArray adbSoundData
+    putByteArray adbSoundData
 
-instance KnownLabel (AiffDataBody a) where
+instance KnownLabel AiffDataBody where
   knownLabel _ = labelSsnd
 
-type AiffDataChunk a = KnownChunk (AiffDataBody a)
-
-data AiffBody a = AiffBody
-  deriving stock (Eq, Show)
+type AiffDataChunk = KnownChunk AiffDataBody
 
 type AiffVersionChunk = Chunk UnparsedBody
 type AiffAnnoChunk = Chunk UnparsedBody
 type AiffMarkChunk = Chunk UnparsedBody
+type AiffUnparsedChunk = Chunk UnparsedBody
 
-getOptChunk :: Label -> Get a -> Get (Maybe a)
-getOptChunk wantLabel g = do
-  remSz <- getRemainingSize
-  if remSz == 0
-    then pure Nothing
-    else do
-      gotLabel <- getLookAhead get
-      if gotLabel == wantLabel
-        then fmap Just g
-        else pure Nothing
+data AiffChunk =
+    AiffChunkCommon !AiffCommonChunk
+  | AiffChunkData !AiffDataChunk
+  | AiffChunkVersion !AiffVersionChunk
+  | AiffChunkAnno !AiffAnnoChunk
+  | AiffChunkMark !AiffMarkChunk
+  | AiffChunkUnparsed !AiffUnparsedChunk
+  deriving stock (Eq, Show, Generic)
 
-putOptChunk :: (a -> Put) -> Maybe a -> Put
-putOptChunk = maybe (pure ())
+instance ByteSized AiffChunk where
+  byteSize = \case
+    AiffChunkCommon x -> byteSize x
+    AiffChunkData x -> byteSize x
+    AiffChunkVersion x -> byteSize x
+    AiffChunkAnno x -> byteSize x
+    AiffChunkMark x -> byteSize x
+    AiffChunkUnparsed x -> byteSize x
 
-byteSizeOpt :: ByteSized a => Maybe a -> ByteCount
-byteSizeOpt = maybe 0 byteSize
+instance Binary AiffChunk where
+  get = do
+    label <- getLookAhead get
+    if
+      | label == labelComm -> fmap AiffChunkCommon get
+      | label == labelSsnd -> fmap AiffChunkData get
+      | label == labelFver -> fmap AiffChunkVersion get
+      | label == labelAnno -> fmap AiffChunkAnno get
+      | label == labelMark -> fmap AiffChunkMark get
+      | otherwise -> fmap AiffChunkUnparsed get
+  put = \case
+    AiffChunkCommon x -> put x
+    AiffChunkData x -> put x
+    AiffChunkVersion x -> put x
+    AiffChunkAnno x -> put x
+    AiffChunkMark x -> put x
+    AiffChunkUnparsed x -> put x
 
 newtype AiffHeader = AiffHeader
   { ahSize :: ByteCount
@@ -187,8 +206,11 @@ newtype AiffHeader = AiffHeader
     deriving newtype (Eq)
     deriving (ByteSized) via (ViaStaticByteSized AiffHeader)
 
+aiffHeaderSize :: ByteCount
+aiffHeaderSize = 2 * labelSize + countSize
+
 instance StaticByteSized AiffHeader where
-  staticByteSize _ = 2 * labelSize + countSize
+  staticByteSize _ = aiffHeaderSize
 
 instance Binary AiffHeader where
   get = do
@@ -201,37 +223,20 @@ instance Binary AiffHeader where
     putChunkSizeBE (remSz + labelSize)
     put labelAifc
 
-data Aiff a = Aiff
-  { aiffVersion :: !(Maybe AiffVersionChunk)
-  , aiffAnno :: !(Maybe AiffAnnoChunk)
-  , aiffCommon :: !AiffCommonChunk
-  , aiffData :: !(AiffDataChunk a)
-  , aiffMark :: !(Maybe AiffMarkChunk)
-  } deriving stock (Eq, Show, Generic)
+newtype Aiff = Aiff
+  { aiffChunks :: Seq AiffChunk
+  } deriving stock (Show)
+    deriving newtype (Eq)
 
-instance (StaticByteSized a, LiftedPrim a) => ByteSized (Aiff a) where
-  byteSize (Aiff {..}) =
-    byteSizeOpt aiffVersion + byteSizeOpt aiffAnno + byteSize aiffCommon +
-      byteSize aiffData + byteSizeOpt aiffMark
+instance ByteSized Aiff where
+  byteSize (Aiff chunks) = aiffHeaderSize + byteSizeFoldable chunks
 
-instance (StaticByteSized a, LiftedPrim a) => Binary (Aiff a) where
+instance Binary Aiff where
   get = do
     AiffHeader remSz <- get
-    getExact remSz $ do
-      aiffVersion <- getOptChunk labelFver get
-      aiffAnno <- getOptChunk labelAnno get
-      aiffCommon <- get
-      let width = fromIntegral (aceSampleSize (knownChunkBody aiffCommon))
-          staticWidth = staticByteSize (Proxy :: Proxy a)
-      unless (width == staticWidth) (fail ("Bad sample width, expected " ++ show (unByteCount staticWidth) ++ " but read " ++ show (unByteCount width)))
-      aiffData <- get
-      aiffMark <- getOptChunk labelMark get
-      pure $! Aiff {..}
-  put aiff@(Aiff {..})= do
-    let !remSz = byteSize aiff
+    chunks <- getExact remSz (getRemainingSeq get)
+    pure $! Aiff chunks
+  put (Aiff chunks)= do
+    let !remSz = byteSizeFoldable chunks
     put (AiffHeader remSz)
-    putOptChunk put aiffVersion
-    putOptChunk put aiffAnno
-    put aiffCommon
-    put aiffData
-    putOptChunk put aiffMark
+    putSeq put chunks

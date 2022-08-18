@@ -38,7 +38,7 @@ import Control.Exception (Exception)
 import Control.Monad (join, unless)
 import Control.Monad.Identity (Identity (..))
 import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, LiftedPrim, LiftedPrimArray, ShortByteString,
-               StaticByteSized (..), Word16LE, Word32LE, Word8, byteSizeFoldable, getExact, getRemainingLiftedPrimArray,
+               StaticByteSized (..), Word16LE, Word32LE, byteSizeFoldable, getExact, getRemainingLiftedPrimArray,
                getRemainingSeq, getRemainingString, getSeq, getUnfold, putByteString, putLiftedPrimArray, putSeq,
                putWord8)
 import qualified Data.ByteString.Short as BSS
@@ -47,8 +47,8 @@ import Data.Proxy (Proxy (..))
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
 import Data.String (IsString)
-import Scrapti.Common (KnownLabel (..), Label, Sampled (..), UnparsedBody, chunkHeaderSize, countSize, getChunkSizeLE,
-                       getExpectLabel, getSampled, labelSize, padCount, putChunkSizeLE)
+import Scrapti.Common (KnownLabel (..), Label, Sampled (..), UnparsedBody, bssInit, bssLast, chunkHeaderSize, countSize,
+                       getChunkSizeLE, getExpectLabel, getSampled, labelSize, padCount, putChunkSizeLE)
 import Scrapti.Dsp (DspErr, Sel, monoFromSel)
 import Scrapti.Riff (Chunk (..), ChunkLabel (..), KnownChunk (..), KnownListChunk (..), labelRiff, peekChunkLabel)
 
@@ -72,16 +72,6 @@ instance Default PaddedString where
 
 instance ByteSized PaddedString where
   byteSize (PaddedString sbs) = padCount (byteSize sbs)
-
--- NOTE: Remove this when BS lib is updated
-bssLast :: ShortByteString -> Word8
--- bssLast = BSS.last
-bssLast sbs = BSS.index sbs (BSS.length sbs - 1)
-
--- NOTE: Remove this when BS lib is updated
-bssInit :: ShortByteString -> ShortByteString
--- bssInit = BSS.init
-bssInit = BSS.pack . init . BSS.unpack
 
 instance Binary PaddedString where
   get = do

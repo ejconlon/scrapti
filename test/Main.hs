@@ -8,8 +8,10 @@ import Dahdit (Binary (..), ByteCount, ElementCount, Get, Int16LE, LiftedPrimArr
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Short as BSS
 import Data.Default (def)
+import Data.Foldable (for_)
 import Data.Proxy (Proxy (..))
 import qualified Data.Sequence as Seq
+import Scrapti.Aiff (Aiff (..), AiffChunk)
 import Scrapti.Binary (QuietArray (..))
 import Scrapti.Common (Sampled (..), UnparsedBody (..), chunkHeaderSize, getChunkSizeLE, getExpectLabel)
 import Scrapti.Riff (Chunk (..), KnownChunk (..), KnownListChunk (..), KnownOptChunk (..), labelRiff)
@@ -128,6 +130,22 @@ testWavWrite = testCase "write" $ do
 
 testWav :: TestTree
 testWav = testGroup "wav" [testWavSerde, testWavHeader, testWavData, testWavInfo, testWavWhole, testWavWrite]
+
+testAiff :: TestTree
+testAiff = testCase "aiff" $ do
+  bs <- readShort "testdata/M1F1-int16s-AFsp.aif"
+  (aiff, bc) <- runGetIO (get :: Get Aiff) bs
+  byteSize aiff @?= bc
+  bc @?= fromIntegral (BSS.length bs)
+  for_ (aiffChunks aiff) $ \chunk -> do
+    let ys = runPut (put chunk)
+    fromIntegral (BSS.length ys) @?= byteSize chunk
+    (chunk', cc) <- runGetIO (get :: Get AiffChunk) ys
+    byteSize chunk' @?= cc
+    chunk' @?= chunk
+  let bs' = runPut (put aiff)
+  fromIntegral (BSS.length bs') @?= bc
+  -- bs' @?= bs
 
 testSfontWhole :: TestTree
 testSfontWhole = testCase "whole" $ do
@@ -353,7 +371,7 @@ testConvert = testCase "convert" $ do
   pure ()
 
 testScrapti :: TestTree
-testScrapti = testGroup "Scrapti" [testWav, testSfont, testPti, testProject, testConvert, testOtherSizes]
+testScrapti = testGroup "Scrapti" [testWav, testAiff, testSfont, testPti, testProject, testConvert, testOtherSizes]
 
 main :: IO ()
 main = defaultMain testScrapti

@@ -15,11 +15,14 @@ module Scrapti.Common
   , getSampled
   , UnparsedBody (..)
   , padCount
+  , bssLast
+  , bssInit
   ) where
 
 import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, Int16LE, Int24LE, Int32LE, Int8, LiftedPrim, Put,
-               StaticByteSized, StaticBytes, Word32BE, Word32LE, getExpect, getRemainingString, putByteString)
+               StaticByteSized, StaticBytes, Word32BE, Word32LE, Word8, getExpect, getRemainingString, putByteString)
 import Data.ByteString.Short (ShortByteString)
+import qualified Data.ByteString.Short as BSS
 import Data.Proxy (Proxy (..))
 
 type Label = StaticBytes 4
@@ -80,3 +83,13 @@ instance Binary UnparsedBody where
 
 padCount :: ByteCount -> ByteCount
 padCount bc = if even bc then bc else bc + 1
+
+-- NOTE: Remove this when BS lib is updated
+bssLast :: ShortByteString -> Word8
+-- bssLast = BSS.last
+bssLast sbs = BSS.index sbs (BSS.length sbs - 1)
+
+-- NOTE: Remove this when BS lib is updated
+bssInit :: ShortByteString -> ShortByteString
+-- bssInit = BSS.init
+bssInit = BSS.pack . init . BSS.unpack
