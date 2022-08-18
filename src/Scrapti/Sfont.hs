@@ -37,8 +37,9 @@ import qualified Data.Sequence as Seq
 import Data.Type.Equality (testEquality)
 import Data.Word (Word8)
 import GHC.Generics (Generic)
-import Scrapti.Riff (KnownLabel (..), KnownListChunk, KnownOptChunk, Label, chunkHeaderSize, getChunkSize,
-                     getExpectLabel, labelRiff, labelSize, putChunkSize)
+import Scrapti.Common (KnownLabel (..), Label, chunkHeaderSize, getChunkSizeLE, getExpectLabel, labelSize,
+                       putChunkSizeLE)
+import Scrapti.Riff (KnownListChunk, KnownOptChunk, labelRiff)
 import Type.Reflection ((:~:) (..), TypeRep, Typeable, typeRep)
 
 labelSfbk, labelInfo, labelIfil, labelIver, labelIsng, labelInam, labelIrom, labelIcrd,
@@ -89,7 +90,7 @@ instance ByteSized Sfont where
 instance Binary Sfont where
   get = do
     getExpectLabel labelRiff
-    chunkSize <- getChunkSize
+    chunkSize <- getChunkSizeLE
     getExact chunkSize $ do
       getExpectLabel labelSfbk
       info <- get
@@ -99,7 +100,7 @@ instance Binary Sfont where
   put sfont@(Sfont info sdta pdta) = do
     put labelRiff
     let !chunkSize = byteSize sfont - chunkHeaderSize
-    putChunkSize chunkSize
+    putChunkSizeLE chunkSize
     put labelSfbk
     put info
     put sdta
@@ -164,7 +165,7 @@ whichLabelInfo = \case
 instance Binary Info where
   get = do
     label <- get
-    chunkSize <- getChunkSize
+    chunkSize <- getChunkSizeLE
     getExact chunkSize $
       if
         | label == labelIfil -> do
@@ -193,7 +194,7 @@ instance Binary Info where
     let !label = whichLabelInfo info
     put label
     let !chunkSize = byteSize info - chunkHeaderSize
-    putChunkSize chunkSize
+    putChunkSizeLE chunkSize
     case info of
       InfoVersion w1 w2 -> put w1 *> put w2
       InfoTargetSoundEngine z -> put z
@@ -231,14 +232,14 @@ instance Binary Sdta where
   get = do
     chunkSize <- getRemainingSize
     getExpectLabel labelSmpl
-    highSize <- getChunkSize
+    highSize <- getChunkSizeLE
     let !numSamples = div (fromIntegral highSize) 2
     highBits <- getHighBits numSamples
     let !numExtra = chunkSize - highSize - chunkHeaderSize
     if
       | numExtra > 0 -> do
         getExpectLabel labelSm24
-        lowSize <- getChunkSize
+        lowSize <- getChunkSizeLE
         let !expectedSize = if even numSamples then numSamples else numSamples + 1
         unless (fromIntegral lowSize == expectedSize) (fail "invalid low sample size")
         lowBits <- getLowBits numSamples
@@ -248,13 +249,13 @@ instance Binary Sdta where
       | otherwise -> fail "invalid sdata chunk/sample sizes"
   put (Sdta highBits mayLowBits) = do
     put labelSmpl
-    putChunkSize (byteSize highBits)
+    putChunkSizeLE (byteSize highBits)
     putLiftedPrimArray highBits
     case mayLowBits of
       Nothing -> pure ()
       Just lowBits -> do
         put labelSm24
-        putChunkSize (byteSize lowBits)
+        putChunkSizeLE (byteSize lowBits)
         putLiftedPrimArray lowBits
 
 newtype SdtaChunk = SdtaChunk { unSdtaChunk :: KnownOptChunk Sdta }
@@ -312,7 +313,7 @@ whichLabelPdtaBlock = \case
 instance Binary PdtaBlock where
   get = do
     label <- get
-    chunkSize <- getChunkSize
+    chunkSize <- getChunkSizeLE
     getExact chunkSize $
       if
         | label == labelPhdr ->
@@ -339,7 +340,7 @@ instance Binary PdtaBlock where
     let !label = whichLabelPdtaBlock block
     put label
     let !chunkSize = byteSize block - chunkHeaderSize
-    putChunkSize chunkSize
+    putChunkSizeLE chunkSize
     case block of
       PdtaBlockPhdr phdrs -> putSeq put phdrs
       PdtaBlockBag _ bags -> putSeq put bags

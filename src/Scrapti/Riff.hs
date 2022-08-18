@@ -2,19 +2,10 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 module Scrapti.Riff
-  ( Label
-  , labelSize
-  , countSize
-  , labelRiff
+  ( labelRiff
   , labelList
-  , getExpectLabel
-  , getChunkSize
-  , expectChunkSize
-  , putChunkSize
-  , chunkHeaderSize
   , listChunkHeaderSize
   , Chunk (..)
-  , KnownLabel (..)
   , KnownChunk (..)
   , ListChunkBody (..)
   , ListChunk (..)
@@ -24,59 +15,20 @@ module Scrapti.Riff
   , peekChunkLabel
   ) where
 
-import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, Put, StaticByteSized (..), StaticBytes, Word32LE,
-               byteSizeFoldable, getExact, getExpect, getLookAhead, getRemainingSeq, getSkip, putSeq)
+import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, StaticByteSized (..), byteSizeFoldable, getExact,
+               getLookAhead, getRemainingSeq, getSkip, putSeq)
 import Data.Default (Default)
 import Data.Proxy (Proxy (..))
 import Data.Sequence (Seq)
-
-type Label = StaticBytes 4
-
-labelSize, countSize :: ByteCount
-labelSize = 4
-countSize = 4
+import Scrapti.Common (KnownLabel (..), Label, chunkHeaderSize, countSize, getChunkSizeLE, getExpectLabel, labelSize,
+                       putChunkSizeLE)
 
 labelRiff, labelList :: Label
 labelRiff = "RIFF"
 labelList = "LIST"
 
-getExpectLabel :: Label -> Get ()
-getExpectLabel = getExpect "label" get
-
-getChunkSize :: Get ByteCount
-getChunkSize = fmap fromIntegral (get @Word32LE)
-
-expectChunkSize :: ByteCount -> Get ()
-expectChunkSize = getExpect "chunk size" getChunkSize
-
-putChunkSize :: ByteCount -> Put
-putChunkSize = put @Word32LE . fromIntegral
-
-chunkHeaderSize :: ByteCount
-chunkHeaderSize = 8
-
 listChunkHeaderSize :: ByteCount
 listChunkHeaderSize = chunkHeaderSize + labelSize
-
--- data ChunkHeader = ChunkHeader
---   { chLabel :: !Label
---   , chSize :: !ByteCount
---   } deriving stock (Eq, Show)
-
--- instance ByteSized ChunkHeader where
---   byteSize _ = chunkHeaderSize
-
--- instance StaticByteSized ChunkHeader where
---   staticByteSize _ = chunkHeaderSize
-
--- instance Binary ChunkHeader where
---   get = do
---     lab <- get
---     sz <- getChunkSize
---     pure $! ChunkHeader lab sz
---   put (ChunkHeader lab sz) = do
---     put lab
---     putChunkSize sz
 
 data Chunk a = Chunk
   { chunkLabel :: !Label
@@ -92,16 +44,13 @@ instance StaticByteSized a => StaticByteSized (Chunk a) where
 instance Binary a => Binary (Chunk a) where
   get = do
     lab <- get
-    sz <- getChunkSize
+    sz <- getChunkSizeLE
     body <- getExact sz get
     pure $! Chunk lab body
   put (Chunk lab body) = do
     put lab
-    putChunkSize (byteSize body)
+    putChunkSizeLE (byteSize body)
     put body
-
-class KnownLabel a where
-  knownLabel :: Proxy a -> Label
 
 newtype KnownChunk a = KnownChunk
   { knownChunkBody :: a
@@ -117,12 +66,12 @@ instance StaticByteSized a => StaticByteSized (KnownChunk a) where
 instance (Binary a, KnownLabel a) => Binary (KnownChunk a) where
   get = do
     getExpectLabel (knownLabel (Proxy :: Proxy a))
-    sz <- getChunkSize
+    sz <- getChunkSizeLE
     body <- getExact sz get
     pure $! KnownChunk body
   put (KnownChunk body) = do
     put (knownLabel (Proxy :: Proxy a))
-    putChunkSize (byteSize body)
+    putChunkSizeLE (byteSize body)
     put body
 
 data ListChunkBody a = ListChunkBody
@@ -160,14 +109,14 @@ instance ByteSized a => ByteSized (KnownListChunk a) where
 instance (Binary a, KnownLabel a) => Binary (KnownListChunk a) where
   get = do
     getExpectLabel labelList
-    sz <- getChunkSize
+    sz <- getChunkSizeLE
     items <- getExact sz $ do
       getExpectLabel (knownLabel (Proxy :: Proxy a))
       getRemainingSeq get
     pure $! KnownListChunk items
   put (KnownListChunk items) = do
     put labelList
-    putChunkSize (labelSize + byteSizeFoldable items)
+    putChunkSizeLE (labelSize + byteSizeFoldable items)
     put (knownLabel (Proxy :: Proxy a))
     putSeq put items
 
@@ -182,7 +131,7 @@ instance ByteSized a => ByteSized (KnownOptChunk a) where
 instance (Binary a, KnownLabel a) => Binary (KnownOptChunk a) where
   get = do
     getExpectLabel labelList
-    sz <- getChunkSize
+    sz <- getChunkSizeLE
     item <- getExact sz $ do
       let !label = knownLabel (Proxy :: Proxy a)
       getExpectLabel label
@@ -192,7 +141,7 @@ instance (Binary a, KnownLabel a) => Binary (KnownOptChunk a) where
     pure $! KnownOptChunk item
   put (KnownOptChunk item) = do
     put labelList
-    putChunkSize (labelSize + byteSizeFoldable item)
+    putChunkSizeLE (labelSize + byteSizeFoldable item)
     put (knownLabel (Proxy :: Proxy a))
     maybe (pure ()) put item
 

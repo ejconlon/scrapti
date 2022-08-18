@@ -2,16 +2,17 @@
 
 module Main (main) where
 
-import Dahdit (Binary (..), ByteCount, ElementCount, Get, Int16LE, LiftedPrimArray, Proxy (..), ShortByteString,
+import Dahdit (Binary (..), ByteCount, ElementCount, Get, Int16LE, LiftedPrimArray, ShortByteString,
                StaticByteSized (..), StaticBytes, Word16LE, Word8, byteSize, getExact, getSkip, getWord32LE, runGetIO,
                runPut, sizeofLiftedPrimArray)
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Short as BSS
 import Data.Default (def)
+import Data.Proxy (Proxy (..))
 import qualified Data.Sequence as Seq
 import Scrapti.Binary (QuietArray (..))
-import Scrapti.Riff (KnownChunk (..), KnownListChunk (..), KnownOptChunk (..), chunkHeaderSize, getChunkSize,
-                     getExpectLabel, labelRiff)
+import Scrapti.Common (chunkHeaderSize, getChunkSizeLE, getExpectLabel)
+import Scrapti.Riff (KnownChunk (..), KnownListChunk (..), KnownOptChunk (..), labelRiff)
 import Scrapti.Sfont (Bag, Gen, InfoChunk (..), Inst, Mod, PdtaChunk (..), Phdr, Sdta (..), SdtaChunk (..), Sfont (..),
                       Shdr, labelSfbk)
 import Scrapti.Tracker.Checked (Checked (..), mkCode)
@@ -128,7 +129,7 @@ testSfontManual = testCase "manual" $ do
   bs <- readShort "testdata/timpani.sf2"
   ((info, sdta, pdta), _) <- flip runGetIO bs $ do
     getExpectLabel labelRiff
-    chunkSize <- getChunkSize
+    chunkSize <- getChunkSizeLE
     getExact chunkSize $ do
       getExpectLabel labelSfbk
       info <- get @InfoChunk

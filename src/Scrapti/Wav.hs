@@ -38,19 +38,18 @@ module Scrapti.Wav
 import Control.Exception (Exception)
 import Control.Monad (join, unless)
 import Control.Monad.Identity (Identity (..))
-import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, Int16LE, Int24LE, Int32LE, LiftedPrim, LiftedPrimArray,
-               ShortByteString, StaticByteSized (..), Word16LE, Word32LE, byteSizeFoldable, getByteString, getExact,
+import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, LiftedPrim, LiftedPrimArray, ShortByteString,
+               StaticByteSized (..), Word16LE, Word32LE, byteSizeFoldable, getByteString, getExact,
                getRemainingLiftedPrimArray, getRemainingSeq, getRemainingString, getSeq, getUnfold, putByteString,
                putLiftedPrimArray, putSeq)
 import Data.Default (Default (..))
-import Data.Int (Int8)
 import Data.Proxy (Proxy (..))
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
+import Scrapti.Common (KnownLabel (..), Label, Sampled (..), chunkHeaderSize, countSize, getChunkSizeLE, getExpectLabel,
+                       getSampled, labelSize, putChunkSizeLE)
 import Scrapti.Dsp (DspErr, Sel, monoFromSel)
-import Scrapti.Riff (Chunk (..), ChunkLabel (..), KnownChunk (..), KnownLabel (..), KnownListChunk (..), Label,
-                     chunkHeaderSize, countSize, getChunkSize, getExpectLabel, labelRiff, labelSize, peekChunkLabel,
-                     putChunkSize)
+import Scrapti.Riff (Chunk (..), ChunkLabel (..), KnownChunk (..), KnownListChunk (..), labelRiff, peekChunkLabel)
 
 labelWave, labelFmt, labelData, labelInfo, labelAdtl, labelCue, labelNote, labelLabl, labelLtxt :: Label
 labelWave = "WAVE"
@@ -66,18 +65,6 @@ labelLtxt = "ltxt"
 newtype BitLength = BitLength { unBitLength :: Word16LE }
   deriving stock (Show)
   deriving newtype (Eq, Ord, Num, Enum, Real, Integral, Default, Binary, ByteSized)
-
-data Sampled f where
-  Sampled :: (LiftedPrim a, Binary a, StaticByteSized a) => !(f a) -> Sampled f
-
-getSampled :: BitLength -> Maybe (Sampled Proxy)
-getSampled = \case
-  8 -> Just (Sampled (Proxy :: Proxy Int8))
-  16 -> Just (Sampled (Proxy :: Proxy Int16LE))
-  24 -> Just (Sampled (Proxy :: Proxy Int24LE))
-  32 -> Just (Sampled (Proxy :: Proxy Int32LE))
-  -- 64 -> Just (Sampled (Proxy :: Proxy Int64LE))
-  _ -> Nothing
 
 data WavFormatBody = WavFormatBody
   { wfbFormatType :: !Word16LE
@@ -163,7 +150,7 @@ instance ByteSized WavHeader where
 instance Binary WavHeader where
   get = do
     getExpectLabel labelRiff
-    fileSize <- getChunkSize
+    fileSize <- getChunkSizeLE
     getExpectLabel labelWave
     format <- get
     let !formatSize = byteSize format
@@ -173,7 +160,7 @@ instance Binary WavHeader where
     let !formatSize = byteSize format
         !fileSize = remainingSize + formatSize + labelSize
     put labelRiff
-    putChunkSize fileSize
+    putChunkSizeLE fileSize
     put labelWave
     put format
 
@@ -202,12 +189,12 @@ instance ByteSized WavInfoElem where
 instance Binary WavInfoElem where
   get = do
     key <- get
-    sz <- getChunkSize
+    sz <- getChunkSizeLE
     val <- getByteString sz
     pure $! WavInfoElem key val
   put (WavInfoElem key val) = do
     put key
-    putChunkSize (byteSize val)
+    putChunkSizeLE (byteSize val)
     putByteString val
 
 instance KnownLabel WavInfoElem where
@@ -240,7 +227,7 @@ instance ByteSized WavAdtlElem where
 instance Binary WavAdtlElem where
   get = do
     lab <- get
-    sz <- getChunkSize
+    sz <- getChunkSizeLE
     (cueId, bs) <- getExact sz $ do
       cueId <- get
       bs <- getRemainingString
@@ -256,7 +243,7 @@ instance Binary WavAdtlElem where
       WavAdtlDataLabl _ -> labelLabl
       WavAdtlDataNote _ -> labelNote
       WavAdtlDataLtxt _ -> labelLtxt
-    putChunkSize (byteSize dat)
+    putChunkSizeLE (byteSize dat)
     put cueId
     putByteString $! case dat of
       WavAdtlDataLabl bs -> bs
@@ -443,7 +430,7 @@ instance Binary SampledWav where
     WavHeader remainingSize fmtChunk <- get
     let !fmt = knownChunkBody fmtChunk
         !bps = wfbBitsPerSample fmt
-    case getSampled bps of
+    case getSampled (fromIntegral bps) of
       Nothing -> fail ("Bad bps: " ++ show bps)
       Just (Sampled prox) -> fmap (SampledWav . Sampled) (getRestOfWav prox remainingSize fmtChunk)
   put (SampledWav (Sampled wd)) = put wd

@@ -7,7 +7,8 @@ import Scrapti.Riff (Chunk)
 -- We only bother to support "sowt" compression (little endian samples)
 
 -- AIFF shares a similar 4-byte label + size + payload structure with RIFF
--- We can use a lot of the same structures to read the file.
+-- We could use a lot of the same structures to read the file... If they were
+-- big-endian.
 
 data AiffFormatBody = AiffFormatBody
   deriving stock (Eq, Show)

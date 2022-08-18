@@ -26,6 +26,7 @@ library
   exposed-modules:
       Scrapti.Aiff
       Scrapti.Binary
+      Scrapti.Common
       Scrapti.Dsp
       Scrapti.Main
       Scrapti.Riff
