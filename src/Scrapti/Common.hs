@@ -13,10 +13,13 @@ module Scrapti.Common
   , KnownLabel (..)
   , Sampled (..)
   , getSampled
+  , UnparsedBody (..)
+  , padCount
   ) where
 
-import Dahdit (Binary (..), ByteCount, Get, Int16LE, Int24LE, Int32LE, Int8, LiftedPrim, Put, StaticByteSized,
-               StaticBytes, Word32BE, Word32LE, getExpect)
+import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, Int16LE, Int24LE, Int32LE, Int8, LiftedPrim, Put,
+               StaticByteSized, StaticBytes, Word32BE, Word32LE, getExpect, getRemainingString, putByteString)
+import Data.ByteString.Short (ShortByteString)
 import Data.Proxy (Proxy (..))
 
 type Label = StaticBytes 4
@@ -62,3 +65,18 @@ getSampled = \case
   24 -> Just (Sampled (Proxy :: Proxy Int24LE))
   32 -> Just (Sampled (Proxy :: Proxy Int32LE))
   _ -> Nothing
+
+newtype UnparsedBody = UnparsedBody
+  { ubContents :: ShortByteString
+  } deriving stock (Show)
+    deriving newtype (Eq)
+
+instance ByteSized UnparsedBody where
+  byteSize (UnparsedBody bs) = byteSize bs
+
+instance Binary UnparsedBody where
+  get = fmap UnparsedBody getRemainingString
+  put (UnparsedBody bs) = putByteString bs
+
+padCount :: ByteCount -> ByteCount
+padCount bc = if even bc then bc else bc + 1

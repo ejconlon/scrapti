@@ -11,8 +11,8 @@ import Data.Default (def)
 import Data.Proxy (Proxy (..))
 import qualified Data.Sequence as Seq
 import Scrapti.Binary (QuietArray (..))
-import Scrapti.Common (chunkHeaderSize, getChunkSizeLE, getExpectLabel)
-import Scrapti.Riff (KnownChunk (..), KnownListChunk (..), KnownOptChunk (..), labelRiff)
+import Scrapti.Common (UnparsedBody (..), chunkHeaderSize, getChunkSizeLE, getExpectLabel)
+import Scrapti.Riff (Chunk (..), KnownChunk (..), KnownListChunk (..), KnownOptChunk (..), labelRiff)
 import Scrapti.Sfont (Bag, Gen, InfoChunk (..), Inst, Mod, PdtaChunk (..), Phdr, Sdta (..), SdtaChunk (..), Sfont (..),
                       Shdr, labelSfbk)
 import Scrapti.Tracker.Checked (Checked (..), mkCode)
@@ -53,6 +53,29 @@ drumDataLen = 248886
 
 readShort :: FilePath -> IO ShortByteString
 readShort = fmap (BSS.toShort . BSL.toStrict) . BSL.readFile
+
+testWavSerde :: TestTree
+testWavSerde = testCase "serde" $ do
+  -- KnownChunk
+  byteSize drumFmt @?= 24
+  let fmtBs = runPut (put drumFmt)
+  (fmt, fmtSz) <- runGetIO get fmtBs
+  byteSize fmt @?= fmtSz
+  fmt @?= drumFmt
+  -- Odd and even unparsed chunks
+  let unpSz = 10
+      unpOdd = Chunk "FOOB" (UnparsedBody "A")
+      unpEven = Chunk "FOOB" (UnparsedBody "AB")
+  byteSize unpOdd @?= unpSz
+  byteSize unpEven @?= unpSz
+  let unpOddBs = runPut (put unpOdd)
+  (unpOdd', unpOddSz) <- runGetIO get unpOddBs
+  byteSize unpOdd' @?= unpOddSz
+  unpOdd' @?= unpOdd
+  let unpEvenBs = runPut (put unpEven)
+  (unpEven', unpEvenSz) <- runGetIO get unpEvenBs
+  byteSize unpEven' @?= unpEvenSz
+  unpEven' @?= unpEven
 
 testWavHeader :: TestTree
 testWavHeader = testCase "header" $ do
@@ -103,7 +126,7 @@ testWavWrite = testCase "write" $ do
   bs' @?= bs
 
 testWav :: TestTree
-testWav = testGroup "wav" [testWavHeader, testWavData, testWavInfo, testWavWhole, testWavWrite]
+testWav = testGroup "wav" [testWavSerde, testWavHeader, testWavData, testWavInfo, testWavWhole, testWavWrite]
 
 testSfontWhole :: TestTree
 testSfontWhole = testCase "whole" $ do

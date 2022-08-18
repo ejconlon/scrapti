@@ -8,7 +8,6 @@ module Scrapti.Wav
   , WavHeader (..)
   , WavDataBody (..)
   , WavDataChunk
-  , WavUnparsedBody (..)
   , WavUnparsedChunk
   , WavInfoElem (..)
   , WavInfoChunk
@@ -46,8 +45,8 @@ import Data.Default (Default (..))
 import Data.Proxy (Proxy (..))
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
-import Scrapti.Common (KnownLabel (..), Label, Sampled (..), chunkHeaderSize, countSize, getChunkSizeLE, getExpectLabel,
-                       getSampled, labelSize, putChunkSizeLE)
+import Scrapti.Common (KnownLabel (..), Label, Sampled (..), UnparsedBody, chunkHeaderSize, countSize, getChunkSizeLE,
+                       getExpectLabel, getSampled, labelSize, putChunkSizeLE)
 import Scrapti.Dsp (DspErr, Sel, monoFromSel)
 import Scrapti.Riff (Chunk (..), ChunkLabel (..), KnownChunk (..), KnownListChunk (..), labelRiff, peekChunkLabel)
 
@@ -164,19 +163,7 @@ instance Binary WavHeader where
     put labelWave
     put format
 
-newtype WavUnparsedBody = WavUnparsedBody
-  { wubContents :: ShortByteString
-  } deriving stock (Show)
-    deriving newtype (Eq)
-
-instance ByteSized WavUnparsedBody where
-  byteSize (WavUnparsedBody bs) = byteSize bs
-
-instance Binary WavUnparsedBody where
-  get = fmap WavUnparsedBody getRemainingString
-  put (WavUnparsedBody bs) = putByteString bs
-
-type WavUnparsedChunk = Chunk WavUnparsedBody
+type WavUnparsedChunk = Chunk UnparsedBody
 
 data WavInfoElem = WavInfoElem
   { wieKey :: !Label
@@ -312,7 +299,7 @@ instance KnownLabel WavCueBody where
 type WavCueChunk = KnownChunk WavCueBody
 
 data WavExtraChunk =
-    WavExtraChunkUnparsed !(Chunk WavUnparsedBody)
+    WavExtraChunkUnparsed !WavUnparsedChunk
   | WavExtraChunkInfo !WavInfoChunk
   | WavExtraChunkAdtl !WavAdtlChunk
   | WavExtraChunkCue !WavCueChunk
