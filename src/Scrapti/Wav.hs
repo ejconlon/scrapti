@@ -2,7 +2,7 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Scrapti.Wav
-  ( Sampled (..)
+  ( PaddedString (..)
   , WavFormatBody (..)
   , WavFormatChunk
   , WavHeader (..)
@@ -38,13 +38,15 @@ import Control.Exception (Exception)
 import Control.Monad (join, unless)
 import Control.Monad.Identity (Identity (..))
 import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, LiftedPrim, LiftedPrimArray, ShortByteString,
-               StaticByteSized (..), Word16LE, Word32LE, byteSizeFoldable, getByteString, getExact,
-               getRemainingLiftedPrimArray, getRemainingSeq, getRemainingString, getSeq, getSkip, getUnfold,
-               putByteString, putLiftedPrimArray, putSeq, putWord8)
+               StaticByteSized (..), Word16LE, Word32LE, Word8, byteSizeFoldable, getExact, getRemainingLiftedPrimArray,
+               getRemainingSeq, getRemainingString, getSeq, getUnfold, putByteString, putLiftedPrimArray, putSeq,
+               putWord8)
+import qualified Data.ByteString.Short as BSS
 import Data.Default (Default (..))
 import Data.Proxy (Proxy (..))
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
+import Data.String (IsString)
 import Scrapti.Common (KnownLabel (..), Label, Sampled (..), UnparsedBody, chunkHeaderSize, countSize, getChunkSizeLE,
                        getExpectLabel, getSampled, labelSize, padCount, putChunkSizeLE)
 import Scrapti.Dsp (DspErr, Sel, monoFromSel)
@@ -60,6 +62,37 @@ labelCue = "cue "
 labelNote = "note"
 labelLabl = "labl"
 labelLtxt = "ltxt"
+
+newtype PaddedString = PaddedString { unPaddedString :: ShortByteString }
+  deriving stock (Show)
+  deriving newtype (Eq, IsString)
+
+instance Default PaddedString where
+  def = PaddedString BSS.empty
+
+instance ByteSized PaddedString where
+  byteSize (PaddedString sbs) = padCount (byteSize sbs)
+
+-- NOTE: Remove this when BS lib is updated
+bssLast :: ShortByteString -> Word8
+-- bssLast = BSS.last
+bssLast sbs = BSS.index sbs (BSS.length sbs - 1)
+
+-- NOTE: Remove this when BS lib is updated
+bssInit :: ShortByteString -> ShortByteString
+-- bssInit = BSS.init
+bssInit = BSS.pack . init . BSS.unpack
+
+instance Binary PaddedString where
+  get = do
+    sbs <- getRemainingString
+    pure $! PaddedString $ if not (BSS.null sbs) && bssLast sbs == 0
+      then bssInit sbs
+      else sbs
+  put (PaddedString sbs) = do
+    putByteString sbs
+    let !usz = BSS.length sbs
+    unless (even usz) (putWord8 0)
 
 newtype BitLength = BitLength { unBitLength :: Word16LE }
   deriving stock (Show)
@@ -167,7 +200,7 @@ type WavUnparsedChunk = Chunk UnparsedBody
 
 data WavInfoElem = WavInfoElem
   { wieKey :: !Label
-  , wieVal :: !ShortByteString
+  , wieVal :: !PaddedString
   } deriving stock (Eq, Show)
 
 instance ByteSized WavInfoElem where
@@ -176,16 +209,13 @@ instance ByteSized WavInfoElem where
 instance Binary WavInfoElem where
   get = do
     key <- get
-    usz <- getChunkSizeLE
-    val <- getByteString usz
-    unless (even usz) (getSkip 1)
+    sz <- getChunkSizeLE
+    val <- getExact sz get
     pure $! WavInfoElem key val
   put (WavInfoElem key val) = do
     put key
-    let !usz = byteSize val
-    putChunkSizeLE usz
-    putByteString val
-    unless (even usz) (putWord8 0)
+    putChunkSizeLE (byteSize val)
+    put val
 
 instance KnownLabel WavInfoElem where
   knownLabel _ = labelInfo

@@ -11,7 +11,7 @@ import Data.Default (def)
 import Data.Proxy (Proxy (..))
 import qualified Data.Sequence as Seq
 import Scrapti.Binary (QuietArray (..))
-import Scrapti.Common (UnparsedBody (..), chunkHeaderSize, getChunkSizeLE, getExpectLabel)
+import Scrapti.Common (Sampled (..), UnparsedBody (..), chunkHeaderSize, getChunkSizeLE, getExpectLabel)
 import Scrapti.Riff (Chunk (..), KnownChunk (..), KnownListChunk (..), KnownOptChunk (..), labelRiff)
 import Scrapti.Sfont (Bag, Gen, InfoChunk (..), Inst, Mod, PdtaChunk (..), Phdr, Sdta (..), SdtaChunk (..), Sfont (..),
                       Shdr, labelSfbk)
@@ -22,8 +22,8 @@ import Scrapti.Tracker.Mtp (Mtp)
 import Scrapti.Tracker.Pti (Auto (..), AutoEnvelope (..), AutoType, Block, Effects (..), Filter, FilterType, Granular,
                             GranularLoopMode, GranularShape, Header (..), InstParams (..), Lfo (..), LfoSteps, LfoType,
                             Preamble (..), Pti (..), SamplePlayback, Slices, WavetableWindowSize)
-import Scrapti.Wav (Sampled (..), SampledWav (..), Wav (..), WavBody (..), WavChoiceChunk (..), WavDataBody (..),
-                    WavExtraChunk (..), WavFormatBody (..), WavFormatChunk, WavHeader (..), WavInfoElem (..))
+import Scrapti.Wav (SampledWav (..), Wav (..), WavBody (..), WavChoiceChunk (..), WavDataBody (..), WavExtraChunk (..),
+                    WavFormatBody (..), WavFormatChunk, WavHeader (..), WavInfoElem (..))
 import System.Directory (doesFileExist)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
@@ -107,7 +107,7 @@ testWavInfo = testCase "info" $ do
     case choice of
       WavChoiceChunkExtra (WavExtraChunkInfo info) -> pure info
       _ -> fail "expected info"
-  info @?= KnownListChunk (Seq.fromList [WavInfoElem "IART" "freewavesamples.com\NUL"])
+  info @?= KnownListChunk (Seq.fromList [WavInfoElem "IART" "freewavesamples.com"])
 
 testWavWhole :: TestTree
 testWavWhole = testCase "whole" $ do
