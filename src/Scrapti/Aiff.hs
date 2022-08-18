@@ -4,10 +4,10 @@
 module Scrapti.Aiff where
 
 import Control.Monad (unless)
-import Dahdit (Binary (..), ByteCount (..), ByteSized (..), LiftedPrim, LiftedPrimArray, Seq, ShortByteString,
+import Dahdit (Binary (..), ByteCount (..), ByteSized (..), Get, LiftedPrim, LiftedPrimArray, Put, ShortByteString,
                StaticByteSized (..), StaticBytes, ViaGeneric (..), ViaStaticByteSized (..), Word16BE, Word32BE,
-               byteSizeFoldable, getByteString, getExact, getRemainingLiftedPrimArray, getRemainingSeq, getSkip,
-               getWord8, putByteString, putLiftedPrimArray, putSeq, putWord8)
+               getByteString, getExact, getLookAhead, getRemainingLiftedPrimArray, getRemainingSize, getSkip, getWord8,
+               putByteString, putLiftedPrimArray, putWord8)
 import qualified Data.ByteString.Short as BSS
 import Data.Default (Default (..))
 import Data.Proxy (Proxy (..))
@@ -23,11 +23,14 @@ import Scrapti.Common (KnownLabel (..), Label, UnparsedBody, chunkHeaderSize, co
 -- We could use a lot of the same structures to read the file... If they were
 -- big-endian.
 
-labelForm, labelAifc, labelComm, labelSsnd :: Label
+labelForm, labelAifc, labelComm, labelSsnd, labelFver, labelAnno, labelMark :: Label
 labelForm = "FORM"
 labelAifc = "AIFC"
 labelComm = "COMM"
 labelSsnd = "SSND"
+labelFver = "FVER"
+labelAnno = "ANNO"
+labelMark = "MARK"
 
 data Chunk a = Chunk
   { chunkLabel :: !Label
@@ -157,16 +160,26 @@ type AiffDataChunk a = KnownChunk (AiffDataBody a)
 data AiffBody a = AiffBody
   deriving stock (Eq, Show)
 
-type AiffExtraChunk = Chunk UnparsedBody
+type AiffVersionChunk = Chunk UnparsedBody
+type AiffAnnoChunk = Chunk UnparsedBody
+type AiffMarkChunk = Chunk UnparsedBody
 
-data Aiff a = Aiff
-  { aiffCommon :: !AiffCommonChunk
-  , aiffData :: !(AiffDataChunk a)
-  , aiffExtras :: !(Seq AiffExtraChunk)
-  } deriving stock (Eq, Show, Generic)
+getOptChunk :: Label -> Get a -> Get (Maybe a)
+getOptChunk wantLabel g = do
+  remSz <- getRemainingSize
+  if remSz == 0
+    then pure Nothing
+    else do
+      gotLabel <- getLookAhead get
+      if gotLabel == wantLabel
+        then fmap Just g
+        else pure Nothing
 
-instance (StaticByteSized a, LiftedPrim a) => ByteSized (Aiff a) where
-  byteSize (Aiff {..}) = byteSize aiffCommon + byteSize aiffData + byteSizeFoldable aiffExtras
+putOptChunk :: (a -> Put) -> Maybe a -> Put
+putOptChunk = maybe (pure ())
+
+byteSizeOpt :: ByteSized a => Maybe a -> ByteCount
+byteSizeOpt = maybe 0 byteSize
 
 newtype AiffHeader = AiffHeader
   { ahSize :: ByteCount
@@ -188,20 +201,37 @@ instance Binary AiffHeader where
     putChunkSizeBE (remSz + labelSize)
     put labelAifc
 
+data Aiff a = Aiff
+  { aiffVersion :: !(Maybe AiffVersionChunk)
+  , aiffAnno :: !(Maybe AiffAnnoChunk)
+  , aiffCommon :: !AiffCommonChunk
+  , aiffData :: !(AiffDataChunk a)
+  , aiffMark :: !(Maybe AiffMarkChunk)
+  } deriving stock (Eq, Show, Generic)
+
+instance (StaticByteSized a, LiftedPrim a) => ByteSized (Aiff a) where
+  byteSize (Aiff {..}) =
+    byteSizeOpt aiffVersion + byteSizeOpt aiffAnno + byteSize aiffCommon +
+      byteSize aiffData + byteSizeOpt aiffMark
+
 instance (StaticByteSized a, LiftedPrim a) => Binary (Aiff a) where
   get = do
     AiffHeader remSz <- get
     getExact remSz $ do
+      aiffVersion <- getOptChunk labelFver get
+      aiffAnno <- getOptChunk labelAnno get
       aiffCommon <- get
       let width = fromIntegral (aceSampleSize (knownChunkBody aiffCommon))
           staticWidth = staticByteSize (Proxy :: Proxy a)
       unless (width == staticWidth) (fail ("Bad sample width, expected " ++ show (unByteCount staticWidth) ++ " but read " ++ show (unByteCount width)))
       aiffData <- get
-      aiffExtras <- getRemainingSeq get
+      aiffMark <- getOptChunk labelMark get
       pure $! Aiff {..}
   put aiff@(Aiff {..})= do
     let !remSz = byteSize aiff
     put (AiffHeader remSz)
+    putOptChunk put aiffVersion
+    putOptChunk put aiffAnno
     put aiffCommon
     put aiffData
-    putSeq put aiffExtras
+    putOptChunk put aiffMark

@@ -121,7 +121,8 @@ testWavWhole = testCase "whole" $ do
 testWavWrite :: TestTree
 testWavWrite = testCase "write" $ do
   bs <- readShort "testdata/drums.wav"
-  (swav, _) <- runGetIO (get @SampledWav) bs
+  (swav, bc) <- runGetIO (get @SampledWav) bs
+  byteSize swav @?= bc
   let bs' = runPut (put swav)
   bs' @?= bs
 
