@@ -39,14 +39,14 @@ import Control.Monad (join, unless)
 import Control.Monad.Identity (Identity (..))
 import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, LiftedPrim, LiftedPrimArray, ShortByteString,
                StaticByteSized (..), Word16LE, Word32LE, byteSizeFoldable, getByteString, getExact,
-               getRemainingLiftedPrimArray, getRemainingSeq, getRemainingString, getSeq, getUnfold, putByteString,
-               putLiftedPrimArray, putSeq)
+               getRemainingLiftedPrimArray, getRemainingSeq, getRemainingString, getSeq, getSkip, getUnfold,
+               putByteString, putLiftedPrimArray, putSeq, putWord8)
 import Data.Default (Default (..))
 import Data.Proxy (Proxy (..))
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
 import Scrapti.Common (KnownLabel (..), Label, Sampled (..), UnparsedBody, chunkHeaderSize, countSize, getChunkSizeLE,
-                       getExpectLabel, getSampled, labelSize, putChunkSizeLE)
+                       getExpectLabel, getSampled, labelSize, padCount, putChunkSizeLE)
 import Scrapti.Dsp (DspErr, Sel, monoFromSel)
 import Scrapti.Riff (Chunk (..), ChunkLabel (..), KnownChunk (..), KnownListChunk (..), labelRiff, peekChunkLabel)
 
@@ -176,13 +176,16 @@ instance ByteSized WavInfoElem where
 instance Binary WavInfoElem where
   get = do
     key <- get
-    sz <- getChunkSizeLE
-    val <- getByteString sz
+    usz <- getChunkSizeLE
+    val <- getByteString usz
+    unless (even usz) (getSkip 1)
     pure $! WavInfoElem key val
   put (WavInfoElem key val) = do
     put key
-    putChunkSizeLE (byteSize val)
+    let !usz = byteSize val
+    putChunkSizeLE usz
     putByteString val
+    unless (even usz) (putWord8 0)
 
 instance KnownLabel WavInfoElem where
   knownLabel _ = labelInfo
