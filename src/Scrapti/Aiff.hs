@@ -1,16 +1,19 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Scrapti.Aiff where
 
 import Control.Monad (unless)
-import Dahdit (Binary (..), ByteCount, ByteSized (..), LiftedPrim, LiftedPrimArray, Seq, ShortByteString,
-               StaticByteSized (..), StaticBytes, ViaGeneric (..), Word16BE, Word32BE, getExact, getSkip, putWord8)
+import Dahdit (Binary (..), ByteCount (..), ByteSized (..), LiftedPrim, LiftedPrimArray, Seq, ShortByteString,
+               StaticByteSized (..), StaticBytes, ViaGeneric (..), ViaStaticByteSized (..), Word16BE, Word32BE,
+               byteSizeFoldable, getByteString, getExact, getRemainingLiftedPrimArray, getRemainingSeq, getSkip,
+               getWord8, putByteString, putLiftedPrimArray, putSeq, putWord8)
 import qualified Data.ByteString.Short as BSS
 import Data.Default (Default (..))
 import Data.Proxy (Proxy (..))
 import GHC.Generics (Generic)
-import Scrapti.Common (KnownLabel (..), Label, UnparsedBody, chunkHeaderSize, getChunkSizeBE, getExpectLabel, padCount,
-                       putChunkSizeBE)
+import Scrapti.Common (KnownLabel (..), Label, UnparsedBody, chunkHeaderSize, countSize, getChunkSizeBE, getExpectLabel,
+                       labelSize, padCount, putChunkSizeBE)
 
 -- AIFF-C file parsing according to
 -- http://www-mmsp.ece.mcgill.ca/Documents/AudioFormats/AIFF/AIFF.html
@@ -20,8 +23,9 @@ import Scrapti.Common (KnownLabel (..), Label, UnparsedBody, chunkHeaderSize, ge
 -- We could use a lot of the same structures to read the file... If they were
 -- big-endian.
 
-labelForm, labelComm, labelSsnd :: Label
+labelForm, labelAifc, labelComm, labelSsnd :: Label
 labelForm = "FORM"
+labelAifc = "AIFC"
 labelComm = "COMM"
 labelSsnd = "SSND"
 
@@ -93,9 +97,19 @@ instance Default PascalString where
 instance ByteSized PascalString where
   byteSize (PascalString sbs) = padCount (byteSize sbs + 1)
 
+-- TODO does the size include the padding byte?
+-- We assume it doesn't here - change to be like PaddedString if so
 instance Binary PascalString where
-  get = error "TODO"
-  put = error "TODO"
+  get = do
+    usz <- fmap fromIntegral getWord8
+    sbs <- getByteString usz
+    unless (even usz) (getSkip 1)
+    pure $! PascalString sbs
+  put (PascalString sbs) = do
+    let !usz = fromIntegral (BSS.length sbs)
+    putWord8 usz
+    putByteString sbs
+    unless (even usz) (putWord8 0)
 
 -- | "80 bit IEEE Standard 754 floating point number"
 newtype ExtendedFloat = ExtendedFloat { unExtendedFloat :: StaticBytes 10 }
@@ -125,8 +139,15 @@ data AiffDataBody a = AiffDataBody
     deriving (ByteSized) via (ViaGeneric (AiffDataBody a))
 
 instance (StaticByteSized a, LiftedPrim a) => Binary (AiffDataBody a) where
-  get = error "TODO"
-  put = error "TODO"
+  get = do
+    adbOffset <- get
+    adbBlockSize <- get
+    adbSoundData <- getRemainingLiftedPrimArray (Proxy :: Proxy a)
+    pure $! AiffDataBody {..}
+  put (AiffDataBody {..}) = do
+    put adbOffset
+    put adbBlockSize
+    putLiftedPrimArray adbSoundData
 
 instance KnownLabel (AiffDataBody a) where
   knownLabel _ = labelSsnd
@@ -143,3 +164,44 @@ data Aiff a = Aiff
   , aiffData :: !(AiffDataChunk a)
   , aiffExtras :: !(Seq AiffExtraChunk)
   } deriving stock (Eq, Show, Generic)
+
+instance (StaticByteSized a, LiftedPrim a) => ByteSized (Aiff a) where
+  byteSize (Aiff {..}) = byteSize aiffCommon + byteSize aiffData + byteSizeFoldable aiffExtras
+
+newtype AiffHeader = AiffHeader
+  { ahSize :: ByteCount
+  } deriving stock (Show, Generic)
+    deriving newtype (Eq)
+    deriving (ByteSized) via (ViaStaticByteSized AiffHeader)
+
+instance StaticByteSized AiffHeader where
+  staticByteSize _ = 2 * labelSize + countSize
+
+instance Binary AiffHeader where
+  get = do
+    getExpectLabel labelForm
+    sz <- getChunkSizeBE
+    getExpectLabel labelAifc
+    pure $! AiffHeader (sz - labelSize)
+  put (AiffHeader remSz) = do
+    put labelForm
+    putChunkSizeBE (remSz + labelSize)
+    put labelAifc
+
+instance (StaticByteSized a, LiftedPrim a) => Binary (Aiff a) where
+  get = do
+    AiffHeader remSz <- get
+    getExact remSz $ do
+      aiffCommon <- get
+      let width = fromIntegral (aceSampleSize (knownChunkBody aiffCommon))
+          staticWidth = staticByteSize (Proxy :: Proxy a)
+      unless (width == staticWidth) (fail ("Bad sample width, expected " ++ show (unByteCount staticWidth) ++ " but read " ++ show (unByteCount width)))
+      aiffData <- get
+      aiffExtras <- getRemainingSeq get
+      pure $! Aiff {..}
+  put aiff@(Aiff {..})= do
+    let !remSz = byteSize aiff
+    put (AiffHeader remSz)
+    put aiffCommon
+    put aiffData
+    putSeq put aiffExtras
