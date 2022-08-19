@@ -6,29 +6,45 @@ module Scrapti.Dsp
   , monoFromAvg
   , ensureMonoFromLeft
   , stereoFromMono
-  , monoLinearCrossFade
+  , linearCrossFade
+  , crop
   , Mod (..)
   , modId
   , modAndThen
   , PcmMeta (..)
   , PcmContainer (..)
   , applyMod
+  , applyModGeneric
   ) where
 
 import Control.Exception (Exception)
 import Control.Monad (unless)
-import Dahdit (LiftedPrim (..), LiftedPrimArray (LiftedPrimArray), generateLiftedPrimArray, indexLiftedPrimArray,
-               proxyForF, sizeofLiftedPrimArray)
+import Dahdit (Int16LE, Int24LE, Int32LE, Int8, LiftedPrim (..), LiftedPrimArray (LiftedPrimArray),
+               cloneLiftedPrimArray, generateLiftedPrimArray, indexLiftedPrimArray, proxyForF, sizeofLiftedPrimArray)
 import Data.Bits (Bits (..))
 import Data.Primitive.ByteArray (ByteArray, sizeofByteArray)
 import Data.Proxy (Proxy (..))
-import Data.Word (Word32)
+
+data Sampled f where
+  Sampled :: (LiftedPrim a, Integral a) => !(f a) -> Sampled f
+
+getSampled :: Int -> Maybe (Sampled Proxy)
+getSampled = \case
+  8 -> Just (Sampled (Proxy :: Proxy Int8))
+  16 -> Just (Sampled (Proxy :: Proxy Int16LE))
+  24 -> Just (Sampled (Proxy :: Proxy Int24LE))
+  32 -> Just (Sampled (Proxy :: Proxy Int32LE))
+  _ -> Nothing
+
 
 data DspErr =
     DspErrOddSamples
   | DspErrBadElemSize
+  | DspErrBadBitWidth
   | DspErrNotStereo
   | DspErrNotMono
+  | DspErrBadFade
+  | DspErrBadCrop
   deriving stock (Eq, Show)
 
 instance Exception DspErr
@@ -100,17 +116,64 @@ stereoFromMono = Mod $ \mm src -> do
       !dest = generateLiftedPrimArray destLen (\i -> indexLiftedPrimArray src (div i 2))
   Right (mm { mmNumChannels = 2 }, dest)
 
-monoLinearCrossFade :: (LiftedPrim a, Integral a) => Word32 -> Word32 -> Mod a a
-monoLinearCrossFade loopStart loopEnd = Mod $ \mm src -> do
-  unless (mmNumChannels mm == 1) (Left DspErrNotMono)
-  -- TODO
-  Right (mm, src)
+guardFade :: Int -> Int -> Int -> Either DspErr ()
+guardFade width loopStart loopEnd = do
+  if loopEnd <= loopStart ||
+     loopStart <= loopStart - width ||
+     loopStart + width <= loopStart ||
+     loopEnd - width <= loopStart + width
+    then Left DspErrBadFade
+    else Right ()
 
-monoCrop :: LiftedPrim a => Word32 -> Word32 -> Mod a a
-monoCrop start end = Mod $ \mm src -> do
-  unless (mmNumChannels mm == 1) (Left DspErrNotMono)
-  -- TODO
-  Right (mm, src)
+combine :: Integral a => Int -> Int -> a -> a -> a
+combine off width one two =
+  let dist1 = fromIntegral off
+      dist2 = fromIntegral (width - off)
+      distTot = fromIntegral width
+  in fromInteger (div (dist1 * fromIntegral one + dist2 * fromIntegral two) distTot)
+
+-- Cross fade:  | --------- PreStart Start PostStart PreEnd End ---- |
+-- Guarded to ensure inequalities are strict
+linearCrossFade :: (LiftedPrim a, Integral a) => Int -> Int -> Int -> Mod a a
+linearCrossFade width loopStart loopEnd = Mod $ \mm src -> do
+  guardFade width loopStart loopEnd
+  let !nc = mmNumChannels mm
+      !sampWidth = nc * width
+      !sampBetween = nc * (loopEnd - loopStart)
+      !sampPreStart = nc * (loopStart - width)
+      !sampPostStart = nc * (loopStart + width)
+      !sampPreEnd = nc * loopEnd
+      !sampEnd = nc * loopEnd
+      genElem i =
+        let !v = indexLiftedPrimArray src i
+        in if
+          | i >= sampPreStart && i <= sampPostStart ->
+            let !w = indexLiftedPrimArray src (i + sampBetween)
+                !dist = i - sampPreStart
+            in combine dist sampWidth v w
+          | i >= sampPreEnd && i <= sampEnd ->
+            let !w = indexLiftedPrimArray src (i - sampBetween)
+                !dist = i - sampPreEnd
+            in combine dist sampWidth w v
+          | otherwise -> v
+      !sz = sizeofLiftedPrimArray src
+      !dest = generateLiftedPrimArray sz genElem
+  Right (mm, dest)
+
+guardCrop :: Int -> Int -> Either DspErr ()
+guardCrop start end = do
+  if end <= start
+    then Left DspErrBadCrop
+    else Right ()
+
+crop :: LiftedPrim a => Int -> Int -> Mod a a
+crop start end = Mod $ \mm src -> do
+  guardCrop start end
+  let !nc = mmNumChannels mm
+      !sampStart = nc * start
+      !sampEnd = nc * end
+      !dest = cloneLiftedPrimArray src sampStart sampEnd
+  Right (mm, dest)
 
 data PcmMeta = PcmMeta
   { pmNumChannels :: !Int
@@ -156,3 +219,12 @@ applyMod modx con = do
   (mm, src) <- toLifted (proxyFromFirst modx) con
   (mm', dest) <- runMod modx mm src
   fromLifted mm' dest
+
+proxMod :: (LiftedPrim a, Integral a) => Proxy a -> (forall x. (LiftedPrim x, Integral x) => Mod x x) -> Mod a a
+proxMod _ allMod = allMod
+
+applyModGeneric :: (forall a. (LiftedPrim a, Integral a) => Mod a a) -> PcmContainer -> Either DspErr PcmContainer
+applyModGeneric allMod con =
+  case getSampled (div (pmBitsPerSample (pcMeta con)) 8) of
+    Nothing -> Left DspErrBadBitWidth
+    Just (Sampled prox) -> applyMod (proxMod prox allMod) con

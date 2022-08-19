@@ -13,8 +13,6 @@ module Scrapti.Common
   , putChunkSizeBE
   , chunkHeaderSize
   , KnownLabel (..)
-  , Sampled (..)
-  , getSampled
   , UnparsedBody (..)
   , padCount
   , bssLast
@@ -35,8 +33,8 @@ module Scrapti.Common
 
 import Control.Exception (Exception)
 import Control.Monad (unless)
-import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, Int16LE, Int24LE, Int32LE, Int8, LiftedPrim, Put,
-               StaticByteSized, StaticBytes, Word32BE, Word32LE, Word8, getExpect, getRemainingString, putByteString)
+import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, Put, StaticBytes, Word32BE, Word32LE, Word8, getExpect,
+               getRemainingString, putByteString)
 import Data.ByteString.Short (ShortByteString)
 import qualified Data.ByteString.Short as BSS
 import Data.Proxy (Proxy (..))
@@ -78,17 +76,6 @@ chunkHeaderSize = 8
 
 class KnownLabel a where
   knownLabel :: Proxy a -> Label
-
-data Sampled f where
-  Sampled :: (LiftedPrim a, Binary a, StaticByteSized a) => !(f a) -> Sampled f
-
-getSampled :: Int -> Maybe (Sampled Proxy)
-getSampled = \case
-  8 -> Just (Sampled (Proxy :: Proxy Int8))
-  16 -> Just (Sampled (Proxy :: Proxy Int16LE))
-  24 -> Just (Sampled (Proxy :: Proxy Int24LE))
-  32 -> Just (Sampled (Proxy :: Proxy Int32LE))
-  _ -> Nothing
 
 newtype UnparsedBody = UnparsedBody
   { ubContents :: ShortByteString
@@ -141,6 +128,7 @@ data ConvertErr =
   | ConvertErrDsp !DspErr
   | ConvertErrBadBps !Int
   | ConvertErrMissingMark !ShortByteString
+  | ConvertErrNoLoopMarks
   deriving stock (Eq, Show)
 
 instance Exception ConvertErr
