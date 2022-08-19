@@ -6,6 +6,7 @@ module Scrapti.Dsp
   , monoFromAvg
   , ensureMonoFromLeft
   , stereoFromMono
+  , monoLinearCrossFade
   , Mod (..)
   , modId
   , modAndThen
@@ -21,6 +22,7 @@ import Dahdit (LiftedPrim (..), LiftedPrimArray (LiftedPrimArray), generateLifte
 import Data.Bits (Bits (..))
 import Data.Primitive.ByteArray (ByteArray, sizeofByteArray)
 import Data.Proxy (Proxy (..))
+import Data.Word (Word32)
 
 data DspErr =
     DspErrOddSamples
@@ -97,6 +99,12 @@ stereoFromMono = Mod $ \mm src -> do
       !destLen = srcLen * 2
       !dest = generateLiftedPrimArray destLen (\i -> indexLiftedPrimArray src (div i 2))
   Right (mm { mmNumChannels = 2 }, dest)
+
+monoLinearCrossFade :: (LiftedPrim a, Integral a) => Word32 -> Word32 -> Mod a a
+monoLinearCrossFade loopStart loopEnd = Mod $ \mm src -> do
+  unless (mmNumChannels mm == 1) (Left DspErrNotMono)
+  -- TODO
+  Right (mm, src)
 
 data PcmMeta = PcmMeta
   { pmNumChannels :: !Int

@@ -39,8 +39,8 @@ import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
 import Data.String (IsString)
 import Scrapti.Binary (QuietArray (..))
-import Scrapti.Common (KnownLabel (..), Label, SimpleMarker (..), UnparsedBody, bssInit, bssLast, countSize,
-                       getChunkSizeLE, getExpectLabel, labelSize, padCount, putChunkSizeLE)
+import Scrapti.Common (ConvertErr, KnownLabel (..), Label, SimpleMarker (..), UnparsedBody, bssInit, bssLast, countSize,
+                       getChunkSizeLE, getExpectLabel, guardChunk, labelSize, padCount, putChunkSizeLE)
 import Scrapti.Dsp (PcmContainer (..), PcmMeta (..))
 import Scrapti.Riff (Chunk (..), ChunkLabel (..), KnownChunk (..), KnownListChunk (..), labelRiff, peekChunkLabel)
 
@@ -362,6 +362,9 @@ instance Binary Wav where
 lookupWavChunk :: (WavChunk -> Bool) -> Wav -> Maybe WavChunk
 lookupWavChunk p (Wav chunks) = fmap (Seq.index chunks) (Seq.findIndexL p chunks)
 
+bindWavChunk :: (WavChunk -> Seq WavChunk) -> Wav -> Wav
+bindWavChunk f (Wav chunks) = Wav (chunks >>= f)
+
 lookupWavFormatChunk :: Wav -> Maybe WavFormatChunk
 lookupWavFormatChunk w =
   case lookupWavChunk (\case { WavChunkFormat _ -> True; _ -> False }) w of
@@ -374,8 +377,16 @@ lookupWavDataChunk w =
     Just (WavChunkData x) -> Just x
     _ -> Nothing
 
-wavToPcmContainer :: Wav -> PcmContainer
-wavToPcmContainer = error "TODO"
+wavToPcmContainer :: Wav -> Either ConvertErr PcmContainer
+wavToPcmContainer wav = do
+  KnownChunk fmtBody <- guardChunk "format" (lookupWavFormatChunk wav)
+  KnownChunk (WavDataBody (QuietArray arr)) <- guardChunk "data" (lookupWavDataChunk wav)
+  let !nc = fromIntegral (wfbNumChannels fmtBody)
+      !bps = fromIntegral (wfbBitsPerSample fmtBody)
+      !sr = fromIntegral (wfbSampleRate fmtBody)
+      !ns = div (sizeofByteArray arr) (nc * div bps 8)
+      !meta = PcmMeta nc ns bps sr
+  pure $! PcmContainer meta arr
 
 wavFromPcmContainer :: PcmContainer -> Wav
 wavFromPcmContainer (PcmContainer (PcmMeta {..}) arr) =

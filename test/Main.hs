@@ -2,6 +2,7 @@
 
 module Main (main) where
 
+import Control.Exception (Exception, throwIO)
 import Dahdit (Binary (..), ByteCount, ElementCount, Get, ShortByteString, StaticByteSized (..), StaticBytes, Word16LE,
                Word8, byteSize, getExact, getSkip, getWord32LE, runGetIO, runPut, sizeofLiftedPrimArray)
 import qualified Data.ByteString.Lazy as BSL
@@ -13,7 +14,8 @@ import Data.Proxy (Proxy (..))
 import qualified Data.Sequence as Seq
 import Scrapti.Aiff (Aiff (..), AiffChunk)
 import Scrapti.Binary (QuietArray (..), QuietLiftedArray (..))
-import Scrapti.Common (UnparsedBody (..), chunkHeaderSize, getChunkSizeLE, getExpectLabel)
+import Scrapti.Common (UnparsedBody (..), chunkHeaderSize, defaultLoopMarkNames, getChunkSizeLE, getExpectLabel)
+import Scrapti.Convert (Neutral (..), aiffToNeutral, neutralToWav)
 import Scrapti.Riff (Chunk (..), KnownChunk (..), KnownListChunk (..), KnownOptChunk (..), labelRiff)
 import Scrapti.Sfont (Bag, Gen, InfoChunk (..), Inst, Mod, PdtaChunk (..), Phdr, Sdta (..), SdtaChunk (..), Sfont (..),
                       Shdr, labelSfbk)
@@ -25,12 +27,15 @@ import Scrapti.Tracker.Pti (Auto (..), AutoEnvelope (..), AutoType, Block, Effec
                             GranularLoopMode, GranularShape, Header (..), InstParams (..), Lfo (..), LfoSteps, LfoType,
                             Preamble (..), Pti (..), SamplePlayback, Slices, WavetableWindowSize)
 import Scrapti.Wav (Wav (..), WavChunk (..), WavDataBody (..), WavFormatBody (..), WavFormatChunk, WavHeader (..),
-                    WavInfoElem (..), lookupWavDataChunk, lookupWavFormatChunk)
+                    WavInfoElem (..), lookupWavDataChunk, lookupWavFormatChunk, wavToPcmContainer)
 import System.Directory (doesFileExist)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, testCase, (@?=))
+
+rethrow :: Exception e => Either e a -> IO a
+rethrow = either throwIO pure
 
 drumFmtOffset :: ByteCount
 drumFmtOffset = 12
@@ -367,8 +372,12 @@ testProject = testCase "project" $ do
 
 testConvert :: TestTree
 testConvert = testCase "convert" $ do
-  -- TODO test conversion of sfont
-  pure ()
+  bs <- readShort "testdata/DX-EPiano1-C1.aif"
+  (aif, _) <- runGetIO get bs
+  ne <- rethrow (aiffToNeutral 44100 aif (Just defaultLoopMarkNames))
+  let !wav = neutralToWav ne
+  pc <- rethrow (wavToPcmContainer wav)
+  pc @?= neCon ne
 
 testScrapti :: TestTree
 testScrapti = testGroup "Scrapti" [testWav, testAiff, testSfont, testPti, testProject, testConvert, testOtherSizes]
