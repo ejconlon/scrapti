@@ -25,9 +25,8 @@ module Scrapti.Tracker.Pti
   , Header (..)
   , Pti (..)
   , mkPti
-  , ptiGetPcmContainer
-  , ptiSetPcmContainer
-  , ptiPcmContainerLens
+  , ptiToPcmContainer
+  , ptiWithPcmContainer
   ) where
 
 import Dahdit (Binary (..), BinaryRep (..), BoolByte (..), ByteSized (..), ExactBytes, FloatLE, Int16LE,
@@ -39,8 +38,7 @@ import Data.Int (Int8)
 import Data.Proxy (Proxy (..))
 import Data.Word (Word8)
 import GHC.Generics (Generic)
-import Lens.Micro (lens)
-import Scrapti.Dsp (PcmContainer, PcmContainerLens)
+import Scrapti.Dsp (PcmContainer)
 import Scrapti.Tracker.Checked (Checked (..), mkChecked, updateCheckedCode, verifyCheckedCode)
 
 data WavetableWindowSize =
@@ -477,11 +475,8 @@ instance Default Pti where
 mkPti :: Header -> LiftedPrimArray Int16LE -> Pti
 mkPti = Pti . mkChecked
 
-ptiGetPcmContainer :: Pti -> PcmContainer
-ptiGetPcmContainer = error "TODO"
+ptiToPcmContainer :: Pti -> PcmContainer
+ptiToPcmContainer = error "TODO"
 
-ptiSetPcmContainer :: Pti -> PcmContainer -> Pti
-ptiSetPcmContainer = error "TODO"
-
-ptiPcmContainerLens :: PcmContainerLens Pti
-ptiPcmContainerLens = lens ptiGetPcmContainer ptiSetPcmContainer
+ptiWithPcmContainer :: Pti -> PcmContainer -> Maybe Pti
+ptiWithPcmContainer = error "TODO"

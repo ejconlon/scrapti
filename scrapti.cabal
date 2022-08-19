@@ -27,6 +27,7 @@ library
       Scrapti.Aiff
       Scrapti.Binary
       Scrapti.Common
+      Scrapti.Convert
       Scrapti.Dsp
       Scrapti.Main
       Scrapti.Riff

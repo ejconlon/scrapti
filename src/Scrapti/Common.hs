@@ -17,6 +17,8 @@ module Scrapti.Common
   , padCount
   , bssLast
   , bssInit
+  , SimpleMarker (..)
+  , dedupeSimpleMarkers
   ) where
 
 import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, Int16LE, Int24LE, Int32LE, Int8, LiftedPrim, Put,
@@ -24,6 +26,10 @@ import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, Int16LE, Int24LE, In
 import Data.ByteString.Short (ShortByteString)
 import qualified Data.ByteString.Short as BSS
 import Data.Proxy (Proxy (..))
+import Data.Sequence (Seq (..))
+import qualified Data.Sequence as Seq
+import qualified Data.Set as Set
+import Data.Word (Word32)
 
 type Label = StaticBytes 4
 
@@ -93,3 +99,24 @@ bssLast sbs = BSS.index sbs (BSS.length sbs - 1)
 bssInit :: ShortByteString -> ShortByteString
 -- bssInit = BSS.init
 bssInit = BSS.pack . init . BSS.unpack
+
+data SimpleMarker = SimpleMarker
+  { smName :: !ShortByteString
+  -- ^ name of the cue point
+  , smPosition :: !Word32
+  -- ^ position in SAMPLES not bytes or elements
+  } deriving stock (Eq, Show)
+
+ordNubBy :: Ord b => (a -> b) -> Seq a -> Seq a
+ordNubBy f = go Set.empty Seq.empty where
+  go !accSet !accSeq = \case
+    Empty -> accSeq
+    x :<| xs ->
+      let !y = f x
+      in if Set.member y accSet
+        then go accSet accSeq xs
+        else go (Set.insert y accSet) (accSeq :|> x) xs
+
+-- | Sort, keeping the first of any given name
+dedupeSimpleMarkers :: Seq SimpleMarker -> Seq SimpleMarker
+dedupeSimpleMarkers = ordNubBy smName . Seq.sortOn smPosition

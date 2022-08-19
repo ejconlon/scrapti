@@ -7,27 +7,26 @@ module Scrapti.Aiff
   , lookupAiffChunk
   , lookupAiffCommonChunk
   , lookupAiffDataChunk
-  , aiffGetPcmContainer
-  , aiffSetPcmContainer
-  , aiffPcmContainerLens
+  , aiffToPcmContainer
+  , aiffFromPcmContainer
+  , aiffGatherMarkers
   ) where
 
 import Control.Monad (unless)
 import Dahdit (Binary (..), ByteArray, ByteCount (..), ByteSized (..), ShortByteString, StaticByteSized (..),
-               StaticBytes, ViaGeneric (..), ViaStaticByteSized (..), Word16BE, Word32BE, byteSizeFoldable,
-               getByteString, getExact, getLookAhead, getRemainingByteArray, getRemainingSeq, getSkip, getWord8,
-               putByteArray, putByteString, putSeq, putWord8)
+               StaticBytes, ViaGeneric (..), ViaStaticByteSized (..), Word16BE, Word32BE (unWord32BE), byteSizeFoldable,
+               getByteString, getExact, getLookAhead, getRemainingByteArray, getRemainingSeq, getSeq, getSkip,
+               getWord16BE, getWord8, putByteArray, putByteString, putSeq, putWord16BE, putWord8)
 import qualified Data.ByteString.Short as BSS
 import Data.Default (Default (..))
 import Data.Primitive.ByteArray (sizeofByteArray)
 import Data.Proxy (Proxy (..))
-import Data.Sequence (Seq)
+import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
 import GHC.Generics (Generic)
-import Lens.Micro (lens)
-import Scrapti.Common (KnownLabel (..), Label, UnparsedBody, chunkHeaderSize, countSize, getChunkSizeBE, getExpectLabel,
-                       labelSize, padCount, putChunkSizeBE)
-import Scrapti.Dsp (PcmContainer, PcmContainerLens)
+import Scrapti.Common (KnownLabel (..), Label, SimpleMarker (..), UnparsedBody, chunkHeaderSize, countSize,
+                       dedupeSimpleMarkers, getChunkSizeBE, getExpectLabel, labelSize, padCount, putChunkSizeBE)
+import Scrapti.Dsp (PcmContainer)
 
 -- AIFF-C file parsing according to
 -- http://www-mmsp.ece.mcgill.ca/Documents/AudioFormats/AIFF/AIFF.html
@@ -104,7 +103,7 @@ instance (Binary a, KnownLabel a) => Binary (KnownChunk a) where
 
 -- | A "Pascal-style string" with a leading byte count and optional
 -- trailing padding byte to make total length even.
-newtype PascalString = PascalString { unPString :: ShortByteString }
+newtype PascalString = PascalString { unPascalString :: ShortByteString }
   deriving stock (Show)
   deriving newtype (Eq)
 
@@ -172,8 +171,38 @@ instance KnownLabel AiffDataBody where
 type AiffDataChunk = KnownChunk AiffDataBody
 
 type AiffVersionChunk = Chunk UnparsedBody
+
 type AiffAnnoChunk = Chunk UnparsedBody
-type AiffMarkChunk = Chunk UnparsedBody
+
+data AiffMark = AiffMark
+  { amId :: !Word16BE
+  , amPosition :: !Word32BE
+  , amName :: !PascalString
+  } deriving stock (Eq, Show, Generic)
+    deriving (ByteSized, Binary) via (ViaGeneric AiffMark)
+
+newtype AiffMarkBody = AiffMarkBody
+  { ambMarkers :: Seq AiffMark
+  } deriving stock (Show)
+    deriving newtype (Eq)
+
+instance ByteSized AiffMarkBody where
+  byteSize (AiffMarkBody marks) = 2 + byteSizeFoldable marks
+
+instance Binary AiffMarkBody where
+  get = do
+    ec <- fmap fromIntegral getWord16BE
+    marks <- getSeq ec get
+    pure $! AiffMarkBody marks
+  put (AiffMarkBody marks) = do
+    putWord16BE (fromIntegral (Seq.length marks))
+    putSeq put marks
+
+instance KnownLabel AiffMarkBody where
+  knownLabel _ = labelMark
+
+type AiffMarkChunk = KnownChunk AiffMarkBody
+
 type AiffUnparsedChunk = Chunk UnparsedBody
 
 data AiffChunk =
@@ -268,11 +297,21 @@ lookupAiffDataChunk w =
     Just (AiffChunkData x) -> Just x
     _ -> Nothing
 
-aiffGetPcmContainer :: Aiff -> PcmContainer
-aiffGetPcmContainer = error "TODO"
+lookupAiffMarkChunk :: Aiff -> Maybe AiffMarkChunk
+lookupAiffMarkChunk w =
+  case lookupAiffChunk (\case { AiffChunkMark _ -> True; _ -> False }) w of
+    Just (AiffChunkMark x) -> Just x
+    _ -> Nothing
 
-aiffSetPcmContainer :: Aiff -> PcmContainer -> Aiff
-aiffSetPcmContainer = error "TODO"
+aiffToPcmContainer :: Aiff -> PcmContainer
+aiffToPcmContainer = error "TODO"
 
-aiffPcmContainerLens :: PcmContainerLens Aiff
-aiffPcmContainerLens = lens aiffGetPcmContainer aiffSetPcmContainer
+aiffFromPcmContainer :: PcmContainer -> Aiff
+aiffFromPcmContainer = error "TODO"
+
+aiffGatherMarkers :: Aiff -> Seq SimpleMarker
+aiffGatherMarkers aiff =
+  case lookupAiffMarkChunk aiff of
+    Nothing -> Empty
+    Just (KnownChunk (AiffMarkBody marks)) ->
+      dedupeSimpleMarkers (fmap (\am -> SimpleMarker (unPascalString (amName am)) (unWord32BE (amPosition am))) marks)

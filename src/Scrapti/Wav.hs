@@ -22,17 +22,15 @@ module Scrapti.Wav
   , lookupWavChunk
   , lookupWavFormatChunk
   , lookupWavDataChunk
-  , wavGetPcmContainer
-  , wavSetPcmContainer
-  , wavPcmContainerLens
-  , SimpleCuePoint (..)
-  , toSimpleCuePoint
-  , fromSimpleCuePoint
+  , wavToPcmContainer
+  , wavFromPcmContainer
+  , wavUseMarkers
+  , wavAddChunks
   ) where
 
 import Control.Monad (unless)
 import Dahdit (Binary (..), ByteArray, ByteCount, ByteSized (..), ShortByteString, StaticByteSized (..),
-               ViaStaticByteSized (..), Word16LE, Word32LE, byteSizeFoldable, getExact, getRemainingByteArray,
+               ViaStaticByteSized (..), Word16LE, Word32LE (..), byteSizeFoldable, getExact, getRemainingByteArray,
                getRemainingSeq, getRemainingString, getSeq, putByteArray, putByteString, putSeq, putWord8)
 import qualified Data.ByteString.Short as BSS
 import Data.Default (Default (..))
@@ -40,10 +38,9 @@ import Data.Primitive (sizeofByteArray)
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
 import Data.String (IsString)
-import Lens.Micro (lens)
-import Scrapti.Common (KnownLabel (..), Label, UnparsedBody, bssInit, bssLast, countSize, getChunkSizeLE,
-                       getExpectLabel, labelSize, padCount, putChunkSizeLE)
-import Scrapti.Dsp (PcmContainer, PcmContainerLens)
+import Scrapti.Common (KnownLabel (..), Label, SimpleMarker (..), UnparsedBody, bssInit, bssLast, countSize,
+                       getChunkSizeLE, getExpectLabel, labelSize, padCount, putChunkSizeLE)
+import Scrapti.Dsp (PcmContainer)
 import Scrapti.Riff (Chunk (..), ChunkLabel (..), KnownChunk (..), KnownListChunk (..), labelRiff, peekChunkLabel)
 
 labelWave, labelFmt, labelData, labelInfo, labelAdtl, labelCue, labelNote, labelLabl, labelLtxt :: Label
@@ -68,12 +65,16 @@ instance Default PaddedString where
 instance ByteSized PaddedString where
   byteSize (PaddedString sbs) = padCount (byteSize sbs)
 
+mkPaddedString :: ShortByteString -> PaddedString
+mkPaddedString sbs =
+  PaddedString $ if not (BSS.null sbs) && bssLast sbs == 0
+    then bssInit sbs
+    else sbs
+
 instance Binary PaddedString where
   get = do
     sbs <- getRemainingString
-    pure $! PaddedString $ if not (BSS.null sbs) && bssLast sbs == 0
-      then bssInit sbs
-      else sbs
+    pure $! mkPaddedString sbs
   put (PaddedString sbs) = do
     putByteString sbs
     let !usz = BSS.length sbs
@@ -176,9 +177,9 @@ type WavInfoChunk = KnownListChunk WavInfoElem
 -- NOTE: these are all the same for now, but ltxt has additional
 -- structure that could be parsed out later
 data WavAdtlData =
-    WavAdtlDataLabl !ShortByteString
-  | WavAdtlDataNote !ShortByteString
-  | WavAdtlDataLtxt !ShortByteString
+    WavAdtlDataLabl !PaddedString
+  | WavAdtlDataNote !PaddedString
+  | WavAdtlDataLtxt !PaddedString
   deriving stock (Eq, Show)
 
 instance ByteSized WavAdtlData where
@@ -201,7 +202,7 @@ instance Binary WavAdtlElem where
     sz <- getChunkSizeLE
     (cueId, bs) <- getExact sz $ do
       cueId <- get
-      bs <- getRemainingString
+      bs <- get
       pure (cueId, bs)
     dat <- if
       | lab == labelNote -> pure $! WavAdtlDataNote bs
@@ -216,10 +217,10 @@ instance Binary WavAdtlElem where
       WavAdtlDataLtxt _ -> labelLtxt
     putChunkSizeLE (byteSize dat)
     put cueId
-    putByteString $! case dat of
-      WavAdtlDataLabl bs -> bs
-      WavAdtlDataNote bs -> bs
-      WavAdtlDataLtxt bs -> bs
+    case dat of
+      WavAdtlDataLabl bs -> put bs
+      WavAdtlDataNote bs -> put bs
+      WavAdtlDataLtxt bs -> put bs
 
 instance KnownLabel WavAdtlElem where
   knownLabel _ = labelAdtl
@@ -375,22 +376,25 @@ lookupWavDataChunk w =
     Just (WavChunkData x) -> Just x
     _ -> Nothing
 
-wavGetPcmContainer :: Wav -> PcmContainer
-wavGetPcmContainer = error "TODO"
+wavToPcmContainer :: Wav -> PcmContainer
+wavToPcmContainer = error "TODO"
 
-wavSetPcmContainer :: Wav -> PcmContainer -> Wav
-wavSetPcmContainer = error "TODO"
+wavFromPcmContainer :: PcmContainer -> Wav
+wavFromPcmContainer = error "TODO"
 
-wavPcmContainerLens :: PcmContainerLens Wav
-wavPcmContainerLens = lens wavGetPcmContainer wavSetPcmContainer
+wcpFromMarker :: Int -> SimpleMarker -> WavCuePoint
+wcpFromMarker ix sm = WavCuePoint (fromIntegral ix) (fromIntegral (smPosition sm)) 0 0 0 (fromIntegral (smPosition sm))
 
-data SimpleCuePoint = SimpleCuePoint
-  { scpPointId :: !Word32LE
-  , scpSampleStart :: !Word32LE
-  } deriving stock (Eq, Show)
+waeFromMarker :: Int -> SimpleMarker -> WavAdtlElem
+waeFromMarker ix sm = WavAdtlElem (fromIntegral ix) (WavAdtlDataLabl (mkPaddedString (smName sm)))
 
-toSimpleCuePoint :: WavCuePoint -> SimpleCuePoint
-toSimpleCuePoint wcp = SimpleCuePoint (wcpPointId wcp) (wcpSampleStart wcp)
+wavUseMarkers :: Seq SimpleMarker -> (WavCueChunk, WavAdtlChunk)
+wavUseMarkers marks =
+  let wcps = Seq.mapWithIndex wcpFromMarker marks
+      wcc = KnownChunk (WavCueBody wcps)
+      waes = Seq.mapWithIndex waeFromMarker marks
+      wac = KnownListChunk waes
+  in (wcc, wac)
 
-fromSimpleCuePoint :: SimpleCuePoint -> WavCuePoint
-fromSimpleCuePoint scp = WavCuePoint (scpPointId scp) (scpSampleStart scp) 0 0 0 (scpSampleStart scp)
+wavAddChunks :: Seq WavChunk -> Wav -> Wav
+wavAddChunks chunks wav = wav { wavChunks = wavChunks wav <> chunks }

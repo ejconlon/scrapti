@@ -3,11 +3,13 @@ module Scrapti.Dsp
   , monoFromLeft
   , monoFromRight
   , monoFromAvg
+  , ensureMonoFromLeft
   , stereoFromMono
   , Mod (..)
+  , modId
+  , modAndThen
   , PcmMeta (..)
   , PcmContainer (..)
-  , PcmContainerLens
   , applyMod
   ) where
 
@@ -18,8 +20,6 @@ import Dahdit (LiftedPrim (..), LiftedPrimArray (LiftedPrimArray), generateLifte
 import Data.Bits (Bits (..))
 import Data.Primitive.ByteArray (ByteArray, sizeofByteArray)
 import Data.Proxy (Proxy (..))
-import Lens.Micro (Lens', set)
-import Lens.Micro.Extras (view)
 
 data DspErr =
     DspErrOddSamples
@@ -50,6 +50,14 @@ selMonoAvg = Sel $ \arr i ->
 -- numChannels -> array -> (newNumChannels, newArray)
 newtype Mod a b = Mod { runMod :: Int -> LiftedPrimArray a -> Either DspErr (Int, LiftedPrimArray b) }
 
+modId :: Mod a a
+modId = Mod (curry Right)
+
+modAndThen :: Mod a b -> Mod b c -> Mod a c
+modAndThen modAB modBC = Mod $ \nc src -> do
+  (nc', src') <- runMod modAB nc src
+  runMod modBC nc' src'
+
 monoFromSel :: LiftedPrim a => Sel a -> Mod a a
 monoFromSel sel = Mod $ \nc src -> do
   unless (nc == 2) (Left DspErrNotStereo)
@@ -65,6 +73,15 @@ monoFromRight = monoFromSel selMonoRight
 
 monoFromAvg :: (LiftedPrim a, Integral a, Bits a) => Mod a a
 monoFromAvg = monoFromSel selMonoAvg
+
+ensureMonoFromSel :: LiftedPrim a => Sel a -> Mod a a
+ensureMonoFromSel sel = Mod $ \nc src -> do
+  if nc == 1
+    then pure (nc, src)
+    else runMod (monoFromSel sel) nc src
+
+ensureMonoFromLeft :: LiftedPrim a => Mod a a
+ensureMonoFromLeft = ensureMonoFromSel selMonoLeft
 
 stereoFromMono :: LiftedPrim a => Mod a a
 stereoFromMono = Mod $ \nc src -> do
@@ -84,8 +101,6 @@ data PcmContainer = PcmContainer
   { pcMeta :: !PcmMeta
   , pcData :: !ByteArray
   } deriving stock (Eq, Show)
-
-type PcmContainerLens x = Lens' x PcmContainer
 
 proxyFromFirst :: m a b -> Proxy a
 proxyFromFirst _ = Proxy
@@ -109,11 +124,9 @@ fromLifted prox nc (LiftedPrimArray arr) = do
   unless (extraElems == 0) (Left DspErrBadElemSize)
   Right $! PcmContainer (PcmMeta nc ns bps) arr
 
-applyMod :: (LiftedPrim a, LiftedPrim b) => Mod a b -> PcmContainerLens x -> x -> Either DspErr x
-applyMod modx lenz x = do
-  let con = view lenz x
-      nc = pmNumChannels (pcMeta con)
+applyMod :: (LiftedPrim a, LiftedPrim b) => Mod a b -> PcmContainer -> Either DspErr PcmContainer
+applyMod modx con = do
+  let nc = pmNumChannels (pcMeta con)
   src <- toLifted (proxyFromFirst modx) con
   (nc', dest) <- runMod modx nc src
-  con' <- fromLifted (proxyFromSecond modx) nc' dest
-  Right $! set lenz con' x
+  fromLifted (proxyFromSecond modx) nc' dest

@@ -8,6 +8,6 @@ packages:
 
 extra-deps:
 - git: git@github.com:ejconlon/dahdit.git
-  commit: b0ec56fd6d72ccd38a5e8d39a811ed994c3b22fb
+  commit: e64c6934e6c6c21d9787a53a44044f4c4cb4109e
 - git: git@github.com:ejconlon/data-sword.git
   commit: 4a3efca54b337820446c7682bf3623d607f0365f
