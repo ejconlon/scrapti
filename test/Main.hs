@@ -9,12 +9,13 @@ import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Short as BSS
 import Data.Default (def)
 import Data.Foldable (for_)
-import Data.Primitive.ByteArray (ByteArray, sizeofByteArray)
+import Data.Primitive.ByteArray (sizeofByteArray)
 import Data.Proxy (Proxy (..))
 import qualified Data.Sequence as Seq
-import Scrapti.Aiff (Aiff (..), AiffChunk)
+import Scrapti.Aiff (Aiff (..))
 import Scrapti.Binary (QuietArray (..), QuietLiftedArray (..))
-import Scrapti.Common (UnparsedBody (..), chunkHeaderSize, defaultLoopMarkNames, getChunkSizeLE, getExpectLabel)
+import Scrapti.Common (UnparsedBody (..), chunkHeaderSize, defaultLoopMarkNames, getChunkSizeLE, getExpectLabel,
+                       guardChunk)
 import Scrapti.Convert (Neutral (..), aiffToNeutral, neutralToWav)
 import Scrapti.Riff (Chunk (..), KnownChunk (..), KnownListChunk (..), KnownOptChunk (..), labelRiff)
 import Scrapti.Sfont (Bag, Gen, InfoChunk (..), Inst, Mod, PdtaChunk (..), Phdr, Sdta (..), SdtaChunk (..), Sfont (..),
@@ -26,8 +27,9 @@ import Scrapti.Tracker.Mtp (Mtp)
 import Scrapti.Tracker.Pti (Auto (..), AutoEnvelope (..), AutoType, Block, Effects (..), Filter, FilterType, Granular,
                             GranularLoopMode, GranularShape, Header (..), InstParams (..), Lfo (..), LfoSteps, LfoType,
                             Preamble (..), Pti (..), SamplePlayback, Slices, WavetableWindowSize)
-import Scrapti.Wav (Wav (..), WavChunk (..), WavDataBody (..), WavFormatBody (..), WavFormatChunk, WavHeader (..),
-                    WavInfoElem (..), lookupWavDataChunk, lookupWavFormatChunk, wavToPcmContainer)
+import Scrapti.Wav (Wav (..), WavAdtlChunk, WavAdtlData (..), WavAdtlElem (..), WavChunk (..), WavDataBody (..),
+                    WavFormatBody (..), WavFormatChunk, WavHeader (..), WavInfoElem (..), lookupWavDataChunk,
+                    lookupWavFormatChunk, wavToPcmContainer)
 import System.Directory (doesFileExist)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
@@ -86,6 +88,11 @@ testWavSerde = testCase "serde" $ do
   (unpEven', unpEvenSz) <- runGetIO get unpEvenBs
   byteSize unpEven' @?= unpEvenSz
   unpEven' @?= unpEven
+  -- Adtl chunks
+  let adtlChunkEven = KnownListChunk (Seq.singleton (WavAdtlElem 42 (WavAdtlDataNote "hi")))
+  assertReparses @WavAdtlChunk adtlChunkEven
+  let adtlChunkOdd = KnownListChunk (Seq.singleton (WavAdtlElem 42 (WavAdtlDataNote "h")))
+  assertReparses @WavAdtlChunk adtlChunkOdd
 
 testWavHeader :: TestTree
 testWavHeader = testCase "header" $ do
@@ -120,9 +127,9 @@ testWavWhole :: TestTree
 testWavWhole = testCase "whole" $ do
   bs <- readShort "testdata/drums.wav"
   (wav, _) <- runGetIO (get @Wav) bs
-  fmtChunk <- maybe (fail "no fmt") pure (lookupWavFormatChunk wav)
+  fmtChunk <- rethrow (guardChunk "format" (lookupWavFormatChunk wav))
   fmtChunk @?= drumFmtChunk
-  KnownChunk (WavDataBody (QuietArray arr)) <- maybe (fail "no data") pure (lookupWavDataChunk wav)
+  KnownChunk (WavDataBody (QuietArray arr)) <- rethrow (guardChunk "data" (lookupWavDataChunk wav))
   fromIntegral (sizeofByteArray arr) @?= drumDataLen * 2 -- x2 for 2-byte samples
   Seq.length (wavChunks wav) @?= 4
 
@@ -131,11 +138,21 @@ testWavWrite = testCase "write" $ do
   bs <- readShort "testdata/drums.wav"
   (wav, bc) <- runGetIO (get @Wav) bs
   byteSize wav @?= bc
+  for_ (wavChunks wav) assertReparses
+  let bs' = runPut (put wav)
+  bs' @?= bs
+
+testWavWrite2 :: TestTree
+testWavWrite2 = testCase "write" $ do
+  bs <- readShort "testdata/DX-EPiano1-C1.wav"
+  (wav, bc) <- runGetIO (get @Wav) bs
+  byteSize wav @?= bc
+  for_ (wavChunks wav) assertReparses
   let bs' = runPut (put wav)
   bs' @?= bs
 
 testWav :: TestTree
-testWav = testGroup "wav" [testWavSerde, testWavHeader, testWavData, testWavInfo, testWavWhole, testWavWrite]
+testWav = testGroup "wav" [testWavSerde, testWavHeader, testWavData, testWavInfo, testWavWhole, testWavWrite, testWavWrite2]
 
 testAiff :: TestTree
 testAiff = testCase "aiff" $ do
@@ -143,15 +160,10 @@ testAiff = testCase "aiff" $ do
   (aiff, bc) <- runGetIO (get :: Get Aiff) bs
   byteSize aiff @?= bc
   bc @?= fromIntegral (BSS.length bs)
-  for_ (aiffChunks aiff) $ \chunk -> do
-    let ys = runPut (put chunk)
-    fromIntegral (BSS.length ys) @?= byteSize chunk
-    (chunk', cc) <- runGetIO (get :: Get AiffChunk) ys
-    byteSize chunk' @?= cc
-    chunk' @?= chunk
+  for_ (aiffChunks aiff) assertReparses
   let bs' = runPut (put aiff)
   fromIntegral (BSS.length bs') @?= bc
-  -- bs' @?= bs
+  bs' @?= bs
 
 testSfontWhole :: TestTree
 testSfontWhole = testCase "whole" $ do
@@ -335,18 +347,13 @@ testPtiDigest = testCase "digest" $ do
       expecDigest = mkCode (checkedVal (ptiHeader defPti))
   checkedCode (ptiHeader defPti) @?= expecDigest
 
-extractWavData :: MonadFail m => Wav -> m ByteArray
-extractWavData wav = do
-  KnownChunk (WavDataBody (QuietArray arr)) <- maybe (fail "no data") pure (lookupWavDataChunk wav)
-  pure arr
-
 testPtiWav :: TestTree
 testPtiWav = testCase "wav" $ do
   wavBs <- readShort "testdata/drums.wav"
   ptiBs <- readShort "testdata/testproj16/instruments/1 drums.pti"
   (wav, _) <- runGetIO (get @Wav) wavBs
   (pti, _) <- runGetIO (get @Pti) ptiBs
-  wavData <- extractWavData wav
+  KnownChunk (WavDataBody (QuietArray wavData)) <- rethrow (guardChunk "data" (lookupWavDataChunk wav))
   -- We expect there are half as many samples because it's converted to mono
   -- divide by four to compare number of elements (2-byte samples and 2 channels)
   sizeofLiftedPrimArray (unQuietLiftedArray (ptiPcmData pti)) @?= div (sizeofByteArray wavData) 4
@@ -370,14 +377,23 @@ testProject = testCase "project" $ do
     q <- loadRichProject path
     q @?= p
 
+assertReparses :: (Binary a, Eq a, Show a) => a -> IO ()
+assertReparses a = do
+  let !bs = runPut (put a)
+  (a', bc) <- runGetIO get bs
+  byteSize a' @?= bc
+  a' @?= a
+
 testConvert :: TestTree
 testConvert = testCase "convert" $ do
   bs <- readShort "testdata/DX-EPiano1-C1.aif"
   (aif, _) <- runGetIO get bs
   ne <- rethrow (aiffToNeutral 44100 aif (Just defaultLoopMarkNames))
+  -- Test that a standard translation of the wav works
   let !wav = neutralToWav ne
   pc <- rethrow (wavToPcmContainer wav)
   pc @?= neCon ne
+  assertReparses wav
 
 testScrapti :: TestTree
 testScrapti = testGroup "Scrapti" [testWav, testAiff, testSfont, testPti, testProject, testConvert, testOtherSizes]

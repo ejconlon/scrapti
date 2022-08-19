@@ -30,6 +30,7 @@ module Scrapti.Common
   , defaultLoopMarkNames
   , findMark
   , findLoopMarks
+  , defaultNoteNumber
   ) where
 
 import Control.Exception (Exception)
@@ -171,3 +172,7 @@ findMark name marks =
 
 findLoopMarks :: LoopMarkNames -> Seq SimpleMarker -> Either ConvertErr LoopMarkPoints
 findLoopMarks names marks = traverse (`findMark` marks) names
+
+-- | Midi note C5 is default note
+defaultNoteNumber :: Int
+defaultNoteNumber = 72

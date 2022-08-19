@@ -17,6 +17,9 @@ module Scrapti.Wav
   , WavCuePoint (..)
   , WavCueBody (..)
   , WavCueChunk
+  , WavSampleLoop (..)
+  , WavSampleBody (..)
+  , WavSampleChunk
   , WavChunk (..)
   , Wav (..)
   , lookupWavChunk
@@ -25,26 +28,29 @@ module Scrapti.Wav
   , wavToPcmContainer
   , wavFromPcmContainer
   , wavUseMarkers
+  , wavUseLoopPoints
   , wavAddChunks
   ) where
 
 import Control.Monad (unless)
 import Dahdit (Binary (..), ByteCount, ByteSized (..), ShortByteString, StaticByteSized (..), ViaStaticByteSized (..),
-               Word16LE, Word32LE (..), byteSizeFoldable, getExact, getRemainingByteArray, getRemainingSeq,
-               getRemainingString, getSeq, putByteArray, putByteString, putSeq, putWord8)
+               ViaStaticGeneric (..), Word16LE, Word32LE (..), byteSizeFoldable, getExact, getRemainingByteArray,
+               getRemainingSeq, getRemainingString, getSeq, putByteArray, putByteString, putSeq, putWord8)
 import qualified Data.ByteString.Short as BSS
 import Data.Default (Default (..))
 import Data.Primitive (sizeofByteArray)
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
 import Data.String (IsString)
+import GHC.Generics (Generic)
 import Scrapti.Binary (QuietArray (..))
-import Scrapti.Common (ConvertErr, KnownLabel (..), Label, SimpleMarker (..), UnparsedBody, bssInit, bssLast, countSize,
-                       getChunkSizeLE, getExpectLabel, guardChunk, labelSize, padCount, putChunkSizeLE)
+import Scrapti.Common (ConvertErr, KnownLabel (..), Label, LoopMarkPoints, LoopMarks (..), SimpleMarker (..),
+                       UnparsedBody (..), bssInit, bssLast, countSize, getChunkSizeLE, getExpectLabel, guardChunk,
+                       labelSize, padCount, putChunkSizeLE)
 import Scrapti.Dsp (PcmContainer (..), PcmMeta (..))
 import Scrapti.Riff (Chunk (..), ChunkLabel (..), KnownChunk (..), KnownListChunk (..), labelRiff, peekChunkLabel)
 
-labelWave, labelFmt, labelData, labelInfo, labelAdtl, labelCue, labelNote, labelLabl, labelLtxt :: Label
+labelWave, labelFmt, labelData, labelInfo, labelAdtl, labelCue, labelNote, labelLabl, labelLtxt, labelSmpl :: Label
 labelWave = "WAVE"
 labelFmt = "fmt "
 labelData = "data"
@@ -54,6 +60,7 @@ labelCue = "cue "
 labelNote = "note"
 labelLabl = "labl"
 labelLtxt = "ltxt"
+labelSmpl = "smpl"
 
 -- | A string NUL-padded to align to short width
 newtype PaddedString = PaddedString { unPaddedString :: ShortByteString }
@@ -192,7 +199,7 @@ data WavAdtlElem = WavAdtlElem
   } deriving stock (Eq, Show)
 
 instance ByteSized WavAdtlElem where
-  byteSize (WavAdtlElem _ dat) = 4 + countSize + byteSize dat
+  byteSize (WavAdtlElem _ dat) = 12 + byteSize dat
 
 instance Binary WavAdtlElem where
   get = do
@@ -213,7 +220,7 @@ instance Binary WavAdtlElem where
       WavAdtlDataLabl _ -> labelLabl
       WavAdtlDataNote _ -> labelNote
       WavAdtlDataLtxt _ -> labelLtxt
-    putChunkSizeLE (byteSize dat)
+    putChunkSizeLE (4 + byteSize dat)
     put cueId
     case dat of
       WavAdtlDataLabl bs -> put bs
@@ -281,6 +288,60 @@ instance KnownLabel WavCueBody where
 
 type WavCueChunk = KnownChunk WavCueBody
 
+data WavSampleLoop = WavSampleLoop
+  { wslId :: !Word32LE
+  , wslType :: !Word32LE
+  , wslStart :: !Word32LE
+  , wslEnd :: !Word32LE
+  , wslFraction :: !Word32LE
+  , wslNumPlays :: !Word32LE
+  } deriving stock (Eq, Show, Generic)
+    deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric WavSampleLoop)
+
+-- See https://www.recordingblogs.com/wiki/sample-chunk-of-a-wave-file
+-- for explanation of sample period - for 44100 sr it's 0x00005893
+data WavSampleBody = WavSampleBody
+  { wsbManufacturer :: !Word32LE
+  , wsbProduct :: !Word32LE
+  , wsbSamplePeriod :: !Word32LE
+  , wsbMidiUnityNote :: !Word32LE
+  , wsbMidiPitchFrac :: !Word32LE
+  , wsbSmtpeFormat :: !Word32LE
+  , wsbSmtpeOffset :: !Word32LE
+  , wsbSampleLoops :: !(Seq WavSampleLoop)
+  } deriving stock (Eq, Show)
+
+instance ByteSized WavSampleBody where
+  byteSize wsb = 32 + byteSize (wsbSampleLoops wsb)
+
+instance Binary WavSampleBody where
+  get = do
+    wsbManufacturer <- get
+    wsbProduct <- get
+    wsbSamplePeriod <- get
+    wsbMidiUnityNote <- get
+    wsbMidiPitchFrac <- get
+    wsbSmtpeFormat <- get
+    wsbSmtpeOffset <- get
+    numLoops <- get @Word32LE
+    wsbSampleLoops <- getSeq (fromIntegral numLoops) get
+    pure $! WavSampleBody {..}
+  put (WavSampleBody {..}) = do
+    put wsbManufacturer
+    put wsbProduct
+    put wsbSamplePeriod
+    put wsbMidiUnityNote
+    put wsbMidiPitchFrac
+    put wsbSmtpeFormat
+    put wsbSmtpeOffset
+    put @Word32LE (fromIntegral (Seq.length wsbSampleLoops))
+    putSeq put wsbSampleLoops
+
+instance KnownLabel WavSampleBody where
+  knownLabel _ = labelSmpl
+
+type WavSampleChunk = KnownChunk WavSampleBody
+
 type WavUnparsedChunk = Chunk UnparsedBody
 
 data WavChunk =
@@ -289,6 +350,7 @@ data WavChunk =
   | WavChunkInfo !WavInfoChunk
   | WavChunkAdtl !WavAdtlChunk
   | WavChunkCue !WavCueChunk
+  | WavChunkSample !WavSampleChunk
   | WavChunkUnparsed !WavUnparsedChunk
   deriving stock (Eq, Show)
 
@@ -296,10 +358,11 @@ instance ByteSized WavChunk where
   byteSize = \case
     WavChunkFormat x -> byteSize x
     WavChunkData x -> byteSize x
-    WavChunkUnparsed x -> byteSize x
     WavChunkInfo x -> byteSize x
     WavChunkAdtl x -> byteSize x
     WavChunkCue x -> byteSize x
+    WavChunkSample x -> byteSize x
+    WavChunkUnparsed x -> byteSize x
 
 instance Binary WavChunk where
   get = do
@@ -310,6 +373,7 @@ instance Binary WavChunk where
       ChunkLabelList label | label == labelInfo -> fmap WavChunkInfo get
       ChunkLabelList label | label == labelAdtl -> fmap WavChunkAdtl get
       ChunkLabelSingle label | label == labelCue -> fmap WavChunkCue get
+      ChunkLabelSingle label | label == labelSmpl -> fmap WavChunkSample get
       _ -> fmap WavChunkUnparsed get
   put = \case
     WavChunkFormat x -> put x
@@ -317,6 +381,7 @@ instance Binary WavChunk where
     WavChunkInfo x -> put x
     WavChunkAdtl x -> put x
     WavChunkCue x -> put x
+    WavChunkSample x -> put x
     WavChunkUnparsed x -> put x
 
 newtype WavHeader = WavHeader
@@ -414,6 +479,27 @@ wavUseMarkers marks =
       waes = Seq.mapWithIndex waeFromMarker marks
       wac = KnownListChunk waes
   in (wcc, wac)
+
+wavUseLoopPoints :: Int -> Int -> LoopMarkPoints -> WavSampleChunk
+wavUseLoopPoints sr note (LoopMarks _ (startId, loopStart) (_, loopEnd) _) =
+  let wsbManufacturer = 0
+      wsbProduct = 0
+      -- See notes on type about sample period: for 44100 sr it's 0x00005893
+      wsbSamplePeriod = if sr == 44100 then 0x00005893 else error "TODO - calculate sample period"
+      wsbMidiUnityNote = fromIntegral note
+      wsbMidiPitchFrac = 0
+      wsbSmtpeFormat = 0
+      wsbSmtpeOffset = 0
+      wslId = fromIntegral startId
+      wslType = 0
+      wslStart = fromIntegral (smPosition loopStart)
+      wslEnd = fromIntegral (smPosition loopEnd)
+      wslFraction = 0
+      wslNumPlays = 0
+      wsl = WavSampleLoop {..}
+      wsbSampleLoops = Seq.singleton wsl
+      wsb = WavSampleBody {..}
+  in KnownChunk wsb
 
 wavAddChunks :: Seq WavChunk -> Wav -> Wav
 wavAddChunks chunks wav = wav { wavChunks = wavChunks wav <> chunks }

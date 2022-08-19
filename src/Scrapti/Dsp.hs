@@ -106,6 +106,12 @@ monoLinearCrossFade loopStart loopEnd = Mod $ \mm src -> do
   -- TODO
   Right (mm, src)
 
+monoCrop :: LiftedPrim a => Word32 -> Word32 -> Mod a a
+monoCrop start end = Mod $ \mm src -> do
+  unless (mmNumChannels mm == 1) (Left DspErrNotMono)
+  -- TODO
+  Right (mm, src)
+
 data PcmMeta = PcmMeta
   { pmNumChannels :: !Int
   , pmNumSamples :: !Int
