@@ -25,17 +25,22 @@ module Scrapti.Tracker.Pti
   , Header (..)
   , Pti (..)
   , mkPti
+  , ptiGetPcmContainer
+  , ptiSetPcmContainer
+  , ptiPcmContainerLens
   ) where
 
 import Dahdit (Binary (..), BinaryRep (..), BoolByte (..), ByteSized (..), ExactBytes, FloatLE, Int16LE,
-               LiftedPrimArray, Proxy (..), ShortByteString, StaticArray, StaticByteSized (..), StaticBytes (..),
-               ViaBinaryRep (..), ViaBoundedEnum (..), ViaGeneric (..), ViaStaticGeneric (..), Word16LE, Word32LE,
-               getLiftedPrimArray, getRemainingLiftedPrimArray, putLiftedPrimArray)
+               LiftedPrimArray, ShortByteString, StaticArray, StaticByteSized (..), StaticBytes (..), ViaBinaryRep (..),
+               ViaBoundedEnum (..), ViaGeneric (..), ViaStaticGeneric (..), Word16LE, Word32LE, getLiftedPrimArray,
+               getRemainingLiftedPrimArray, putLiftedPrimArray)
 import Data.Default (Default (..))
 import Data.Int (Int8)
+import Data.Proxy (Proxy (..))
 import Data.Word (Word8)
 import GHC.Generics (Generic)
-import Scrapti.Binary (QuietArray (..))
+import Lens.Micro (lens)
+import Scrapti.Dsp (PcmContainer, PcmContainerLens)
 import Scrapti.Tracker.Checked (Checked (..), mkChecked, updateCheckedCode, verifyCheckedCode)
 
 data WavetableWindowSize =
@@ -443,7 +448,7 @@ instance Default Header where
 
 data Pti = Pti
   { ptiHeader :: !(Checked Header)
-  , ptiWav :: !(QuietArray Int16LE)
+  , ptiPcmData :: !(LiftedPrimArray Int16LE)
   } deriving stock (Eq, Show, Generic)
     deriving (ByteSized) via (ViaGeneric Pti)
 
@@ -457,17 +462,26 @@ instance Binary Pti where
   get = do
     header <- get
     let !sampleLength = fromIntegral (preSampleLength (hdrPreamble (checkedVal header)))
-    wav <-
+    pcmData <-
       if sampleLength == 0  -- what the heck, it happens
         then getRemainingLiftedPrimArray (Proxy :: Proxy Int16LE)
         else getLiftedPrimArray (Proxy :: Proxy Int16LE) sampleLength
-    pure $! Pti header (QuietArray wav)
-  put (Pti header (QuietArray wav)) = do
+    pure $! Pti header pcmData
+  put (Pti header pcmData) = do
     put header
-    putLiftedPrimArray wav
+    putLiftedPrimArray pcmData
 
 instance Default Pti where
   def = Pti def def
 
 mkPti :: Header -> LiftedPrimArray Int16LE -> Pti
-mkPti hdr arr = Pti (mkChecked hdr) (QuietArray arr)
+mkPti = Pti . mkChecked
+
+ptiGetPcmContainer :: Pti -> PcmContainer
+ptiGetPcmContainer = error "TODO"
+
+ptiSetPcmContainer :: Pti -> PcmContainer -> Pti
+ptiSetPcmContainer = error "TODO"
+
+ptiPcmContainerLens :: PcmContainerLens Pti
+ptiPcmContainerLens = lens ptiGetPcmContainer ptiSetPcmContainer

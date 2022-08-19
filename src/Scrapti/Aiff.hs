@@ -1,7 +1,16 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module Scrapti.Aiff where
+module Scrapti.Aiff
+  ( AiffChunk (..)
+  , Aiff (..)
+  , lookupAiffChunk
+  , lookupAiffCommonChunk
+  , lookupAiffDataChunk
+  , aiffGetPcmContainer
+  , aiffSetPcmContainer
+  , aiffPcmContainerLens
+  ) where
 
 import Control.Monad (unless)
 import Dahdit (Binary (..), ByteArray, ByteCount (..), ByteSized (..), ShortByteString, StaticByteSized (..),
@@ -13,9 +22,12 @@ import Data.Default (Default (..))
 import Data.Primitive.ByteArray (sizeofByteArray)
 import Data.Proxy (Proxy (..))
 import Data.Sequence (Seq)
+import qualified Data.Sequence as Seq
 import GHC.Generics (Generic)
+import Lens.Micro (lens)
 import Scrapti.Common (KnownLabel (..), Label, UnparsedBody, chunkHeaderSize, countSize, getChunkSizeBE, getExpectLabel,
                        labelSize, padCount, putChunkSizeBE)
+import Scrapti.Dsp (PcmContainer, PcmContainerLens)
 
 -- AIFF-C file parsing according to
 -- http://www-mmsp.ece.mcgill.ca/Documents/AudioFormats/AIFF/AIFF.html
@@ -201,7 +213,7 @@ instance Binary AiffChunk where
     AiffChunkUnparsed x -> put x
 
 newtype AiffHeader = AiffHeader
-  { ahSize :: ByteCount
+  { wavHeaderRemainingSize :: ByteCount
   } deriving stock (Show, Generic)
     deriving newtype (Eq)
     deriving (ByteSized) via (ViaStaticByteSized AiffHeader)
@@ -240,3 +252,27 @@ instance Binary Aiff where
     let !remSz = byteSizeFoldable chunks
     put (AiffHeader remSz)
     putSeq put chunks
+
+lookupAiffChunk :: (AiffChunk -> Bool) -> Aiff -> Maybe AiffChunk
+lookupAiffChunk p (Aiff chunks) = fmap (Seq.index chunks) (Seq.findIndexL p chunks)
+
+lookupAiffCommonChunk :: Aiff -> Maybe AiffCommonChunk
+lookupAiffCommonChunk w =
+  case lookupAiffChunk (\case { AiffChunkCommon _ -> True; _ -> False }) w of
+    Just (AiffChunkCommon x) -> Just x
+    _ -> Nothing
+
+lookupAiffDataChunk :: Aiff -> Maybe AiffDataChunk
+lookupAiffDataChunk w =
+  case lookupAiffChunk (\case { AiffChunkData _ -> True; _ -> False }) w of
+    Just (AiffChunkData x) -> Just x
+    _ -> Nothing
+
+aiffGetPcmContainer :: Aiff -> PcmContainer
+aiffGetPcmContainer = error "TODO"
+
+aiffSetPcmContainer :: Aiff -> PcmContainer -> Aiff
+aiffSetPcmContainer = error "TODO"
+
+aiffPcmContainerLens :: PcmContainerLens Aiff
+aiffPcmContainerLens = lens aiffGetPcmContainer aiffSetPcmContainer

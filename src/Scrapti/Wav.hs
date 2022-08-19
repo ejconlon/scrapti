@@ -17,39 +17,33 @@ module Scrapti.Wav
   , WavCuePoint (..)
   , WavCueBody (..)
   , WavCueChunk
-  , WavExtraChunk (..)
-  , WavChoiceChunk (..)
-  , WavBody (..)
+  , WavChunk (..)
   , Wav (..)
-  , SampledWav (..)
-  , labelWave
-  , bindWavExtra
-  , filterWavExtra
-  , appendWavExtra
-  , WavDspErr (..)
-  , monoWav
-  , setWavInfo
+  , lookupWavChunk
+  , lookupWavFormatChunk
+  , lookupWavDataChunk
+  , wavGetPcmContainer
+  , wavSetPcmContainer
+  , wavPcmContainerLens
   , SimpleCuePoint (..)
   , toSimpleCuePoint
   , fromSimpleCuePoint
   ) where
 
-import Control.Exception (Exception)
-import Control.Monad (join, unless)
-import Control.Monad.Identity (Identity (..))
-import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, LiftedPrim, LiftedPrimArray, ShortByteString,
-               StaticByteSized (..), Word16LE, Word32LE, byteSizeFoldable, getExact, getRemainingLiftedPrimArray,
-               getRemainingSeq, getRemainingString, getSeq, getUnfold, putByteString, putLiftedPrimArray, putSeq,
-               putWord8)
+import Control.Monad (unless)
+import Dahdit (Binary (..), ByteArray, ByteCount, ByteSized (..), ShortByteString, StaticByteSized (..),
+               ViaStaticByteSized (..), Word16LE, Word32LE, byteSizeFoldable, getExact, getRemainingByteArray,
+               getRemainingSeq, getRemainingString, getSeq, putByteArray, putByteString, putSeq, putWord8)
 import qualified Data.ByteString.Short as BSS
 import Data.Default (Default (..))
-import Data.Proxy (Proxy (..))
+import Data.Primitive (sizeofByteArray)
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
 import Data.String (IsString)
-import Scrapti.Common (KnownLabel (..), Label, Sampled (..), UnparsedBody, bssInit, bssLast, chunkHeaderSize, countSize,
-                       getChunkSizeLE, getExpectLabel, getSampled, labelSize, padCount, putChunkSizeLE)
-import Scrapti.Dsp (DspErr, Sel, monoFromSel)
+import Lens.Micro (lens)
+import Scrapti.Common (KnownLabel (..), Label, UnparsedBody, bssInit, bssLast, countSize, getChunkSizeLE,
+                       getExpectLabel, labelSize, padCount, putChunkSizeLE)
+import Scrapti.Dsp (PcmContainer, PcmContainerLens)
 import Scrapti.Riff (Chunk (..), ChunkLabel (..), KnownChunk (..), KnownListChunk (..), labelRiff, peekChunkLabel)
 
 labelWave, labelFmt, labelData, labelInfo, labelAdtl, labelCue, labelNote, labelLabl, labelLtxt :: Label
@@ -63,6 +57,7 @@ labelNote = "note"
 labelLabl = "labl"
 labelLtxt = "ltxt"
 
+-- | A string NUL-padded to align to short width
 newtype PaddedString = PaddedString { unPaddedString :: ShortByteString }
   deriving stock (Show)
   deriving newtype (Eq, IsString)
@@ -84,25 +79,21 @@ instance Binary PaddedString where
     let !usz = BSS.length sbs
     unless (even usz) (putWord8 0)
 
-newtype BitLength = BitLength { unBitLength :: Word16LE }
-  deriving stock (Show)
-  deriving newtype (Eq, Ord, Num, Enum, Real, Integral, Default, Binary, ByteSized)
-
 data WavFormatBody = WavFormatBody
   { wfbFormatType :: !Word16LE
   , wfbNumChannels :: !Word16LE
   , wfbSampleRate :: !Word32LE
-  , wfbBitsPerSample :: !BitLength
+  , wfbBitsPerSample :: !Word16LE
   , wfbExtra :: !ShortByteString
   } deriving stock (Eq, Show)
 
 instance Default WavFormatBody where
-  def = WavFormatBody 1 2 44100 16 mempty
+  def = WavFormatBody 1 1 44100 16 mempty
 
 instance ByteSized WavFormatBody where
   byteSize wf = 16 + byteSize (wfbExtra wf)
 
-isSupportedBPS :: BitLength -> Bool
+isSupportedBPS :: Word16LE -> Bool
 isSupportedBPS w = mod w 8 == 0 && w <= 64
 
 isSupportedFmtExtraSize :: ByteCount -> Bool
@@ -117,14 +108,14 @@ instance Binary WavFormatBody where
     bpsSlice <- get
     bps <- get
     unless (isSupportedBPS bps) (fail ("Bad bps: " ++ show bps))
-    unless (bpsSlice == div (fromIntegral bps) 8 * numChannels) (fail ("Bad bps slice: " ++ show bpsSlice))
+    unless (bpsSlice == div bps 8 * numChannels) (fail ("Bad bps slice: " ++ show bpsSlice))
     unless (bpsAvg == sampleRate * fromIntegral bpsSlice) (fail ("Bad average bps: " ++ show bpsAvg))
     extra <- getRemainingString
     let !extraLen = byteSize extra
     unless (isSupportedFmtExtraSize extraLen) (fail ("Bad extra length: " ++ show extraLen))
     pure $! WavFormatBody formatType numChannels sampleRate bps extra
   put (WavFormatBody fty nchan sr bps extra) = do
-    let !bpsSlice = div (fromIntegral bps) 8 * nchan
+    let !bpsSlice = div bps 8 * nchan
     let !bpsAvg = sr * fromIntegral bpsSlice
     put fty
     put nchan
@@ -139,54 +130,24 @@ instance KnownLabel WavFormatBody where
 
 type WavFormatChunk = KnownChunk WavFormatBody
 
-newtype WavDataBody a = WavDataBody { unWavDataBody :: LiftedPrimArray a }
+newtype WavDataBody = WavDataBody { unWavDataBody :: ByteArray }
   deriving stock (Show)
   deriving newtype (Eq)
 
-instance KnownLabel (WavDataBody a) where
+instance KnownLabel WavDataBody where
   knownLabel _ = labelData
 
-instance (LiftedPrim a, StaticByteSized a) => ByteSized (WavDataBody a) where
-  byteSize (WavDataBody vec) = byteSize vec
+instance ByteSized WavDataBody where
+  byteSize (WavDataBody vec) = fromIntegral (sizeofByteArray vec)
 
-instance (LiftedPrim a, StaticByteSized a) => Binary (WavDataBody a) where
-  get = do
-    arr <- getRemainingLiftedPrimArray (Proxy :: Proxy a)
-    pure $! WavDataBody arr
-  put (WavDataBody arr) = do
-    putLiftedPrimArray arr
+instance Binary WavDataBody where
+  get = fmap WavDataBody getRemainingByteArray
+  put (WavDataBody arr) = putByteArray arr
 
-instance Default (WavDataBody a) where
+instance Default WavDataBody where
   def = WavDataBody mempty
 
-type WavDataChunk a = KnownChunk (WavDataBody a)
-
-data WavHeader = WavHeader
-  { wavHeaderRemainingSize :: !ByteCount
-  , wavHeaderFormat :: !WavFormatChunk
-  } deriving stock (Eq, Show)
-
-instance ByteSized WavHeader where
-  byteSize (WavHeader _ format) = chunkHeaderSize + labelSize + byteSize format
-
-instance Binary WavHeader where
-  get = do
-    getExpectLabel labelRiff
-    fileSize <- getChunkSizeLE
-    getExpectLabel labelWave
-    format <- get
-    let !formatSize = byteSize format
-    let !remainingSize = fileSize - formatSize - labelSize
-    pure $! WavHeader remainingSize format
-  put (WavHeader remainingSize format) = do
-    let !formatSize = byteSize format
-        !fileSize = remainingSize + formatSize + labelSize
-    put labelRiff
-    putChunkSizeLE fileSize
-    put labelWave
-    put format
-
-type WavUnparsedChunk = Chunk UnparsedBody
+type WavDataChunk = KnownChunk WavDataBody
 
 data WavInfoElem = WavInfoElem
   { wieKey :: !Label
@@ -321,162 +282,107 @@ instance KnownLabel WavCueBody where
 
 type WavCueChunk = KnownChunk WavCueBody
 
-data WavExtraChunk =
-    WavExtraChunkUnparsed !WavUnparsedChunk
-  | WavExtraChunkInfo !WavInfoChunk
-  | WavExtraChunkAdtl !WavAdtlChunk
-  | WavExtraChunkCue !WavCueChunk
+type WavUnparsedChunk = Chunk UnparsedBody
+
+data WavChunk =
+    WavChunkFormat !WavFormatChunk
+  | WavChunkData !WavDataChunk
+  | WavChunkInfo !WavInfoChunk
+  | WavChunkAdtl !WavAdtlChunk
+  | WavChunkCue !WavCueChunk
+  | WavChunkUnparsed !WavUnparsedChunk
   deriving stock (Eq, Show)
 
-instance ByteSized WavExtraChunk where
+instance ByteSized WavChunk where
   byteSize = \case
-    WavExtraChunkUnparsed x -> byteSize x
-    WavExtraChunkInfo x -> byteSize x
-    WavExtraChunkAdtl x -> byteSize x
-    WavExtraChunkCue x -> byteSize x
+    WavChunkFormat x -> byteSize x
+    WavChunkData x -> byteSize x
+    WavChunkUnparsed x -> byteSize x
+    WavChunkInfo x -> byteSize x
+    WavChunkAdtl x -> byteSize x
+    WavChunkCue x -> byteSize x
 
-getExtra :: ChunkLabel -> Get WavExtraChunk
-getExtra = \case
-  ChunkLabelList label | label == labelInfo -> fmap WavExtraChunkInfo get
-  ChunkLabelList label | label == labelAdtl -> fmap WavExtraChunkAdtl get
-  ChunkLabelSingle label | label == labelCue -> fmap WavExtraChunkCue get
-  _ -> fmap WavExtraChunkUnparsed get
-
-instance Binary WavExtraChunk where
-  get = peekChunkLabel >>= getExtra
-  put = \case
-    WavExtraChunkUnparsed x -> put x
-    WavExtraChunkInfo x -> put x
-    WavExtraChunkAdtl x -> put x
-    WavExtraChunkCue x -> put x
-
-data WavChoiceChunk a =
-    WavChoiceChunkExtra !WavExtraChunk
-  | WavChoiceChunkData !(WavDataChunk a)
-  deriving stock (Eq, Show)
-
-instance (LiftedPrim a, StaticByteSized a) => ByteSized (WavChoiceChunk a) where
-  byteSize = \case
-    WavChoiceChunkExtra wce -> byteSize wce
-    WavChoiceChunkData wcd -> byteSize wcd
-
-instance (LiftedPrim a, StaticByteSized a) => Binary (WavChoiceChunk a) where
+instance Binary WavChunk where
   get = do
-    chunkLab <- peekChunkLabel
-    case chunkLab of
-      ChunkLabelSingle label | label == labelData -> fmap WavChoiceChunkData get
-      _ -> fmap WavChoiceChunkExtra (getExtra chunkLab)
+    chunkLabel <- peekChunkLabel
+    case chunkLabel of
+      ChunkLabelSingle label | label == labelFmt -> fmap WavChunkFormat get
+      ChunkLabelSingle label | label == labelData -> fmap WavChunkData get
+      ChunkLabelList label | label == labelInfo -> fmap WavChunkInfo get
+      ChunkLabelList label | label == labelAdtl -> fmap WavChunkAdtl get
+      ChunkLabelSingle label | label == labelCue -> fmap WavChunkCue get
+      _ -> fmap WavChunkUnparsed get
   put = \case
-    WavChoiceChunkExtra wce -> put wce
-    WavChoiceChunkData wcd -> put wcd
+    WavChunkFormat x -> put x
+    WavChunkData x -> put x
+    WavChunkInfo x -> put x
+    WavChunkAdtl x -> put x
+    WavChunkCue x -> put x
+    WavChunkUnparsed x -> put x
 
-data WavBody a = WavBody
-  { wbUnparsedPre :: !(Seq WavExtraChunk)
-  , wbSample :: !(KnownChunk (WavDataBody a))
-  , wbUnparsedPost :: !(Seq WavExtraChunk)
+newtype WavHeader = WavHeader
+  { wavHeaderRemainingSize :: ByteCount
+  } deriving stock (Show)
+    deriving newtype (Eq)
+    deriving (ByteSized) via (ViaStaticByteSized WavHeader)
+
+wavHeaderSize :: ByteCount
+wavHeaderSize = 2 * labelSize + countSize
+
+instance StaticByteSized WavHeader where
+  staticByteSize _ = wavHeaderSize
+
+instance Binary WavHeader where
+  get = do
+    getExpectLabel labelRiff
+    sz <- getChunkSizeLE
+    getExpectLabel labelWave
+    pure $! WavHeader (sz - labelSize)
+  put (WavHeader remSz) = do
+    put labelRiff
+    putChunkSizeLE (remSz + labelSize)
+    put labelWave
+
+newtype Wav = Wav
+  { wavChunks :: Seq WavChunk
   } deriving stock (Eq, Show)
 
-instance Default (WavBody a) where
-  def = WavBody Empty def Empty
+instance ByteSized Wav where
+  byteSize (Wav chunks) = wavHeaderSize + byteSizeFoldable chunks
 
-instance (LiftedPrim a, StaticByteSized a) => ByteSized (WavBody a) where
-  byteSize (WavBody pre sam post) = byteSizeFoldable pre + byteSize sam + byteSizeFoldable post
-
-instance (LiftedPrim a, StaticByteSized a) => Binary (WavBody a) where
+instance Binary Wav where
   get = do
-    (!pre, !dat) <- getUnfold Empty $ \pre -> do
-      choice <- get
-      pure $! case choice of
-        WavChoiceChunkExtra xtra -> Left (pre :|> xtra)
-        WavChoiceChunkData dat -> Right (pre, dat)
-    post <- getRemainingSeq get
-    pure $! WavBody pre dat post
-  put (WavBody pre dat post) = do
-    putSeq put pre
-    put dat
-    putSeq put post
+    WavHeader remSz <- get
+    chunks <- getExact remSz (getRemainingSeq get)
+    pure $! Wav chunks
+  put (Wav chunks)= do
+    let !remSz = byteSizeFoldable chunks
+    put (WavHeader remSz)
+    putSeq put chunks
 
-data Wav a = Wav
-  { wavFormat :: !WavFormatChunk
-  , wavBody :: !(WavBody a)
-  } deriving stock (Eq, Show)
+lookupWavChunk :: (WavChunk -> Bool) -> Wav -> Maybe WavChunk
+lookupWavChunk p (Wav chunks) = fmap (Seq.index chunks) (Seq.findIndexL p chunks)
 
-instance Default (Wav a) where
-  def = Wav def def
+lookupWavFormatChunk :: Wav -> Maybe WavFormatChunk
+lookupWavFormatChunk w =
+  case lookupWavChunk (\case { WavChunkFormat _ -> True; _ -> False }) w of
+    Just (WavChunkFormat x) -> Just x
+    _ -> Nothing
 
-instance (LiftedPrim a, StaticByteSized a) => ByteSized (Wav a) where
-  byteSize (Wav fmt body) =
-    let !remainingSize = byteSize body
-        !header = WavHeader remainingSize fmt
-    in byteSize header + byteSize body
+lookupWavDataChunk :: Wav -> Maybe WavDataChunk
+lookupWavDataChunk w =
+  case lookupWavChunk (\case { WavChunkData _ -> True; _ -> False }) w of
+    Just (WavChunkData x) -> Just x
+    _ -> Nothing
 
-getRestOfWav :: (LiftedPrim a, StaticByteSized a) => Proxy a -> ByteCount -> WavFormatChunk -> Get (Wav a)
-getRestOfWav _ remainingSize fmtChunk = do
-  body <- getExact remainingSize get
-  pure $! Wav fmtChunk body
+wavGetPcmContainer :: Wav -> PcmContainer
+wavGetPcmContainer = error "TODO"
 
-instance (LiftedPrim a, StaticByteSized a) => Binary (Wav a) where
-  get = do
-    WavHeader remainingSize fmtChunk <- get
-    let !fmt = knownChunkBody fmtChunk
-        !fmtBps = fromIntegral (wfbBitsPerSample fmt)
-        !prox = Proxy :: Proxy a
-        !parseBps = staticByteSize prox * 8
-    unless (fmtBps == parseBps) (fail ("Bad bps: in header: " ++ show fmtBps ++ " required: " ++ show parseBps))
-    getRestOfWav prox remainingSize fmtChunk
-  put (Wav fmtChunk body) = do
-    let !remainingSize = byteSize body
-        !header = WavHeader remainingSize fmtChunk
-    put header
-    put body
+wavSetPcmContainer :: Wav -> PcmContainer -> Wav
+wavSetPcmContainer = error "TODO"
 
-newtype SampledWav = SampledWav { unSampledWav :: Sampled Wav }
-
-instance ByteSized SampledWav where
-  byteSize (SampledWav (Sampled wd)) = byteSize wd
-
-instance Binary SampledWav where
-  get = do
-    WavHeader remainingSize fmtChunk <- get
-    let !fmt = knownChunkBody fmtChunk
-        !bps = wfbBitsPerSample fmt
-    case getSampled (fromIntegral bps) of
-      Nothing -> fail ("Bad bps: " ++ show bps)
-      Just (Sampled prox) -> fmap (SampledWav . Sampled) (getRestOfWav prox remainingSize fmtChunk)
-  put (SampledWav (Sampled wd)) = put wd
-
-bindWavExtraM :: Applicative m => (WavExtraChunk -> m (Seq WavExtraChunk)) -> WavBody a -> m (WavBody a)
-bindWavExtraM f (WavBody pre dat post) = (`WavBody` dat) <$> fmap join (traverse f pre) <*> fmap join (traverse f post)
-
-bindWavExtra :: (WavExtraChunk -> Seq WavExtraChunk) -> WavBody a -> WavBody a
-bindWavExtra f = runIdentity . bindWavExtraM (Identity . f)
-
-filterWavExtra :: (WavExtraChunk -> Bool) -> WavBody a -> WavBody a
-filterWavExtra p = bindWavExtra (\c -> if p c then Seq.singleton c else Empty)
-
-appendWavExtra :: WavExtraChunk -> WavBody a -> WavBody a
-appendWavExtra c (WavBody pre dat post) = WavBody pre dat (post :|> c)
-
-data WavDspErr =
-    WavDspErrEmbed !DspErr
-  | WavDspErrCannotMono !Word16LE
-  deriving stock (Eq, Show)
-
-instance Exception WavDspErr
-
-monoWav :: LiftedPrim a => Sel a -> Wav a -> Either WavDspErr (Wav a)
-monoWav sel (Wav (KnownChunk fmt) (WavBody pre (KnownChunk (WavDataBody arr)) post)) =
-  case wfbNumChannels fmt of
-    2 -> case monoFromSel sel arr of
-      Left dspErr -> Left (WavDspErrEmbed dspErr)
-      Right arr' ->
-        let fmt' = fmt { wfbNumChannels = 1 }
-        in Right (Wav (KnownChunk fmt') (WavBody pre (KnownChunk (WavDataBody arr')) post))
-    x -> Left (WavDspErrCannotMono x)
-
-setWavInfo :: WavInfoChunk -> WavBody a -> WavBody a
-setWavInfo info = appendWavExtra (WavExtraChunkInfo info) . filterWavExtra (not . isInfo) where
-  isInfo = \case { WavExtraChunkInfo _ -> True; _ -> False }
+wavPcmContainerLens :: PcmContainerLens Wav
+wavPcmContainerLens = lens wavGetPcmContainer wavSetPcmContainer
 
 data SimpleCuePoint = SimpleCuePoint
   { scpPointId :: !Word32LE

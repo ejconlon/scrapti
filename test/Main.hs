@@ -2,18 +2,17 @@
 
 module Main (main) where
 
-import Dahdit (Binary (..), ByteCount, ElementCount, Get, Int16LE, LiftedPrimArray, ShortByteString,
-               StaticByteSized (..), StaticBytes, Word16LE, Word8, byteSize, getExact, getSkip, getWord32LE, runGetIO,
-               runPut, sizeofLiftedPrimArray)
+import Dahdit (Binary (..), ByteCount, ElementCount, Get, ShortByteString, StaticByteSized (..), StaticBytes, Word16LE,
+               Word8, byteSize, getExact, getSkip, getWord32LE, runGetIO, runPut, sizeofLiftedPrimArray)
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Short as BSS
 import Data.Default (def)
 import Data.Foldable (for_)
+import Data.Primitive.ByteArray (ByteArray, sizeofByteArray)
 import Data.Proxy (Proxy (..))
 import qualified Data.Sequence as Seq
 import Scrapti.Aiff (Aiff (..), AiffChunk)
-import Scrapti.Binary (QuietArray (..))
-import Scrapti.Common (Sampled (..), UnparsedBody (..), chunkHeaderSize, getChunkSizeLE, getExpectLabel)
+import Scrapti.Common (UnparsedBody (..), chunkHeaderSize, getChunkSizeLE, getExpectLabel)
 import Scrapti.Riff (Chunk (..), KnownChunk (..), KnownListChunk (..), KnownOptChunk (..), labelRiff)
 import Scrapti.Sfont (Bag, Gen, InfoChunk (..), Inst, Mod, PdtaChunk (..), Phdr, Sdta (..), SdtaChunk (..), Sfont (..),
                       Shdr, labelSfbk)
@@ -24,13 +23,16 @@ import Scrapti.Tracker.Mtp (Mtp)
 import Scrapti.Tracker.Pti (Auto (..), AutoEnvelope (..), AutoType, Block, Effects (..), Filter, FilterType, Granular,
                             GranularLoopMode, GranularShape, Header (..), InstParams (..), Lfo (..), LfoSteps, LfoType,
                             Preamble (..), Pti (..), SamplePlayback, Slices, WavetableWindowSize)
-import Scrapti.Wav (SampledWav (..), Wav (..), WavBody (..), WavChoiceChunk (..), WavDataBody (..), WavExtraChunk (..),
-                    WavFormatBody (..), WavFormatChunk, WavHeader (..), WavInfoElem (..))
+import Scrapti.Wav (Wav (..), WavChunk (..), WavDataBody (..), WavFormatBody (..), WavFormatChunk, WavHeader (..),
+                    WavInfoElem (..), lookupWavDataChunk, lookupWavFormatChunk)
 import System.Directory (doesFileExist)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, testCase, (@?=))
+
+drumFmtOffset :: ByteCount
+drumFmtOffset = 12
 
 drumDataOffset :: ByteCount
 drumDataOffset = 36
@@ -38,8 +40,8 @@ drumDataOffset = 36
 drumPostDataOffset :: ByteCount
 drumPostDataOffset = 497816
 
-drumFmt :: WavFormatChunk
-drumFmt = KnownChunk (WavFormatBody 1 2 44100 16 mempty)
+drumFmtChunk :: WavFormatChunk
+drumFmtChunk = KnownChunk (WavFormatBody 1 2 44100 16 mempty)
 
 drumFileSize :: ByteCount
 drumFileSize = 497896
@@ -48,7 +50,7 @@ drumEndOffset :: ByteCount
 drumEndOffset = drumFileSize + 8
 
 drumHeader :: WavHeader
-drumHeader = WavHeader (drumFileSize - 28) drumFmt
+drumHeader = WavHeader (drumFileSize - 4)
 
 drumDataLen :: ElementCount
 drumDataLen = 248886
@@ -59,11 +61,11 @@ readShort = fmap (BSS.toShort . BSL.toStrict) . BSL.readFile
 testWavSerde :: TestTree
 testWavSerde = testCase "serde" $ do
   -- KnownChunk
-  byteSize drumFmt @?= 24
-  let fmtBs = runPut (put drumFmt)
+  byteSize drumFmtChunk @?= 24
+  let fmtBs = runPut (put drumFmtChunk)
   (fmt, fmtSz) <- runGetIO get fmtBs
   byteSize fmt @?= fmtSz
-  fmt @?= drumFmt
+  fmt @?= drumFmtChunk
   -- Odd and even unparsed chunks
   let unpSz = 10
       unpOdd = Chunk "FOOB" (UnparsedBody "A")
@@ -84,48 +86,46 @@ testWavHeader = testCase "header" $ do
   bs <- readShort "testdata/drums.wav"
   (header, bc) <- runGetIO get bs
   header @?= drumHeader
-  bc @?= drumDataOffset
-
-getChoiceChunkInt16LE :: Get (WavChoiceChunk Int16LE)
-getChoiceChunkInt16LE = get
+  bc @?= drumFmtOffset
 
 testWavData :: TestTree
 testWavData = testCase "data" $ do
   bs <- readShort "testdata/drums.wav"
   (arr, _) <- flip runGetIO bs $ do
     getSkip drumDataOffset
-    choice <- getChoiceChunkInt16LE
-    case choice of
-      WavChoiceChunkData (KnownChunk (WavDataBody arr)) -> pure arr
+    chunk <- get
+    case chunk of
+      WavChunkData (KnownChunk (WavDataBody arr)) -> pure arr
       _ -> fail "expected data"
-  fromIntegral (sizeofLiftedPrimArray arr) @?= drumDataLen
+  fromIntegral (sizeofByteArray arr) @?= drumDataLen * 2  -- x2 for 2-byte samples
 
 testWavInfo :: TestTree
 testWavInfo = testCase "info" $ do
   bs <- readShort "testdata/drums.wav"
   (info, _) <- flip runGetIO bs $ do
     getSkip drumPostDataOffset
-    choice <- getChoiceChunkInt16LE
-    case choice of
-      WavChoiceChunkExtra (WavExtraChunkInfo info) -> pure info
+    chunk <- get
+    case chunk of
+      WavChunkInfo (KnownListChunk info) -> pure info
       _ -> fail "expected info"
-  info @?= KnownListChunk (Seq.fromList [WavInfoElem "IART" "freewavesamples.com"])
+  info @?= Seq.fromList [WavInfoElem "IART" "freewavesamples.com"]
 
 testWavWhole :: TestTree
 testWavWhole = testCase "whole" $ do
   bs <- readShort "testdata/drums.wav"
-  (SampledWav (Sampled (Wav fmt (WavBody pre (KnownChunk (WavDataBody arr)) post))), _) <- runGetIO (get @SampledWav) bs
-  fmt @?= drumFmt
-  Seq.length pre @?= 0
-  fromIntegral (sizeofLiftedPrimArray arr) @?= drumDataLen
-  Seq.length post @?= 2
+  (wav, _) <- runGetIO (get @Wav) bs
+  fmtChunk <- maybe (fail "no fmt") pure (lookupWavFormatChunk wav)
+  fmtChunk @?= drumFmtChunk
+  KnownChunk (WavDataBody arr) <- maybe (fail "no data") pure (lookupWavDataChunk wav)
+  fromIntegral (sizeofByteArray arr) @?= drumDataLen * 2 -- x2 for 2-byte samples
+  Seq.length (wavChunks wav) @?= 4
 
 testWavWrite :: TestTree
 testWavWrite = testCase "write" $ do
   bs <- readShort "testdata/drums.wav"
-  (swav, bc) <- runGetIO (get @SampledWav) bs
-  byteSize swav @?= bc
-  let bs' = runPut (put swav)
+  (wav, bc) <- runGetIO (get @Wav) bs
+  byteSize wav @?= bc
+  let bs' = runPut (put wav)
   bs' @?= bs
 
 testWav :: TestTree
@@ -231,7 +231,8 @@ testPtiWrite = testCase "write" $ do
   (pti, bc) <- runGetIO (get @Pti) bs
   byteSize pti @?= bc
   fromIntegral bc @?= BSS.length bs
-  sizeofLiftedPrimArray (unQuietArray (ptiWav pti)) @?= div (fromIntegral drumDataLen) 2
+  -- divide by two to compare number of elements (2-byte samples)
+  sizeofLiftedPrimArray (ptiPcmData pti) @?= div (fromIntegral drumDataLen) 2
   let bs' = runPut (put pti)
   bs' @?= bs
 
@@ -328,24 +329,22 @@ testPtiDigest = testCase "digest" $ do
       expecDigest = mkCode (checkedVal (ptiHeader defPti))
   checkedCode (ptiHeader defPti) @?= expecDigest
 
-getWavInt16LE :: Get (Wav Int16LE)
-getWavInt16LE = get
-
-extractWavData :: Wav a -> LiftedPrimArray a
-extractWavData = unWavDataBody . knownChunkBody . wbSample . wavBody
+extractWavData :: MonadFail m => Wav -> m ByteArray
+extractWavData wav = do
+  KnownChunk (WavDataBody arr) <- maybe (fail "no data") pure (lookupWavDataChunk wav)
+  pure arr
 
 testPtiWav :: TestTree
 testPtiWav = testCase "wav" $ do
   wavBs <- readShort "testdata/drums.wav"
   ptiBs <- readShort "testdata/testproj16/instruments/1 drums.pti"
-  (wav, _) <- runGetIO getWavInt16LE wavBs
+  (wav, _) <- runGetIO (get @Wav) wavBs
   (pti, _) <- runGetIO (get @Pti) ptiBs
-  let wavData = extractWavData wav
-      ptiData = unQuietArray (ptiWav pti)
-  -- We expect there is half as many samples because it's converted to mono
-  sizeofLiftedPrimArray ptiData @?= div (sizeofLiftedPrimArray wavData) 2
+  wavData <- extractWavData wav
+  -- We expect there are half as many samples because it's converted to mono
+  -- divide by four to compare number of elements (2-byte samples and 2 channels)
+  sizeofLiftedPrimArray (ptiPcmData pti) @?= div (sizeofByteArray wavData) 4
   -- As far as the content, I have no idea what it's doing to the signal...
-  -- Can do FFT and compare frequencies?
 
 testPti :: TestTree
 testPti = testGroup "pti" [testPtiSizes, testPtiWrite, testPtiAux, testPtiMinimal, testPtiDigest, testPtiWav]
