@@ -29,18 +29,19 @@ module Scrapti.Wav
   ) where
 
 import Control.Monad (unless)
-import Dahdit (Binary (..), ByteArray, ByteCount, ByteSized (..), ShortByteString, StaticByteSized (..),
-               ViaStaticByteSized (..), Word16LE, Word32LE (..), byteSizeFoldable, getExact, getRemainingByteArray,
-               getRemainingSeq, getRemainingString, getSeq, putByteArray, putByteString, putSeq, putWord8)
+import Dahdit (Binary (..), ByteCount, ByteSized (..), ShortByteString, StaticByteSized (..), ViaStaticByteSized (..),
+               Word16LE, Word32LE (..), byteSizeFoldable, getExact, getRemainingByteArray, getRemainingSeq,
+               getRemainingString, getSeq, putByteArray, putByteString, putSeq, putWord8)
 import qualified Data.ByteString.Short as BSS
 import Data.Default (Default (..))
 import Data.Primitive (sizeofByteArray)
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
 import Data.String (IsString)
+import Scrapti.Binary (QuietArray (..))
 import Scrapti.Common (KnownLabel (..), Label, SimpleMarker (..), UnparsedBody, bssInit, bssLast, countSize,
                        getChunkSizeLE, getExpectLabel, labelSize, padCount, putChunkSizeLE)
-import Scrapti.Dsp (PcmContainer)
+import Scrapti.Dsp (PcmContainer (..), PcmMeta (..))
 import Scrapti.Riff (Chunk (..), ChunkLabel (..), KnownChunk (..), KnownListChunk (..), labelRiff, peekChunkLabel)
 
 labelWave, labelFmt, labelData, labelInfo, labelAdtl, labelCue, labelNote, labelLabl, labelLtxt :: Label
@@ -131,22 +132,19 @@ instance KnownLabel WavFormatBody where
 
 type WavFormatChunk = KnownChunk WavFormatBody
 
-newtype WavDataBody = WavDataBody { unWavDataBody :: ByteArray }
+newtype WavDataBody = WavDataBody { unWavDataBody :: QuietArray }
   deriving stock (Show)
-  deriving newtype (Eq)
+  deriving newtype (Eq, Default)
 
 instance KnownLabel WavDataBody where
   knownLabel _ = labelData
 
 instance ByteSized WavDataBody where
-  byteSize (WavDataBody vec) = fromIntegral (sizeofByteArray vec)
+  byteSize (WavDataBody (QuietArray arr)) = fromIntegral (sizeofByteArray arr)
 
 instance Binary WavDataBody where
-  get = fmap WavDataBody getRemainingByteArray
-  put (WavDataBody arr) = putByteArray arr
-
-instance Default WavDataBody where
-  def = WavDataBody mempty
+  get = fmap (WavDataBody . QuietArray) getRemainingByteArray
+  put (WavDataBody (QuietArray arr)) = putByteArray arr
 
 type WavDataChunk = KnownChunk WavDataBody
 
@@ -380,7 +378,17 @@ wavToPcmContainer :: Wav -> PcmContainer
 wavToPcmContainer = error "TODO"
 
 wavFromPcmContainer :: PcmContainer -> Wav
-wavFromPcmContainer = error "TODO"
+wavFromPcmContainer (PcmContainer (PcmMeta {..}) arr) =
+  let fmtBody = WavFormatBody
+        { wfbFormatType = 1
+        , wfbNumChannels = fromIntegral pmNumChannels
+        , wfbSampleRate = fromIntegral pmSampleRate
+        , wfbBitsPerSample = fromIntegral pmBitsPerSample
+        , wfbExtra = mempty
+        }
+      fmtChunk = WavChunkFormat (KnownChunk fmtBody)
+      dataChunk = WavChunkData (KnownChunk (WavDataBody (QuietArray arr)))
+  in Wav (Seq.fromList [fmtChunk, dataChunk])
 
 wcpFromMarker :: Int -> SimpleMarker -> WavCuePoint
 wcpFromMarker ix sm = WavCuePoint (fromIntegral ix) (fromIntegral (smPosition sm)) 0 0 0 (fromIntegral (smPosition sm))

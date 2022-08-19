@@ -12,6 +12,7 @@ import Data.Primitive.ByteArray (ByteArray, sizeofByteArray)
 import Data.Proxy (Proxy (..))
 import qualified Data.Sequence as Seq
 import Scrapti.Aiff (Aiff (..), AiffChunk)
+import Scrapti.Binary (QuietArray (..), QuietLiftedArray (..))
 import Scrapti.Common (UnparsedBody (..), chunkHeaderSize, getChunkSizeLE, getExpectLabel)
 import Scrapti.Riff (Chunk (..), KnownChunk (..), KnownListChunk (..), KnownOptChunk (..), labelRiff)
 import Scrapti.Sfont (Bag, Gen, InfoChunk (..), Inst, Mod, PdtaChunk (..), Phdr, Sdta (..), SdtaChunk (..), Sfont (..),
@@ -95,7 +96,7 @@ testWavData = testCase "data" $ do
     getSkip drumDataOffset
     chunk <- get
     case chunk of
-      WavChunkData (KnownChunk (WavDataBody arr)) -> pure arr
+      WavChunkData (KnownChunk (WavDataBody (QuietArray arr))) -> pure arr
       _ -> fail "expected data"
   fromIntegral (sizeofByteArray arr) @?= drumDataLen * 2  -- x2 for 2-byte samples
 
@@ -116,7 +117,7 @@ testWavWhole = testCase "whole" $ do
   (wav, _) <- runGetIO (get @Wav) bs
   fmtChunk <- maybe (fail "no fmt") pure (lookupWavFormatChunk wav)
   fmtChunk @?= drumFmtChunk
-  KnownChunk (WavDataBody arr) <- maybe (fail "no data") pure (lookupWavDataChunk wav)
+  KnownChunk (WavDataBody (QuietArray arr)) <- maybe (fail "no data") pure (lookupWavDataChunk wav)
   fromIntegral (sizeofByteArray arr) @?= drumDataLen * 2 -- x2 for 2-byte samples
   Seq.length (wavChunks wav) @?= 4
 
@@ -232,7 +233,7 @@ testPtiWrite = testCase "write" $ do
   byteSize pti @?= bc
   fromIntegral bc @?= BSS.length bs
   -- divide by two to compare number of elements (2-byte samples)
-  sizeofLiftedPrimArray (ptiPcmData pti) @?= div (fromIntegral drumDataLen) 2
+  sizeofLiftedPrimArray (unQuietLiftedArray (ptiPcmData pti)) @?= div (fromIntegral drumDataLen) 2
   let bs' = runPut (put pti)
   bs' @?= bs
 
@@ -331,7 +332,7 @@ testPtiDigest = testCase "digest" $ do
 
 extractWavData :: MonadFail m => Wav -> m ByteArray
 extractWavData wav = do
-  KnownChunk (WavDataBody arr) <- maybe (fail "no data") pure (lookupWavDataChunk wav)
+  KnownChunk (WavDataBody (QuietArray arr)) <- maybe (fail "no data") pure (lookupWavDataChunk wav)
   pure arr
 
 testPtiWav :: TestTree
@@ -343,7 +344,7 @@ testPtiWav = testCase "wav" $ do
   wavData <- extractWavData wav
   -- We expect there are half as many samples because it's converted to mono
   -- divide by four to compare number of elements (2-byte samples and 2 channels)
-  sizeofLiftedPrimArray (ptiPcmData pti) @?= div (sizeofByteArray wavData) 4
+  sizeofLiftedPrimArray (unQuietLiftedArray (ptiPcmData pti)) @?= div (sizeofByteArray wavData) 4
   -- As far as the content, I have no idea what it's doing to the signal...
 
 testPti :: TestTree

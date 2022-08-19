@@ -27,17 +27,20 @@ module Scrapti.Tracker.Pti
   , mkPti
   , ptiToPcmContainer
   , ptiWithPcmContainer
+  , ptiFromPcmContainer
   ) where
 
 import Dahdit (Binary (..), BinaryRep (..), BoolByte (..), ByteSized (..), ExactBytes, FloatLE, Int16LE,
                LiftedPrimArray, ShortByteString, StaticArray, StaticByteSized (..), StaticBytes (..), ViaBinaryRep (..),
-               ViaBoundedEnum (..), ViaGeneric (..), ViaStaticGeneric (..), Word16LE, Word32LE, getLiftedPrimArray,
+               ViaBoundedEnum (..), ViaStaticGeneric (..), Word16LE, Word32LE, getLiftedPrimArray,
                getRemainingLiftedPrimArray, putLiftedPrimArray)
 import Data.Default (Default (..))
 import Data.Int (Int8)
 import Data.Proxy (Proxy (..))
 import Data.Word (Word8)
 import GHC.Generics (Generic)
+import Scrapti.Binary (QuietLiftedArray (..))
+import Scrapti.Common (ConvertErr)
 import Scrapti.Dsp (PcmContainer)
 import Scrapti.Tracker.Checked (Checked (..), mkChecked, updateCheckedCode, verifyCheckedCode)
 
@@ -446,9 +449,11 @@ instance Default Header where
 
 data Pti = Pti
   { ptiHeader :: !(Checked Header)
-  , ptiPcmData :: !(LiftedPrimArray Int16LE)
-  } deriving stock (Eq, Show, Generic)
-    deriving (ByteSized) via (ViaGeneric Pti)
+  , ptiPcmData :: !(QuietLiftedArray Int16LE)
+  } deriving stock (Eq, Show)
+
+instance ByteSized Pti where
+  byteSize (Pti hd (QuietLiftedArray larr)) = byteSize hd + byteSize larr
 
 updatePtiCode :: Pti -> Pti
 updatePtiCode pti = pti { ptiHeader = updateCheckedCode (ptiHeader pti) }
@@ -460,23 +465,26 @@ instance Binary Pti where
   get = do
     header <- get
     let !sampleLength = fromIntegral (preSampleLength (hdrPreamble (checkedVal header)))
-    pcmData <-
+    pcmData <- fmap QuietLiftedArray $
       if sampleLength == 0  -- what the heck, it happens
         then getRemainingLiftedPrimArray (Proxy :: Proxy Int16LE)
         else getLiftedPrimArray (Proxy :: Proxy Int16LE) sampleLength
     pure $! Pti header pcmData
   put (Pti header pcmData) = do
     put header
-    putLiftedPrimArray pcmData
+    putLiftedPrimArray (unQuietLiftedArray pcmData)
 
 instance Default Pti where
   def = Pti def def
 
 mkPti :: Header -> LiftedPrimArray Int16LE -> Pti
-mkPti = Pti . mkChecked
+mkPti hd = Pti (mkChecked hd) . QuietLiftedArray
 
 ptiToPcmContainer :: Pti -> PcmContainer
 ptiToPcmContainer = error "TODO"
 
-ptiWithPcmContainer :: Pti -> PcmContainer -> Maybe Pti
+ptiWithPcmContainer :: Pti -> PcmContainer -> Either ConvertErr Pti
 ptiWithPcmContainer = error "TODO"
+
+ptiFromPcmContainer :: PcmContainer -> Either ConvertErr Pti
+ptiFromPcmContainer = error "TODO"

@@ -13,10 +13,10 @@ module Scrapti.Aiff
   ) where
 
 import Control.Monad (unless)
-import Dahdit (Binary (..), ByteArray, ByteCount (..), ByteSized (..), ShortByteString, StaticByteSized (..),
-               StaticBytes, ViaGeneric (..), ViaStaticByteSized (..), Word16BE, Word32BE (unWord32BE), byteSizeFoldable,
-               getByteString, getExact, getLookAhead, getRemainingByteArray, getRemainingSeq, getSeq, getSkip,
-               getWord16BE, getWord8, putByteArray, putByteString, putSeq, putWord16BE, putWord8)
+import Dahdit (Binary (..), ByteCount (..), ByteSized (..), ShortByteString, StaticByteSized (..), StaticBytes,
+               ViaGeneric (..), ViaStaticByteSized (..), Word16BE, Word32BE (..), byteSizeFoldable, getByteString,
+               getExact, getLookAhead, getRemainingByteArray, getRemainingSeq, getSeq, getSkip, getWord16BE, getWord8,
+               putByteArray, putByteString, putSeq, putWord16BE, putWord8)
 import qualified Data.ByteString.Short as BSS
 import Data.Default (Default (..))
 import Data.Primitive.ByteArray (sizeofByteArray)
@@ -24,9 +24,11 @@ import Data.Proxy (Proxy (..))
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
 import GHC.Generics (Generic)
-import Scrapti.Common (KnownLabel (..), Label, SimpleMarker (..), UnparsedBody, chunkHeaderSize, countSize,
-                       dedupeSimpleMarkers, getChunkSizeBE, getExpectLabel, labelSize, padCount, putChunkSizeBE)
-import Scrapti.Dsp (PcmContainer)
+import Scrapti.Binary (QuietArray (..))
+import Scrapti.Common (ConvertErr, KnownLabel (..), Label, SimpleMarker (..), UnparsedBody, chunkHeaderSize, countSize,
+                       dedupeSimpleMarkers, getChunkSizeBE, getExpectLabel, guardChunk, labelSize, padCount,
+                       putChunkSizeBE)
+import Scrapti.Dsp (PcmContainer (PcmContainer), PcmMeta (PcmMeta))
 
 -- AIFF-C file parsing according to
 -- http://www-mmsp.ece.mcgill.ca/Documents/AudioFormats/AIFF/AIFF.html
@@ -148,22 +150,22 @@ type AiffCommonChunk = KnownChunk AiffCommonBody
 data AiffDataBody = AiffDataBody
   { adbOffset :: !Word32BE
   , adbBlockSize :: !Word32BE
-  , adbSoundData :: !ByteArray
+  , adbSoundData :: !QuietArray
   } deriving stock (Eq, Show, Generic)
 
 instance ByteSized AiffDataBody where
-  byteSize (AiffDataBody _ _ arr) = 8 + fromIntegral (sizeofByteArray arr)
+  byteSize (AiffDataBody _ _ (QuietArray arr)) = 8 + fromIntegral (sizeofByteArray arr)
 
 instance Binary AiffDataBody where
   get = do
     adbOffset <- get
     adbBlockSize <- get
-    adbSoundData <- getRemainingByteArray
+    adbSoundData <- fmap QuietArray getRemainingByteArray
     pure $! AiffDataBody {..}
   put (AiffDataBody {..}) = do
     put adbOffset
     put adbBlockSize
-    putByteArray adbSoundData
+    putByteArray (unQuietArray adbSoundData)
 
 instance KnownLabel AiffDataBody where
   knownLabel _ = labelSsnd
@@ -303,8 +305,17 @@ lookupAiffMarkChunk w =
     Just (AiffChunkMark x) -> Just x
     _ -> Nothing
 
-aiffToPcmContainer :: Aiff -> PcmContainer
-aiffToPcmContainer = error "TODO"
+-- NOTE: Taking sr as a param here so we don't have to interpret extended fp
+aiffToPcmContainer :: Int -> Aiff -> Either ConvertErr PcmContainer
+aiffToPcmContainer sr aiff = do
+  KnownChunk commBody <- guardChunk "common" (lookupAiffCommonChunk aiff)
+  KnownChunk dataBody <- guardChunk "data" (lookupAiffDataChunk aiff)
+  let !nc = fromIntegral (aceNumChannels commBody)
+      !ns = fromIntegral (aceNumSampleFrames commBody)
+      !bps = fromIntegral (aceSampleSize commBody)
+      !meta = PcmMeta nc ns bps sr
+      !arr = unQuietArray (adbSoundData dataBody)
+  pure $! PcmContainer meta arr
 
 aiffFromPcmContainer :: PcmContainer -> Aiff
 aiffFromPcmContainer = error "TODO"

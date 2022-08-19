@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Scrapti.Common
   ( Label
   , labelSize
@@ -19,8 +21,19 @@ module Scrapti.Common
   , bssInit
   , SimpleMarker (..)
   , dedupeSimpleMarkers
+  , ConvertErr (..)
+  , guardBps
+  , guardChunk
+  , LoopMarks (..)
+  , LoopMarkNames
+  , LoopMarkPoints
+  , defaultLoopMarkNames
+  , findMark
+  , findLoopMarks
   ) where
 
+import Control.Exception (Exception)
+import Control.Monad (unless)
 import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, Int16LE, Int24LE, Int32LE, Int8, LiftedPrim, Put,
                StaticByteSized, StaticBytes, Word32BE, Word32LE, Word8, getExpect, getRemainingString, putByteString)
 import Data.ByteString.Short (ShortByteString)
@@ -30,6 +43,7 @@ import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 import Data.Word (Word32)
+import Scrapti.Dsp (DspErr)
 
 type Label = StaticBytes 4
 
@@ -120,3 +134,40 @@ ordNubBy f = go Set.empty Seq.empty where
 -- | Sort, keeping the first of any given name
 dedupeSimpleMarkers :: Seq SimpleMarker -> Seq SimpleMarker
 dedupeSimpleMarkers = ordNubBy smName . Seq.sortOn smPosition
+
+data ConvertErr =
+    ConvertErrMissingChunk !String
+  | ConvertErrDsp !DspErr
+  | ConvertErrBadBps !Int
+  | ConvertErrMissingMark !ShortByteString
+  deriving stock (Eq, Show)
+
+instance Exception ConvertErr
+
+guardBps :: Int -> Int -> Either ConvertErr ()
+guardBps needBps haveBps = unless (needBps == haveBps) (Left (ConvertErrBadBps haveBps))
+
+guardChunk :: String -> Maybe c -> Either ConvertErr c
+guardChunk name = maybe (Left (ConvertErrMissingChunk name)) Right
+
+data LoopMarks a = LoopMarks
+  { lmStart :: !a
+  , lmLoopStart :: !a
+  , lmLoopEnd :: !a
+  , lmEnd :: !a
+  } deriving stock (Eq, Show, Functor, Foldable, Traversable)
+
+type LoopMarkNames = LoopMarks ShortByteString
+type LoopMarkPoints = LoopMarks (Int, SimpleMarker)
+
+defaultLoopMarkNames :: LoopMarkNames
+defaultLoopMarkNames = LoopMarks "Start" "LoopStart" "LoopEnd" "End"
+
+findMark :: ShortByteString -> Seq SimpleMarker -> Either ConvertErr (Int, SimpleMarker)
+findMark name marks =
+  case Seq.findIndexL (\sm -> smName sm == name) marks of
+    Nothing -> Left (ConvertErrMissingMark name)
+    Just ix -> Right (ix, Seq.index marks ix)
+
+findLoopMarks :: LoopMarkNames -> Seq SimpleMarker -> Either ConvertErr LoopMarkPoints
+findLoopMarks names marks = traverse (`findMark` marks) names
