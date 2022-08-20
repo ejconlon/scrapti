@@ -13,8 +13,7 @@ import Data.Maybe (fromMaybe)
 import Data.Primitive.ByteArray (indexByteArray, sizeofByteArray)
 import Data.Proxy (Proxy (..))
 import qualified Data.Sequence as Seq
-import Scrapti.Aiff (Aiff (..), lookupAiffDataChunk)
-import Scrapti.Aiff (AiffDataBody (..))
+import Scrapti.Aiff (Aiff (..), AiffDataBody (..), lookupAiffDataChunk)
 import qualified Scrapti.Aiff as Aiff
 import Scrapti.Binary (QuietArray (..), QuietLiftedArray (..))
 import Scrapti.Common (UnparsedBody (..), chunkHeaderSize, defaultLoopMarkNames, getChunkSizeLE, getExpectLabel,

@@ -13,7 +13,8 @@ module Scrapti.Convert
 import Dahdit (LiftedPrim, Seq)
 import qualified Data.Sequence as Seq
 import Scrapti.Aiff (Aiff, aiffGatherMarkers, aiffToPcmContainer)
-import Scrapti.Common (ConvertErr (..), LoopMarkNames, LoopMarkPoints, LoopMarks (..), SimpleMarker (..), findLoopMarks)
+import Scrapti.Common (ConvertErr (..), LoopMarkNames, LoopMarkPoints, LoopMarks (..), SimpleMarker (..),
+                       adjustLoopPoints, adjustMarker, findLoopMarks)
 import Scrapti.Dsp (Mod, PcmContainer, applyMod, applyModGeneric, crop, ensureMonoFromLeft, linearCrossFade)
 import Scrapti.Wav (Wav, WavChunk (..), wavAddChunks, wavFromPcmContainer, wavUseMarkers)
 
@@ -50,23 +51,27 @@ neutralMono ne@(Neutral {..}) = do
   con' <- convertModGeneric ensureMonoFromLeft neCon
   pure $! ne { neCon = con' }
 
-fadeMod :: Int -> SimpleMarker -> SimpleMarker -> forall a. (LiftedPrim a, Integral a) => Mod a a
-fadeMod width loopStart loopEnd = linearCrossFade width (fromIntegral (smPosition loopStart)) (fromIntegral (smPosition loopEnd))
-
 neutralCrossFade :: Int -> Neutral -> Either ConvertErr Neutral
 neutralCrossFade width ne@(Neutral {..}) = do
-  LoopMarks _ (_, loopStart) (_, loopEnd) _ <- maybe (Left ConvertErrNoLoopMarks) Right neLoopMarks
-  con' <- convertModGeneric (fadeMod width loopStart loopEnd) neCon
+  LoopMarks _ (_, !loopStart) (_, !loopEnd) _ <- maybe (Left ConvertErrNoLoopMarks) Right neLoopMarks
+  let !loopStartPos = smPosition loopStart
+      !loopEndPos = smPosition loopEnd
+  con' <- convertModGeneric (linearCrossFade width (fromIntegral loopStartPos) (fromIntegral loopEndPos)) neCon
   pure $! ne { neCon = con' }
-
-cropMod :: SimpleMarker -> SimpleMarker -> forall a. LiftedPrim a => Mod a a
-cropMod start end = crop (fromIntegral (smPosition start)) (fromIntegral (smPosition end))
 
 neutralCropLoop :: Neutral -> Either ConvertErr Neutral
-neutralCropLoop ne@(Neutral {..}) = do
-  LoopMarks (_, start) _ (_, loopEnd) _ <- maybe (Left ConvertErrNoLoopMarks) Right neLoopMarks
-  con' <- convertModGeneric (cropMod start loopEnd) neCon
-  pure $! ne { neCon = con' }
+neutralCropLoop (Neutral {..}) = do
+  -- TODO need to adjust marks and loop markers for the crop
+  initLoopMarks <- maybe (Left ConvertErrNoLoopMarks) Right neLoopMarks
+  let LoopMarks (_, !start) _ (_, !loopEnd) _ = initLoopMarks
+      !startPos = smPosition start
+      !loopEndPos = smPosition loopEnd
+      !adjLoopMarks = adjustLoopPoints (-startPos) initLoopMarks
+      !finalLoopMarks = adjLoopMarks { lmEnd = lmLoopEnd adjLoopMarks }
+      !filteredMarks = Seq.filter (\sm -> let p = smPosition sm in p >= startPos && p <= loopEndPos) neMarks
+      !finalMarks = fmap (adjustMarker (-startPos)) filteredMarks
+  con' <- convertModGeneric (crop (fromIntegral startPos) (fromIntegral loopEndPos)) neCon
+  pure $! Neutral { neCon = con', neLoopMarks = Just finalLoopMarks, neMarks = finalMarks }
 
 neutralToSampleWav :: Int -> Neutral -> Either ConvertErr Wav
 neutralToSampleWav width ne = fmap neutralToWav (neutralMono ne >>= neutralCrossFade width >>= neutralCropLoop)
