@@ -2,7 +2,14 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Scrapti.Aiff
-  ( AiffChunk (..)
+  ( PascalString (..)
+  , Chunk (..)
+  , KnownChunk (..)
+  , AiffCommonBody (..)
+  , AiffCommonChunk
+  , AiffDataBody (..)
+  , AiffDataChunk
+  , AiffChunk (..)
   , Aiff (..)
   , lookupAiffChunk
   , lookupAiffCommonChunk
@@ -159,6 +166,7 @@ instance ByteSized AiffDataBody where
 instance Binary AiffDataBody where
   get = do
     adbOffset <- get
+    unless (adbOffset == 0) (fail "need zero offset")
     adbBlockSize <- get
     adbSoundData <- fmap QuietArray getRemainingByteArray
     pure $! AiffDataBody {..}

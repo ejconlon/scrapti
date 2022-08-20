@@ -4,15 +4,18 @@ module Main (main) where
 
 import Control.Exception (Exception, throwIO)
 import Dahdit (Binary (..), ByteCount, ElementCount, Get, ShortByteString, StaticByteSized (..), StaticBytes, Word16LE,
-               Word8, byteSize, getExact, getSkip, getWord32LE, runGetIO, runPut, sizeofLiftedPrimArray)
+               Word8, byteSize, getExact, getSkip, getWord32LE, runGetFile, runGetIO, runPut, sizeofLiftedPrimArray)
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Short as BSS
 import Data.Default (def)
 import Data.Foldable (for_)
-import Data.Primitive.ByteArray (sizeofByteArray)
+import Data.Maybe (fromMaybe)
+import Data.Primitive.ByteArray (indexByteArray, sizeofByteArray)
 import Data.Proxy (Proxy (..))
 import qualified Data.Sequence as Seq
-import Scrapti.Aiff (Aiff (..))
+import Scrapti.Aiff (Aiff (..), lookupAiffDataChunk)
+import Scrapti.Aiff (AiffDataBody (..))
+import qualified Scrapti.Aiff as Aiff
 import Scrapti.Binary (QuietArray (..), QuietLiftedArray (..))
 import Scrapti.Common (UnparsedBody (..), chunkHeaderSize, defaultLoopMarkNames, getChunkSizeLE, getExpectLabel,
                        guardChunk)
@@ -384,8 +387,8 @@ assertReparses a = do
   byteSize a' @?= bc
   a' @?= a
 
-testConvert :: TestTree
-testConvert = testCase "convert" $ do
+testConvertDx :: TestTree
+testConvertDx = testCase "DX" $ do
   bs <- readShort "testdata/DX-EPiano1-C1.aif"
   (aif, _) <- runGetIO get bs
   ne <- rethrow (aiffToNeutral 44100 aif (Just defaultLoopMarkNames))
@@ -398,6 +401,74 @@ testConvert = testCase "convert" $ do
   let !width = 2500 -- double this is 0.1s of total fade
   swav <- rethrow (neutralToSampleWav width ne)
   assertReparses swav
+
+aifSamples :: Aiff -> [Word8]
+aifSamples aif =
+  let Aiff.KnownChunk (AiffDataBody _ _ (QuietArray wavData)) = fromMaybe (error "no data") (lookupAiffDataChunk aif)
+      !sz = sizeofByteArray wavData
+  in fmap (indexByteArray wavData) [0 .. sz - 1]
+
+wavSamples :: Wav -> [Word8]
+wavSamples wav =
+  let KnownChunk (WavDataBody (QuietArray wavData)) = fromMaybe (error "no data") (lookupWavDataChunk wav)
+      !sz = sizeofByteArray wavData
+  in fmap (indexByteArray wavData) [0 .. sz - 1]
+
+wavFmt :: Wav -> WavFormatBody
+wavFmt wav = fmtBody where
+  KnownChunk fmtBody = fromMaybe (error "no format") (lookupWavFormatChunk wav)
+
+takeN :: Int -> [Word8] -> [Word8]
+takeN n xs = let f = take n in f xs ++ reverse (f (reverse xs))
+
+evenShorts :: [Word8] -> [Word8]
+evenShorts (x:y:zs) = x : y : oddShorts zs
+evenShorts _ = []
+
+oddShorts :: [Word8] -> [Word8]
+oddShorts (_:_:zs) = evenShorts zs
+oddShorts _ = []
+
+takeSome :: [Word8] -> [Word8]
+takeSome = takeN 10
+
+takeSomeEvens :: [Word8] -> [Word8]
+takeSomeEvens = evenShorts . takeN 20
+
+tryAifToWav :: Int -> String -> IO ()
+tryAifToWav channels variant = do
+  (aif, _) <- runGetFile (get @Aiff) ("testdata/sin_" ++ variant ++ ".aifc")
+  (wav, _) <- runGetFile (get @Wav) ("testdata/sin_" ++ variant ++ ".wav")
+  ne <- rethrow (aiffToNeutral 44100 aif Nothing)
+  let !conv = neutralToWav ne
+  let !aifPart = takeSome (aifSamples aif)
+  let !wavPart = takeSome (wavSamples wav)
+  wavPart @?= aifPart
+  let !convPart = takeSome (wavSamples conv)
+  convPart @?= aifPart
+  -- conv and wav will be different bc of addl chunks like cue
+  -- but their formats will be the same
+  let !convFx = wavFmt conv
+  wfbNumChannels convFx @?= fromIntegral channels
+  let !wavFx = wavFmt wav
+  convFx @?= wavFx
+
+tryWavMono :: IO ()
+tryWavMono = do
+  (wavStereo, _) <- runGetFile (get @Wav) "testdata/sin_stereo.wav"
+  (wavMono, _) <- runGetFile (get @Wav) "testdata/sin_mono.wav"
+  let !leftStereoPart = takeSomeEvens (wavSamples wavStereo)
+  let !monoPart = takeSome (wavSamples wavMono)
+  monoPart @?= leftStereoPart
+
+testConvertSin :: TestTree
+testConvertSin = testCase "sin" $ do
+  tryAifToWav 1 "mono"
+  tryAifToWav 2 "stereo"
+  tryWavMono
+
+testConvert :: TestTree
+testConvert = testGroup "convert" [testConvertDx, testConvertSin]
 
 testScrapti :: TestTree
 testScrapti = testGroup "Scrapti" [testWav, testAiff, testSfont, testPti, testProject, testConvert, testOtherSizes]

@@ -1,6 +1,6 @@
 module Scrapti.Main (main) where
-import System.Exit (die)
 import System.Environment (getArgs)
+import System.Exit (die)
 
 convert :: FilePath -> FilePath -> IO ()
 convert _aiffPath _wavPath = do
