@@ -72,16 +72,16 @@ ghc-options:
 library:
   source-dirs: src
 
-# executables:
-#   scrapti-exe:
-#     main:                Main.hs
-#     source-dirs:         exe
-#     ghc-options:
-#     - -threaded
-#     - -rtsopts
-#     - -with-rtsopts=-N
-#     dependencies:
-#     - scrapti
+executables:
+  scrapti-exe:
+    main:                Main.hs
+    source-dirs:         exe
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - scrapti
 
 tests:
   scrapti-test:

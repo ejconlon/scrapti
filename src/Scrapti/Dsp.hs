@@ -134,11 +134,13 @@ combine off width one two =
 
 -- Cross fade:  | --------- PreStart Start PostStart PreEnd End ---- |
 -- Guarded to ensure inequalities are strict
+-- Width here is one-sided
 linearCrossFade :: (LiftedPrim a, Integral a) => Int -> Int -> Int -> Mod a a
 linearCrossFade width loopStart loopEnd = Mod $ \mm src -> do
   guardFade width loopStart loopEnd
   let !nc = mmNumChannels mm
       !sampWidth = nc * width
+      !sampTotDist = 2 * sampWidth
       !sampBetween = nc * (loopEnd - loopStart)
       !sampPreStart = nc * (loopStart - width)
       !sampPostStart = nc * (loopStart + width)
@@ -150,11 +152,11 @@ linearCrossFade width loopStart loopEnd = Mod $ \mm src -> do
           | i >= sampPreStart && i <= sampPostStart ->
             let !w = indexLiftedPrimArray src (i + sampBetween)
                 !dist = i - sampPreStart
-            in combine dist sampWidth v w
+            in combine dist sampTotDist v w
           | i >= sampPreEnd && i <= sampEnd ->
             let !w = indexLiftedPrimArray src (i - sampBetween)
                 !dist = i - sampPreEnd
-            in combine dist sampWidth w v
+            in combine dist sampTotDist w v
           | otherwise -> v
       !sz = sizeofLiftedPrimArray src
       !dest = generateLiftedPrimArray sz genElem
@@ -225,6 +227,6 @@ proxMod _ allMod = allMod
 
 applyModGeneric :: (forall a. (LiftedPrim a, Integral a) => Mod a a) -> PcmContainer -> Either DspErr PcmContainer
 applyModGeneric allMod con =
-  case getSampled (div (pmBitsPerSample (pcMeta con)) 8) of
+  case getSampled (pmBitsPerSample (pcMeta con)) of
     Nothing -> Left DspErrBadBitWidth
     Just (Sampled prox) -> applyMod (proxMod prox allMod) con

@@ -16,7 +16,7 @@ import Scrapti.Aiff (Aiff (..))
 import Scrapti.Binary (QuietArray (..), QuietLiftedArray (..))
 import Scrapti.Common (UnparsedBody (..), chunkHeaderSize, defaultLoopMarkNames, getChunkSizeLE, getExpectLabel,
                        guardChunk)
-import Scrapti.Convert (Neutral (..), aiffToNeutral, neutralToWav)
+import Scrapti.Convert (Neutral (..), aiffToNeutral, neutralToSampleWav, neutralToWav)
 import Scrapti.Riff (Chunk (..), KnownChunk (..), KnownListChunk (..), KnownOptChunk (..), labelRiff)
 import Scrapti.Sfont (Bag, Gen, InfoChunk (..), Inst, Mod, PdtaChunk (..), Phdr, Sdta (..), SdtaChunk (..), Sfont (..),
                       Shdr, labelSfbk)
@@ -394,6 +394,10 @@ testConvert = testCase "convert" $ do
   pc <- rethrow (wavToPcmContainer wav)
   pc @?= neCon ne
   assertReparses wav
+  -- Test that the sample wav works
+  let !width = 2500 -- double this is 0.1s of total fade
+  swav <- rethrow (neutralToSampleWav width ne)
+  assertReparses swav
 
 testScrapti :: TestTree
 testScrapti = testGroup "Scrapti" [testWav, testAiff, testSfont, testPti, testProject, testConvert, testOtherSizes]

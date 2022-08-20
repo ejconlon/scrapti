@@ -1,5 +1,5 @@
 include Makefile.base
 
 .PHONY: exe
-exe: build
-	stack exec -- scrapti-exe
+exe:
+	stack build --test --no-run-tests --exec scrapti-exe
