@@ -8,6 +8,7 @@ module Scrapti.Dsp
   , stereoFromMono
   , linearCrossFade
   , crop
+  , ModMeta (..)
   , Mod (..)
   , modId
   , modAndThen
@@ -36,7 +37,6 @@ getSampled = \case
   32 -> Just (Sampled (Proxy :: Proxy Int32LE))
   _ -> Nothing
 
-
 data DspErr =
     DspErrOddSamples
   | DspErrBadElemSize
@@ -52,12 +52,12 @@ instance Exception DspErr
 newtype Sel a = Sel { runSel :: LiftedPrimArray a -> Int -> a }
 
 selMonoLeft, selMonoRight :: LiftedPrim a => Sel a
-selMonoLeft = Sel $ \arr i -> indexLiftedPrimArray arr (div i 2)
-selMonoRight = Sel $ \arr i -> indexLiftedPrimArray arr (div i 2 + 1)
+selMonoLeft = Sel $ \arr i -> indexLiftedPrimArray arr (i * 2)
+selMonoRight = Sel $ \arr i -> indexLiftedPrimArray arr (i * 2 + 1)
 
 selMonoAvg :: (LiftedPrim a, Integral a, Bits a) => Sel a
 selMonoAvg = Sel $ \arr i ->
-  let !ix = div i 2
+  let !ix = i * 2
       !lval = indexLiftedPrimArray arr ix
       !rval = indexLiftedPrimArray arr (ix + 1)
       !halfLval = div lval 2
@@ -118,21 +118,23 @@ stereoFromMono = Mod $ \mm src -> do
 
 guardFade :: Int -> Int -> Int -> Either DspErr ()
 guardFade width loopStart loopEnd = do
-  if loopEnd <= loopStart ||
+  if width <= 0 ||
+     loopEnd <= loopStart ||
      loopStart <= loopStart - width ||
      loopStart + width <= loopStart ||
-     loopEnd - width <= loopStart + width
+     loopEnd <= loopEnd - width ||
+     loopEnd + width <= loopEnd
     then Left DspErrBadFade
     else Right ()
 
 combine :: Integral a => Int -> Int -> a -> a -> a
-combine off width one two =
-  let dist1 = fromIntegral off
-      dist2 = fromIntegral (width - off)
-      distTot = fromIntegral width
+combine intDistTot intDist1 one two =
+  let dist1 = fromIntegral intDist1
+      dist2 = fromIntegral (intDistTot - intDist1)
+      distTot = fromIntegral intDistTot
   in fromInteger (div (dist1 * fromIntegral one + dist2 * fromIntegral two) distTot)
 
--- Cross fade:  | --------- PreStart Start PostStart PreEnd End ---- |
+-- Cross fade:  | --------- PreStart Start PostStart PreEnd End PostEnd ---- |
 -- Guarded to ensure inequalities are strict
 -- Width here is one-sided
 linearCrossFade :: (LiftedPrim a, Integral a) => Int -> Int -> Int -> Mod a a
@@ -143,20 +145,29 @@ linearCrossFade width loopStart loopEnd = Mod $ \mm src -> do
       !sampTotDist = 2 * sampWidth
       !sampBetween = nc * (loopEnd - loopStart)
       !sampPreStart = nc * (loopStart - width)
+      !sampStart = nc * loopStart
       !sampPostStart = nc * (loopStart + width)
-      !sampPreEnd = nc * loopEnd
-      !sampEnd = nc * loopEnd
+      !sampPreEnd = nc * (loopEnd - width)
+      !sampEnd = nc * loopStart
+      !sampPostEnd = nc * (loopEnd + width)
+      !sampLast = sizeofLiftedPrimArray src - sampBetween
       genElem i =
         let !v = indexLiftedPrimArray src i
         in if
           | i >= sampPreStart && i <= sampPostStart ->
-            let !w = indexLiftedPrimArray src (i + sampBetween)
-                !dist = i - sampPreStart
-            in combine dist sampTotDist v w
-          | i >= sampPreEnd && i <= sampEnd ->
-            let !w = indexLiftedPrimArray src (i - sampBetween)
-                !dist = i - sampPreEnd
-            in combine dist sampTotDist w v
+            if i >= sampLast
+              then v
+              else
+                let !w = indexLiftedPrimArray src (i + sampBetween)
+                    f = combine sampTotDist (sampPostStart - i)
+                in if i < sampStart then f v w else f w v
+          | i >= sampPreEnd && i <= sampPostEnd ->
+            if i < sampBetween
+              then v
+              else
+                let !w = indexLiftedPrimArray src (i - sampBetween)
+                    f = combine sampTotDist (sampPostEnd - i)
+                in if i < sampEnd then f v w else f w v
           | otherwise -> v
       !sz = sizeofLiftedPrimArray src
       !dest = generateLiftedPrimArray sz genElem

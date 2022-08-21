@@ -3,13 +3,15 @@
 module Main (main) where
 
 import Control.Exception (Exception, throwIO)
-import Dahdit (Binary (..), ByteCount, ElementCount, Get, ShortByteString, StaticByteSized (..), StaticBytes, Word16LE,
-               Word8, byteSize, getExact, getSkip, getWord32LE, runGetFile, runGetIO, runPut, sizeofLiftedPrimArray)
+import Dahdit (Binary (..), ByteCount, ElementCount, Get, Int16LE (..), ShortByteString, StaticByteSized (..),
+               StaticBytes, Word16LE, Word8, byteSize, getExact, getSkip, getWord32LE, liftedPrimArrayFromList,
+               runGetFile, runGetIO, runPut, sizeofLiftedPrimArray)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Short as BSS
 import Data.Default (def)
 import Data.Foldable (for_, toList)
+import Data.Int (Int8)
 import Data.Maybe (fromMaybe)
 import Data.Primitive.ByteArray (indexByteArray, sizeofByteArray)
 import Data.Proxy (Proxy (..))
@@ -19,7 +21,8 @@ import qualified Scrapti.Aiff as Aiff
 import Scrapti.Binary (QuietArray (..), QuietLiftedArray (..))
 import Scrapti.Common (LoopMarks (..), UnparsedBody (..), chunkHeaderSize, defaultLoopMarkNames, defaultNoteNumber,
                        defineLoopMarks, getChunkSizeLE, getExpectLabel, guardChunk)
-import Scrapti.Convert (Neutral (..), aiffToNeutral, neutralToSampleWav, neutralToWav, wavToNeutral)
+import Scrapti.Convert (Neutral (..), aiffToNeutral, neutralMono, neutralToSampleWav, neutralToWav, wavToNeutral)
+import Scrapti.Dsp (ModMeta (..), PcmContainer (..), linearCrossFade, monoFromLeft, runMod)
 import Scrapti.Riff (Chunk (..), KnownChunk (..), KnownListChunk (..), KnownOptChunk (..), labelRiff)
 import Scrapti.Sfont (Bag, Gen, InfoChunk (..), Inst, Mod, PdtaChunk (..), Phdr, Sdta (..), SdtaChunk (..), Sfont (..),
                       Shdr, labelSfbk)
@@ -420,6 +423,12 @@ wavSamples wav =
       !sz = sizeofByteArray wavData
   in fmap (indexByteArray wavData) [0 .. sz - 1]
 
+neutralSamples :: Neutral -> [Word8]
+neutralSamples ne =
+  let !wavData = pcData (neCon ne)
+      !sz = sizeofByteArray wavData
+  in fmap (indexByteArray wavData) [0 .. sz - 1]
+
 wavFmt :: Wav -> WavFormatBody
 wavFmt wav = fmtBody where
   KnownChunk fmtBody = fromMaybe (error "no format") (lookupWavFormatChunk wav)
@@ -461,11 +470,16 @@ tryAifToWav channels variant = do
 
 tryWavMono :: IO ()
 tryWavMono = do
+  -- Read stereo + mono versions of same wav, assert their samples are correct
   (wavStereo, _) <- runGetFile (get @Wav) "testdata/sin_stereo.wav"
   (wavMono, _) <- runGetFile (get @Wav) "testdata/sin_mono.wav"
   let !leftStereoPart = takeSomeEvens (wavSamples wavStereo)
   let !monoPart = takeSome (wavSamples wavMono)
   monoPart @?= leftStereoPart
+  -- Now make the stereo wav mono and assert the same
+  neExtract <- rethrow (wavToNeutral wavStereo Nothing >>= neutralMono)
+  let !extractPart = takeSome (neutralSamples neExtract)
+  extractPart @?= monoPart
 
 testConvertSin :: TestTree
 testConvertSin = testCase "sin" $ do
@@ -496,11 +510,87 @@ testConvertLoop = testCase "loop" $ do
   let !actualSampleLoopMarks = neLoopMarks sampleNe
   actualSampleLoopMarks @?= Just expectedSampleLoopMarks
 
+testConvertFade :: TestTree
+testConvertFade = testCase "fade" $ do
+  (wav, _) <- runGetFile (get @Wav) "testdata/fadeout_post.wav"
+  con <- rethrow (wavToPcmContainer wav)
+  let mkLoopMarks = defineLoopMarks @Int defaultLoopMarkNames . fmap (* 4410)
+      !loopMarks = mkLoopMarks (LoopMarks 0 3 6 10)
+      !marks = Seq.fromList (fmap snd (toList loopMarks))
+  let !ne = Neutral { neCon = con, neLoopMarks = Just loopMarks, neMarks = marks }
+  -- Convert and write out for inspection
+  let !fullWav = neutralToWav defaultNoteNumber ne
+  BS.writeFile "testoutput/fadeout_full.wav" (BSS.fromShort (runPut (put fullWav)))
+  sampleWav <- rethrow (neutralToSampleWav 1000 defaultNoteNumber ne)
+  BS.writeFile "testoutput/fadeout_sample.wav" (BSS.fromShort (runPut (put sampleWav)))
+
+testConvertDxFade :: TestTree
+testConvertDxFade = testCase "dx fade" $ do
+  (wav, _) <- runGetFile (get @Wav) "testdata/DX-EPiano1-C1.wav"
+  ne <- rethrow (wavToNeutral wav (Just defaultLoopMarkNames))
+  neMon <- rethrow (neutralMono ne)
+  -- Convert and write out for inspection
+  let !fullWav = neutralToWav defaultNoteNumber neMon
+  BS.writeFile "testoutput/dx_full.wav" (BSS.fromShort (runPut (put fullWav)))
+  sampleWav <- rethrow (neutralToSampleWav 2500 defaultNoteNumber neMon)
+  BS.writeFile "testoutput/dx_sample.wav" (BSS.fromShort (runPut (put sampleWav)))
+
 testConvert :: TestTree
-testConvert = testGroup "convert" [testConvertDx, testConvertSin, testConvertLoop]
+testConvert = testGroup "convert" [testConvertDx, testConvertSin, testConvertLoop, testConvertFade, testConvertDxFade]
+
+testDspMono :: TestTree
+testDspMono = testCase "mono" $ do
+  let !larr1 = liftedPrimArrayFromList @Int16LE [0, 1, 2, 3, 4, 5]
+      !larr2 = liftedPrimArrayFromList @Int16LE [0, 2, 4]
+      !mm1 = ModMeta { mmNumChannels = 2, mmBitsPerSample = 16, mmSampleRate = 44100 }
+      !mm2 = mm1 { mmNumChannels = 1 }
+  (!mmx, !larrx) <- rethrow (runMod monoFromLeft mm1 larr1)
+  mmx @?= mm2
+  larrx @?= larr2
+
+testDspFadeOne :: TestTree
+testDspFadeOne = testCase "fade one" $ do
+  let !larr1 = liftedPrimArrayFromList @Int8 [5, 5, 5, 5, 5, 5, 5, 5, 5, 1, 1, 1, 1, 1, 1, 1, 1]
+  --                                                               ^                       ^
+      !width = 1
+      !loopStart = 7
+      !loopEnd = 15
+      !larr2 = liftedPrimArrayFromList @Int8 [5, 5, 5, 5, 5, 5, 5, 3, 5, 1, 1, 1, 1, 1, 5, 3, 1]
+  --                                                               ^                       ^
+      !mm = ModMeta { mmNumChannels = 1, mmBitsPerSample = 8, mmSampleRate = 44100 }
+  (!mmx, !larrx) <- rethrow (runMod (linearCrossFade width loopStart loopEnd) mm larr1)
+  mmx @?= mm
+  larrx @?= larr2
+
+testDspFadeSome :: TestTree
+testDspFadeSome = testCase "fade some" $ do
+  let !larr1 = liftedPrimArrayFromList @Int8 [5, 5, 5, 5, 5, 5, 5, 5, 5, 1, 1, 1, 1, 1, 1, 1, 1]
+      !width = 3
+      !loopStart = 7
+      !loopEnd = 15
+      !larr2 = liftedPrimArrayFromList @Int8 [5, 5, 5, 5, 5, 4, 3, 3, 3, 1, 1, 1, 5, 4, 3, 3, 2]
+      !mm = ModMeta { mmNumChannels = 1, mmBitsPerSample = 8, mmSampleRate = 44100 }
+  (!mmx, !larrx) <- rethrow (runMod (linearCrossFade width loopStart loopEnd) mm larr1)
+  mmx @?= mm
+  larrx @?= larr2
+
+testDspFadeWider :: TestTree
+testDspFadeWider = testCase "fade wider" $ do
+  let !larr1 = liftedPrimArrayFromList @Int16LE [5, 5, 5, 5, 5, 5, 5, 5, 5, 1, 1, 1, 1, 1, 1, 1, 1]
+      !width = 3
+      !loopStart = 7
+      !loopEnd = 15
+      !larr2 = liftedPrimArrayFromList @Int16LE [5, 5, 5, 5, 5, 4, 3, 3, 3, 1, 1, 1, 5, 4, 3, 3, 2]
+      !mm = ModMeta { mmNumChannels = 1, mmBitsPerSample = 16, mmSampleRate = 44100 }
+  (!mmx, !larrx) <- rethrow (runMod (linearCrossFade width loopStart loopEnd) mm larr1)
+  mmx @?= mm
+  larrx @?= larr2
+
+testDsp :: TestTree
+testDsp = testGroup "dsp" [testDspMono, testDspFadeOne, testDspFadeSome, testDspFadeWider]
 
 testScrapti :: TestTree
-testScrapti = testGroup "Scrapti" [testWav, testAiff, testSfont, testPti, testProject, testConvert, testOtherSizes]
+testScrapti = testGroup "Scrapti" [testWav, testAiff, testSfont, testPti, testProject, testConvert, testDsp, testOtherSizes]
 
 main :: IO ()
 main = defaultMain testScrapti
