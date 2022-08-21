@@ -30,6 +30,7 @@ module Scrapti.Wav
   , wavUseMarkers
   , wavUseLoopPoints
   , wavAddChunks
+  , wavGatherMarkers
   ) where
 
 import Control.Monad (unless)
@@ -38,6 +39,8 @@ import Dahdit (Binary (..), ByteCount, ByteSized (..), ShortByteString, StaticBy
                getRemainingSeq, getRemainingString, getSeq, putByteArray, putByteString, putSeq, putWord8)
 import qualified Data.ByteString.Short as BSS
 import Data.Default (Default (..))
+import Data.Foldable (toList)
+import Data.Maybe (fromMaybe)
 import Data.Primitive (sizeofByteArray)
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
@@ -45,8 +48,8 @@ import Data.String (IsString)
 import GHC.Generics (Generic)
 import Scrapti.Binary (QuietArray (..))
 import Scrapti.Common (ConvertErr, KnownLabel (..), Label, LoopMarkPoints, LoopMarks (..), SimpleMarker (..),
-                       UnparsedBody (..), bssInit, bssLast, countSize, getChunkSizeLE, getExpectLabel, guardChunk,
-                       labelSize, padCount, putChunkSizeLE)
+                       UnparsedBody (..), bssInit, bssLast, countSize, dedupeSimpleMarkers, getChunkSizeLE,
+                       getExpectLabel, guardChunk, labelSize, padCount, putChunkSizeLE)
 import Scrapti.Dsp (PcmContainer (..), PcmMeta (..))
 import Scrapti.Riff (Chunk (..), ChunkLabel (..), KnownChunk (..), KnownListChunk (..), labelRiff, peekChunkLabel)
 
@@ -192,6 +195,12 @@ instance ByteSized WavAdtlData where
     WavAdtlDataLabl bs -> byteSize bs
     WavAdtlDataNote bs -> byteSize bs
     WavAdtlDataLtxt bs -> byteSize bs
+
+wadString :: WavAdtlData -> ShortByteString
+wadString = \case
+  WavAdtlDataLabl (PaddedString bs) -> bs
+  WavAdtlDataNote (PaddedString bs) -> bs
+  WavAdtlDataLtxt (PaddedString bs) -> bs
 
 data WavAdtlElem = WavAdtlElem
   { waeCueId :: !Word32LE
@@ -442,6 +451,18 @@ lookupWavDataChunk w =
     Just (WavChunkData x) -> Just x
     _ -> Nothing
 
+lookupWavCueChunk :: Wav -> Maybe WavCueChunk
+lookupWavCueChunk w =
+  case lookupWavChunk (\case { WavChunkCue _ -> True; _ -> False }) w of
+    Just (WavChunkCue x) -> Just x
+    _ -> Nothing
+
+lookupWavAdtlChunk :: Wav -> Maybe WavAdtlChunk
+lookupWavAdtlChunk w =
+  case lookupWavChunk (\case { WavChunkAdtl _ -> True; _ -> False }) w of
+    Just (WavChunkAdtl x) -> Just x
+    _ -> Nothing
+
 wavToPcmContainer :: Wav -> Either ConvertErr PcmContainer
 wavToPcmContainer wav = do
   KnownChunk fmtBody <- guardChunk "format" (lookupWavFormatChunk wav)
@@ -503,3 +524,16 @@ wavUseLoopPoints sr note (LoopMarks _ (startId, loopStart) (_, loopEnd) _) =
 
 wavAddChunks :: Seq WavChunk -> Wav -> Wav
 wavAddChunks chunks wav = wav { wavChunks = wavChunks wav <> chunks }
+
+wavGatherMarkers :: Wav -> Seq SimpleMarker
+wavGatherMarkers wav = fromMaybe Seq.empty $ do
+  KnownChunk cueBody <- lookupWavCueChunk wav
+  KnownListChunk adtlElems <- lookupWavAdtlChunk wav
+  let !cues = fmap (\wcp -> (wcpPointId wcp, wcpSampleStart wcp)) (toList (wcbPoints cueBody))
+      !names = fmap (\wae -> (waeCueId wae, wadString (waeData wae))) (toList adtlElems)
+      !marks = Seq.fromList $ do
+        (pid, ss) <- cues
+        case lookup pid names of
+          Nothing -> []
+          Just nm -> [SimpleMarker nm (unWord32LE ss)]
+  pure $! dedupeSimpleMarkers marks

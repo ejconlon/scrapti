@@ -5,10 +5,11 @@ module Main (main) where
 import Control.Exception (Exception, throwIO)
 import Dahdit (Binary (..), ByteCount, ElementCount, Get, ShortByteString, StaticByteSized (..), StaticBytes, Word16LE,
                Word8, byteSize, getExact, getSkip, getWord32LE, runGetFile, runGetIO, runPut, sizeofLiftedPrimArray)
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Short as BSS
 import Data.Default (def)
-import Data.Foldable (for_)
+import Data.Foldable (for_, toList)
 import Data.Maybe (fromMaybe)
 import Data.Primitive.ByteArray (indexByteArray, sizeofByteArray)
 import Data.Proxy (Proxy (..))
@@ -16,9 +17,9 @@ import qualified Data.Sequence as Seq
 import Scrapti.Aiff (Aiff (..), AiffDataBody (..), lookupAiffDataChunk)
 import qualified Scrapti.Aiff as Aiff
 import Scrapti.Binary (QuietArray (..), QuietLiftedArray (..))
-import Scrapti.Common (UnparsedBody (..), chunkHeaderSize, defaultLoopMarkNames, getChunkSizeLE, getExpectLabel,
-                       guardChunk)
-import Scrapti.Convert (Neutral (..), aiffToNeutral, neutralToSampleWav, neutralToWav)
+import Scrapti.Common (LoopMarks (..), UnparsedBody (..), chunkHeaderSize, defaultLoopMarkNames, defaultNoteNumber,
+                       defineLoopMarks, getChunkSizeLE, getExpectLabel, guardChunk)
+import Scrapti.Convert (Neutral (..), aiffToNeutral, neutralToSampleWav, neutralToWav, wavToNeutral)
 import Scrapti.Riff (Chunk (..), KnownChunk (..), KnownListChunk (..), KnownOptChunk (..), labelRiff)
 import Scrapti.Sfont (Bag, Gen, InfoChunk (..), Inst, Mod, PdtaChunk (..), Phdr, Sdta (..), SdtaChunk (..), Sfont (..),
                       Shdr, labelSfbk)
@@ -37,6 +38,7 @@ import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, testCase, (@?=))
+-- import Text.Pretty.Simple (pPrint)
 
 rethrow :: Exception e => Either e a -> IO a
 rethrow = either throwIO pure
@@ -392,14 +394,19 @@ testConvertDx = testCase "DX" $ do
   (aif, _) <- runGetIO get bs
   ne <- rethrow (aiffToNeutral 44100 aif (Just defaultLoopMarkNames))
   -- Test that a standard translation of the wav works
-  let !wav = neutralToWav ne
+  let !wav = neutralToWav defaultNoteNumber ne
   pc <- rethrow (wavToPcmContainer wav)
   pc @?= neCon ne
   assertReparses wav
+  xne <- rethrow (wavToNeutral wav (Just defaultLoopMarkNames))
+  xne @?= ne
   -- Test that the sample wav works
   let !width = 2500 -- double this is 0.1s of total fade
-  swav <- rethrow (neutralToSampleWav width ne)
+  swav <- rethrow (neutralToSampleWav width defaultNoteNumber ne)
   assertReparses swav
+  -- TODO
+  -- yne <- rethrow (wavToNeutral swav (Just defaultLoopMarkNames))
+  -- yne @?= ne
 
 aifSamples :: Aiff -> [Word8]
 aifSamples aif =
@@ -439,7 +446,7 @@ tryAifToWav channels variant = do
   (aif, _) <- runGetFile (get @Aiff) ("testdata/sin_" ++ variant ++ ".aifc")
   (wav, _) <- runGetFile (get @Wav) ("testdata/sin_" ++ variant ++ ".wav")
   ne <- rethrow (aiffToNeutral 44100 aif Nothing)
-  let !conv = neutralToWav ne
+  let !conv = neutralToWav defaultNoteNumber ne
   let !aifPart = takeSome (aifSamples aif)
   let !wavPart = takeSome (wavSamples wav)
   wavPart @?= aifPart
@@ -466,8 +473,31 @@ testConvertSin = testCase "sin" $ do
   tryAifToWav 2 "stereo"
   tryWavMono
 
+testConvertLoop :: TestTree
+testConvertLoop = testCase "loop" $ do
+  (wav, _) <- runGetFile (get @Wav) "testdata/sin_mono.wav"
+  con <- rethrow (wavToPcmContainer wav)
+  let mkLoopMarks = defineLoopMarks @Int defaultLoopMarkNames . fmap (* 6000)
+      !loopMarks = mkLoopMarks (LoopMarks 1 2 3 4)
+      !marks = Seq.fromList (fmap snd (toList loopMarks))
+  let !ne = Neutral { neCon = con, neLoopMarks = Just loopMarks, neMarks = marks }
+  -- Convert and write out for inspection
+  let !fullWav = neutralToWav defaultNoteNumber ne
+  BS.writeFile "testoutput/sin_mono_full.wav" (BSS.fromShort (runPut (put fullWav)))
+  sampleWav <- rethrow (neutralToSampleWav 2500 defaultNoteNumber ne)
+  BS.writeFile "testoutput/sin_mono_sample.wav" (BSS.fromShort (runPut (put sampleWav)))
+  -- Test full wav marks
+  fullNe <- rethrow (wavToNeutral fullWav (Just defaultLoopMarkNames))
+  let !actualFullLoopMarks = neLoopMarks fullNe
+  actualFullLoopMarks @?= Just loopMarks
+  -- Test sample wav marks
+  let !expectedSampleLoopMarks = mkLoopMarks (LoopMarks 0 1 2 2)
+  sampleNe <- rethrow (wavToNeutral sampleWav (Just defaultLoopMarkNames))
+  let !actualSampleLoopMarks = neLoopMarks sampleNe
+  actualSampleLoopMarks @?= Just expectedSampleLoopMarks
+
 testConvert :: TestTree
-testConvert = testGroup "convert" [testConvertDx, testConvertSin]
+testConvert = testGroup "convert" [testConvertDx, testConvertSin, testConvertLoop]
 
 testScrapti :: TestTree
 testScrapti = testGroup "Scrapti" [testWav, testAiff, testSfont, testPti, testProject, testConvert, testOtherSizes]

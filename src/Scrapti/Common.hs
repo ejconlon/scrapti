@@ -26,8 +26,10 @@ module Scrapti.Common
   , LoopMarkNames
   , LoopMarkPoints
   , defaultLoopMarkNames
+  , defineLoopMarks
   , findMark
   , findLoopMarks
+  , recallLoopMarkNames
   , defaultNoteNumber
   , adjustMarker
   , adjustLoopPoints
@@ -154,6 +156,13 @@ type LoopMarkPoints = LoopMarks (Int, SimpleMarker)
 defaultLoopMarkNames :: LoopMarkNames
 defaultLoopMarkNames = LoopMarks "Start" "LoopStart" "LoopEnd" "End"
 
+defineLoopMarks :: Integral a => LoopMarkNames -> LoopMarks a -> LoopMarkPoints
+defineLoopMarks (LoopMarks nw nx ny nz) (LoopMarks pw px py pz) = LoopMarks
+  (0, SimpleMarker nw (fromIntegral pw))
+  (1, SimpleMarker nx (fromIntegral px))
+  (2, SimpleMarker ny (fromIntegral py))
+  (3, SimpleMarker nz (fromIntegral pz))
+
 findMark :: ShortByteString -> Seq SimpleMarker -> Either ConvertErr (Int, SimpleMarker)
 findMark name marks =
   case Seq.findIndexL (\sm -> smName sm == name) marks of
@@ -162,6 +171,9 @@ findMark name marks =
 
 findLoopMarks :: LoopMarkNames -> Seq SimpleMarker -> Either ConvertErr LoopMarkPoints
 findLoopMarks names marks = traverse (`findMark` marks) names
+
+recallLoopMarkNames :: LoopMarkPoints -> LoopMarkNames
+recallLoopMarkNames = fmap (smName . snd)
 
 -- | Midi note C5 is default note
 defaultNoteNumber :: Int

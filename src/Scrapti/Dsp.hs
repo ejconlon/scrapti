@@ -174,7 +174,7 @@ crop start end = Mod $ \mm src -> do
   let !nc = mmNumChannels mm
       !sampStart = nc * start
       !sampEnd = nc * end
-      !dest = cloneLiftedPrimArray src sampStart sampEnd
+      !dest = cloneLiftedPrimArray src sampStart (sampEnd - sampStart)
   Right (mm, dest)
 
 data PcmMeta = PcmMeta

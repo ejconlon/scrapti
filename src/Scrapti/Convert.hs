@@ -3,6 +3,7 @@
 module Scrapti.Convert
   ( Neutral (..)
   , aiffToNeutral
+  , wavToNeutral
   , neutralToWav
   , neutralMono
   , neutralCrossFade
@@ -10,13 +11,15 @@ module Scrapti.Convert
   , neutralToSampleWav
   ) where
 
-import Dahdit (LiftedPrim, Seq)
+import Dahdit (LiftedPrim, Seq (..))
 import qualified Data.Sequence as Seq
 import Scrapti.Aiff (Aiff, aiffGatherMarkers, aiffToPcmContainer)
-import Scrapti.Common (ConvertErr (..), LoopMarkNames, LoopMarkPoints, LoopMarks (..), SimpleMarker (..),
-                       adjustLoopPoints, adjustMarker, findLoopMarks)
-import Scrapti.Dsp (Mod, PcmContainer, applyMod, applyModGeneric, crop, ensureMonoFromLeft, linearCrossFade)
-import Scrapti.Wav (Wav, WavChunk (..), wavAddChunks, wavFromPcmContainer, wavUseMarkers)
+import Scrapti.Common (ConvertErr (..), LoopMarkNames, LoopMarkPoints, LoopMarks (..), SimpleMarker (..), adjustMarker,
+                       findLoopMarks, recallLoopMarkNames)
+import Scrapti.Dsp (Mod, PcmContainer (..), PcmMeta (..), applyMod, applyModGeneric, crop, ensureMonoFromLeft,
+                    linearCrossFade)
+import Scrapti.Wav (Wav, WavChunk (..), wavAddChunks, wavFromPcmContainer, wavGatherMarkers, wavToPcmContainer,
+                    wavUseLoopPoints, wavUseMarkers)
 
 convertMod :: (LiftedPrim a, LiftedPrim b) => Mod a b -> PcmContainer -> Either ConvertErr PcmContainer
 convertMod modx con = either (Left . ConvertErrDsp) Right (applyMod modx con)
@@ -38,11 +41,19 @@ aiffToNeutral sr aiff mayNames = do
   neLoopMarks <- maybe (pure Nothing) (fmap Just . (`findLoopMarks` neMarks)) mayNames
   pure $! Neutral { .. }
 
-neutralToWav :: Neutral -> Wav
-neutralToWav (Neutral {..}) =
-  let !maySampleChunk = Nothing -- error "TODO"
-      (!wcc, !wac) = wavUseMarkers neMarks
-      !chunks = Seq.fromList ([WavChunkCue wcc, WavChunkAdtl wac] ++ maybe [] pure maySampleChunk)
+wavToNeutral :: Wav -> Maybe LoopMarkNames -> Either ConvertErr Neutral
+wavToNeutral wav mayNames = do
+  neCon <- wavToPcmContainer wav
+  let !neMarks = wavGatherMarkers wav
+  neLoopMarks <- maybe (pure Nothing) (fmap Just . (`findLoopMarks` neMarks)) mayNames
+  pure $! Neutral { .. }
+
+neutralToWav :: Int -> Neutral -> Wav
+neutralToWav note (Neutral {..}) =
+  let !sr = pmSampleRate (pcMeta neCon)
+      !maySampleChunk = fmap (WavChunkSample . wavUseLoopPoints sr note) neLoopMarks
+      !markChunks = if Seq.null neMarks then [] else let (!wcc, !wac) = wavUseMarkers neMarks in [WavChunkCue wcc, WavChunkAdtl wac]
+      !chunks = Seq.fromList (markChunks ++ maybe [] pure maySampleChunk)
       !wav = wavFromPcmContainer neCon
   in wavAddChunks chunks wav
 
@@ -61,17 +72,18 @@ neutralCrossFade width ne@(Neutral {..}) = do
 
 neutralCropLoop :: Neutral -> Either ConvertErr Neutral
 neutralCropLoop (Neutral {..}) = do
-  -- TODO need to adjust marks and loop markers for the crop
   initLoopMarks <- maybe (Left ConvertErrNoLoopMarks) Right neLoopMarks
-  let LoopMarks (_, !start) _ (_, !loopEnd) _ = initLoopMarks
+  let !names = recallLoopMarkNames initLoopMarks
+      LoopMarks (_, !start) _ (_, !loopEnd) (_, !end) = initLoopMarks
       !startPos = smPosition start
       !loopEndPos = smPosition loopEnd
-      !adjLoopMarks = adjustLoopPoints (-startPos) initLoopMarks
-      !finalLoopMarks = adjLoopMarks { lmEnd = lmLoopEnd adjLoopMarks }
+      !endPos = smPosition end
       !filteredMarks = Seq.filter (\sm -> let p = smPosition sm in p >= startPos && p <= loopEndPos) neMarks
-      !finalMarks = fmap (adjustMarker (-startPos)) filteredMarks
+      !withEndMarks = if endPos <= loopEndPos then filteredMarks else filteredMarks :|> end { smPosition = loopEndPos }
+      !finalMarks = fmap (adjustMarker (-startPos)) withEndMarks
+  !finalLoopMarks <- findLoopMarks names finalMarks
   con' <- convertModGeneric (crop (fromIntegral startPos) (fromIntegral loopEndPos)) neCon
   pure $! Neutral { neCon = con', neLoopMarks = Just finalLoopMarks, neMarks = finalMarks }
 
-neutralToSampleWav :: Int -> Neutral -> Either ConvertErr Wav
-neutralToSampleWav width ne = fmap neutralToWav (neutralMono ne >>= neutralCrossFade width >>= neutralCropLoop)
+neutralToSampleWav :: Int -> Int -> Neutral -> Either ConvertErr Wav
+neutralToSampleWav width note ne = fmap (neutralToWav note) (neutralMono ne >>= neutralCrossFade width >>= neutralCropLoop)
