@@ -1,0 +1,8 @@
+<region>
+lokey=0
+hikey=127
+pitch_keycenter=36
+loop_mode=loop_continuous
+loop_start=11181
+loop_end=33096
+sample=DX-EPiano1-C1.wav

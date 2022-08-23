@@ -2,7 +2,6 @@
 
 module Main (main) where
 
-import Control.Exception (Exception, throwIO)
 import Dahdit (Binary (..), ByteCount, ElementCount, Get, Int16LE (..), ShortByteString, StaticByteSized (..),
                StaticBytes, Word16LE, Word8, byteSize, getExact, getSkip, getWord32LE, liftedPrimArrayFromList,
                runGetFile, runGetIO, runPut, sizeofLiftedPrimArray)
@@ -20,7 +19,7 @@ import Scrapti.Aiff (Aiff (..), AiffDataBody (..), lookupAiffDataChunk)
 import qualified Scrapti.Aiff as Aiff
 import Scrapti.Binary (QuietArray (..), QuietLiftedArray (..))
 import Scrapti.Common (LoopMarks (..), UnparsedBody (..), chunkHeaderSize, defaultLoopMarkNames, defaultNoteNumber,
-                       defineLoopMarks, getChunkSizeLE, getExpectLabel, guardChunk)
+                       defineLoopMarks, getChunkSizeLE, getExpectLabel, guardChunk, rethrow)
 import Scrapti.Convert (Neutral (..), aiffToNeutral, neutralMono, neutralToSampleWav, neutralToWav, wavToNeutral)
 import Scrapti.Dsp (ModMeta (..), PcmContainer (..), linearCrossFade, monoFromLeft, runMod)
 import Scrapti.Riff (Chunk (..), KnownChunk (..), KnownListChunk (..), KnownOptChunk (..), labelRiff)
@@ -42,9 +41,6 @@ import System.IO.Temp (withSystemTempDirectory)
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, testCase, (@?=))
 -- import Text.Pretty.Simple (pPrint)
-
-rethrow :: Exception e => Either e a -> IO a
-rethrow = either throwIO pure
 
 drumFmtOffset :: ByteCount
 drumFmtOffset = 12

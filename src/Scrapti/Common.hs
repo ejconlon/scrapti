@@ -1,7 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Scrapti.Common
-  ( Label
+  ( rethrow
+  , Label
   , labelSize
   , countSize
   , getExpectLabel
@@ -35,7 +36,7 @@ module Scrapti.Common
   , adjustLoopPoints
   ) where
 
-import Control.Exception (Exception)
+import Control.Exception (Exception, throwIO)
 import Control.Monad (unless)
 import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, Put, StaticBytes, Word32BE, Word32LE, Word8, getExpect,
                getRemainingString, putByteString)
@@ -47,6 +48,9 @@ import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 import Data.Word (Word32)
 import Scrapti.Dsp (DspErr)
+
+rethrow :: Exception e => Either e a -> IO a
+rethrow = either throwIO pure
 
 type Label = StaticBytes 4
 
@@ -152,6 +156,7 @@ data LoopMarks a = LoopMarks
 
 type LoopMarkNames = LoopMarks ShortByteString
 type LoopMarkPoints = LoopMarks (Int, SimpleMarker)
+type LoopMarkOffsets = LoopMarks Int
 
 defaultLoopMarkNames :: LoopMarkNames
 defaultLoopMarkNames = LoopMarks "Start" "LoopStart" "LoopEnd" "End"

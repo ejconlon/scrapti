@@ -9,13 +9,15 @@ module Scrapti.Convert
   , neutralCrossFade
   , neutralCropLoop
   , neutralToSampleWav
+  , readPtiWav
   ) where
 
-import Dahdit (LiftedPrim, Seq (..))
+import Control.Monad (unless)
+import Dahdit (Int16LE, LiftedPrim, LiftedPrimArray (..), Seq (..), get, runGetFile)
 import qualified Data.Sequence as Seq
 import Scrapti.Aiff (Aiff, aiffGatherMarkers, aiffToPcmContainer)
 import Scrapti.Common (ConvertErr (..), LoopMarkNames, LoopMarkPoints, LoopMarks (..), SimpleMarker (..), adjustMarker,
-                       findLoopMarks, recallLoopMarkNames)
+                       findLoopMarks, recallLoopMarkNames, rethrow)
 import Scrapti.Dsp (Mod, PcmContainer (..), PcmMeta (..), applyMod, applyModGeneric, crop, ensureMonoFromLeft,
                     linearCrossFade)
 import Scrapti.Wav (Wav, WavChunk (..), wavAddChunks, wavFromPcmContainer, wavGatherMarkers, wavToPcmContainer,
@@ -87,3 +89,14 @@ neutralCropLoop (Neutral {..}) = do
 
 neutralToSampleWav :: Int -> Int -> Neutral -> Either ConvertErr Wav
 neutralToSampleWav width note ne = fmap (neutralToWav note) (neutralMono ne >>= neutralCrossFade width >>= neutralCropLoop)
+
+readPtiWav :: Maybe LoopMarkNames -> FilePath -> IO (LiftedPrimArray Int16LE, Maybe LoopMarkPoints)
+readPtiWav mayNames fp = do
+  (wav, _) <- runGetFile (get @Wav) fp
+  ne <- rethrow (wavToNeutral wav mayNames)
+  let !meta = pcMeta (neCon ne)
+  unless (pmNumChannels meta == 1 && pmSampleRate meta == 44100 && pmBitsPerSample meta == 16)
+    (fail ("bad pti wav: " ++ fp))
+  let !arr = LiftedPrimArray (pcData (neCon ne))
+      !points = neLoopMarks ne
+  pure (arr, points)
