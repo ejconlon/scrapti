@@ -1,12 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Scrapti.Patches.Common where
+module Scrapti.Midi.Notes where
 
-import Data.Sequence (Seq)
-import Data.Set (Set)
+import Data.Char (isDigit)
 import Data.Text (Text)
 import qualified Data.Text as T
-import Data.Char (isDigit)
 import Text.Read (readMaybe)
 
 data NoteName =
@@ -38,7 +36,7 @@ octNoteIsMidi :: OctNote -> Bool
 octNoteIsMidi (OctNote (Octave oct) name) =
   if
     | oct == -1 -> name == NoteNameC
-    | oct == 9 -> name <= NoteNameGS
+    | oct == 9 -> name <= NoteNameG
     | otherwise -> oct >= 0 && oct <= 8
 
 -- | An integral note type that can represent notes outside the MIDI scale.
@@ -46,8 +44,13 @@ newtype LinNote = LinNote { unLinNote :: Int }
   deriving stock (Show)
   deriving newtype (Eq, Ord)
 
+-- Midi notes are between 0 (C-1) and 127 (G9)
+-- Piano notes are between 21 (A0) and 108 (C8)
 linIsMidiNote :: LinNote -> Bool
 linIsMidiNote (LinNote n) = n >= 0 && n < 127
+
+linFreq :: LinNote -> Double
+linFreq (LinNote n) = 440 * (2 ** ((fromIntegral n - 69) / 12))
 
 newtype Interval = Interval { unInterval :: Int }
   deriving stock (Show)
@@ -72,16 +75,6 @@ octAddInterval i = linToOct . linAddInterval i . octToLin
 
 noteAssoc :: OctNote -> NoteAssoc
 noteAssoc oct = NoteAssoc oct (octToLin oct)
-
-newtype Scale = Scale
-  { scaleIntervals :: Seq Interval
-  } deriving stock (Show)
-    deriving newtype (Eq)
-
-data ScaleClassifier = ScaleClassifier
-  { scRoot :: !NoteName
-  , scMembers :: !(Set NoteName)
-  } deriving stock (Eq, Show)
 
 parseNoteName :: Text -> Maybe (NoteName, Int)
 parseNoteName = \case
@@ -110,7 +103,7 @@ parseNoteName = \case
 
 parseNote :: Text -> Maybe OctNote
 parseNote ns = do
-  let (noteRaw, octRaw) = T.break isDigit ns
+  let (noteRaw, octRaw) = T.break (\c -> isDigit c || c == '-') ns
   (nn, off) <- parseNoteName noteRaw
   octStart <- readMaybe @Int (T.unpack octRaw)
   let !oct = Octave (octStart + off)

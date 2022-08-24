@@ -30,8 +30,10 @@ library
       Scrapti.Convert
       Scrapti.Dsp
       Scrapti.Main
+      Scrapti.Midi.Msg
+      Scrapti.Midi.Notes
+      Scrapti.Midi.Time
       Scrapti.Patch
-      Scrapti.Patches.Common
       Scrapti.Patches.ConvertPti
       Scrapti.Patches.ConvertSfz
       Scrapti.Patches.Inst
