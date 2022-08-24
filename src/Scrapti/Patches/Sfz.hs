@@ -16,7 +16,7 @@ module Scrapti.Patches.Sfz
 import Control.Monad (unless)
 import Control.Monad.Except (Except, MonadError (..), runExcept)
 import Control.Monad.State.Strict (MonadState (..), StateT (..))
-import Data.Char (isDigit)
+import Data.Char (isAlpha, isDigit)
 import Data.Foldable (for_, toList)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -145,12 +145,12 @@ readM :: Read a => (a -> b) -> Text -> SfzParser b
 readM f t =
   let s = T.unpack t
   in case readEither s of
-    Left err -> fail ("failed to read attr val " ++ s ++ ": " ++ err)
+    Left err -> fail ("Failed to read attr val " ++ s ++ ": " ++ err)
     Right val -> pure $! f val
 
 parseValM :: Text -> SfzParser SfzVal
 parseValM valStr
-  | T.elem '.' valStr = readM SfzValFloat valStr
+  | T.elem '.' valStr && not (T.any isAlpha valStr) = readM SfzValFloat valStr
   | not (T.null valStr) && isDigit (T.head valStr) = readM SfzValInt valStr
   | otherwise = pure $! SfzValText valStr
 
