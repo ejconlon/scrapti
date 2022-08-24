@@ -31,7 +31,9 @@ library
       Scrapti.Dsp
       Scrapti.Main
       Scrapti.Patch
-      Scrapti.Patches.Convert
+      Scrapti.Patches.Common
+      Scrapti.Patches.ConvertPti
+      Scrapti.Patches.ConvertSfz
       Scrapti.Patches.Inst
       Scrapti.Patches.Sfz
       Scrapti.Riff

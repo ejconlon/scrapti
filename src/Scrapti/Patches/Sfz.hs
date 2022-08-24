@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+
 module Scrapti.Patches.Sfz
   ( SfzVal (..)
   , sfzValText

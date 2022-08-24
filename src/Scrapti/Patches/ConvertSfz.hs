@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module Scrapti.Patches.Convert
+module Scrapti.Patches.ConvertSfz
   ( PatchErr (..)
   , sfzToInst
   , SfzSample (..)
