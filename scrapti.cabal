@@ -37,6 +37,7 @@ library
       Scrapti.Patches.ConvertPti
       Scrapti.Patches.ConvertSfz
       Scrapti.Patches.Inst
+      Scrapti.Patches.Loader
       Scrapti.Patches.Sfz
       Scrapti.Riff
       Scrapti.Sfont
