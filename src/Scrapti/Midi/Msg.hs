@@ -9,9 +9,13 @@ module Scrapti.Midi.Msg
   , Pressure (..)
   , ProgramNum (..)
   , PitchBend (..)
-  , noteOn
-  , noteOff
-  , ChanVoiceData (..)
+  -- , noteOn
+  -- , noteOff
+  -- , ChanVoiceData (..)
+  , ChanStatus (..)
+  , CommonStatus (..)
+  , RtStatus (..)
+  , MidiStatus (..)
   , MidiMsg (..)
   , MidiEvent (..)
   , MidiTrack (..)
@@ -21,7 +25,7 @@ module Scrapti.Midi.Msg
 import Control.Monad (unless)
 import Dahdit (Binary (..), BinaryRep (..), ByteCount, ByteSized (..), ExactBytes (..), Get, StaticByteSized (..),
                ViaBinaryRep (..), ViaGeneric (..), ViaStaticByteSized (..), Word16BE (..), byteSizeFoldable,
-               getByteString, getLookAhead, getSeq, getWord8, putByteString, putSeq, putWord8)
+               getByteString, getLookAhead, getSeq, getWord8, putByteString, putSeq, putWord8, PutM)
 import Data.Bits (Bits (..))
 import Data.ByteString.Short (ShortByteString)
 import qualified Data.ByteString.Short as BSS
@@ -112,24 +116,24 @@ quarterTimeValue = \case
   QTHoursLow w -> w
   QTHoursHigh w -> w
 
-noteOn :: Channel -> Note -> Velocity -> MidiMsg
-noteOn c k v = MidiMsgChanVoice (ChanVoiceMsg c (ChanVoiceNoteOnOff k v))
+-- noteOn :: Channel -> Note -> Velocity -> MidiMsg
+-- noteOn c k v = MidiMsgChanVoice (ChanVoiceMsg c (ChanVoiceNoteOnOff k v))
 
-noteOff :: Channel -> Note -> MidiMsg
-noteOff c k = noteOn c k 0
+-- noteOff :: Channel -> Note -> MidiMsg
+-- noteOff c k = noteOn c k 0
 
-data ChanVoiceData =
-    ChanVoiceNoteOnOff !Note !Velocity
-  | ChanVoicePolyAftertouch !Note !Pressure
-  | ChanVoiceCC !ControlNum !ControlVal
-  | ChanVoiceProgramChange !ProgramNum
-  | ChanVoiceAftertouch !Pressure
-  | ChanVoicePitchWheel !PitchBend
-  deriving stock (Eq, Show, Generic)
+-- data ChanVoiceData =
+--     ChanVoiceNoteOnOff !Note !Velocity
+--   | ChanVoicePolyAftertouch !Note !Pressure
+--   | ChanVoiceCC !ControlNum !ControlVal
+--   | ChanVoiceProgramChange !ProgramNum
+--   | ChanVoiceAftertouch !Pressure
+--   | ChanVoicePitchWheel !PitchBend
+--   deriving stock (Eq, Show, Generic)
 
-data ChanVoiceMsg =
-  ChanVoiceMsg !Channel !ChanVoiceData
-  deriving stock (Eq, Show, Generic)
+-- data ChanVoiceMsg =
+--   ChanVoiceMsg !Channel !ChanVoiceData
+--   deriving stock (Eq, Show, Generic)
 
 newtype SysExString = SysExString { unSysExString :: ShortByteString }
   deriving stock (Show)
@@ -150,12 +154,39 @@ instance Binary SysExString where
   get = fmap SysExString (findDataLength >>= getByteString)
   put (SysExString ss) = putByteString ss
 
+data ChanStatus =
+    ChanStatusNoteOff
+  | ChanStatusNoteOn
+  | ChanStatusAftertouch
+  | ChanStatusControl
+  -- ^ Can also be chan mode status but need to see second byte
+  | ChanStatusProgram
+  | ChanStatusPressure
+  | ChanStatusPitchBend
+  deriving stock (Eq, Show)
+
+data CommonStatus =
+    CommonStatusTimeFrame
+  | CommonStatusSongPointer
+  | CommonStatusSongSelect
+  | CommonStatusTuneRequest
+  | CommonStatusEndExclusive
+  deriving stock (Eq, Show)
+
+data RtStatus =
+    RtStatusTimingClock
+  | RtStatusStart
+  | RtStatusContinue
+  | RtStatusStop
+  | RtStatusActiveSensing
+  | RtStatusActiveSystemReset
+  deriving stock (Eq, Show)
+
 data MidiStatus =
-    MidiStatusChanVoice !Channel
-  | MidiStatusChanMode !Channel
+    MidiStatusChan !Channel !ChanStatus
   | MidiStatusSysEx
-  | MidiStatusSysCommon !Word8
-  | MidiStatusSysRt !Word8
+  | MidiStatusSysCommon !CommonStatus
+  | MidiStatusSysRt !RtStatus
   deriving stock (Eq, Show)
   deriving (ByteSized) via (ViaStaticByteSized MidiStatus)
 
@@ -163,104 +194,174 @@ instance StaticByteSized MidiStatus where
   staticByteSize _ = 1
 
 instance Binary MidiStatus where
+  get = do
+    b <- getWord8
+    let !x = shiftL b 4
+    if
+      | x < 0x8 -> fail ("Midi status byte with high bit clear: " ++ show x)
+      | x == 0xF -> error "TODO parse system msgs"
+      | otherwise -> do
+        let !d = b .&. 0xF
+        pure $! MidiStatusChan (Channel d) $ case x of
+          0x8 -> ChanStatusNoteOff
+          0x9 -> ChanStatusNoteOn
+          0xA -> ChanStatusAftertouch
+          0xB -> ChanStatusControl
+          0xC -> ChanStatusProgram
+          0xD -> ChanStatusPressure
+          0xE -> ChanStatusPitchBend
+          _ -> error "impossible"
+  put = \case
+    MidiStatusChan (Channel c) cs ->
+      let !d = min 15 c
+          !x = case cs of
+            ChanStatusNoteOff -> 0x90
+            ChanStatusNoteOn -> 0x90
+            ChanStatusAftertouch -> 0xA0
+            ChanStatusControl -> 0xB0
+            ChanStatusProgram -> 0xC0
+            ChanStatusPressure -> 0xD0
+            ChanStatusPitchBend -> 0xE0
+      in putWord8 (d .|. x)
+    MidiStatusSysEx -> putWord8 0xF0
+    MidiStatusSysCommon cs ->
+      let !x = case cs of
+            CommonStatusTimeFrame -> 0x1
+            CommonStatusSongPointer -> 0x2
+            CommonStatusSongSelect -> 0x3
+            CommonStatusTuneRequest -> 0x6
+            CommonStatusEndExclusive -> 0x7
+      in putWord8 (0xF0 .|. x)
+    MidiStatusSysRt rs ->
+      let !x = case rs of
+            RtStatusTimingClock -> 0x0
+            RtStatusStart -> 0x2
+            RtStatusContinue -> 0x3
+            RtStatusStop -> 0x4
+            RtStatusActiveSensing -> 0x6
+            RtStatusActiveSystemReset -> 0x7
+      in putWord8 (0xF8 .|. x)
+
+data MidiMsg = MidiMsgWhatever
+  deriving stock (Eq, Show)
+
+instance ByteSized MidiMsg where
+  byteSize = error "TODO"
+
+midiMsgStatus :: MidiMsg -> MidiStatus
+midiMsgStatus = undefined
+
+midiMsgIsChan :: MidiMsg -> Bool
+midiMsgIsChan = undefined
+
+-- Running status is for Voice and Mode messages only!
+getMidiMsg :: Maybe ChanStatus -> MidiStatus -> Get MidiMsg
+getMidiMsg = undefined
+
+putMidiMsg :: Maybe ChanStatus -> MidiMsg -> PutM ChanStatus
+putMidiMsg = undefined
+
+-- -- TODO(ejconlon) Implement ChannelMode message
+-- -- https://www.midi.org/specifications/item/table-1-summary-of-midi-message
+-- -- Also break this into status byte + data bytes by category
+-- data MidiMsg =
+--     MidiMsgChanVoice !ChanVoiceMsg
+--   | MidiMsgSysex !Manf !SysExString
+--   | MidiMsgQuarterFrame !QuarterTime
+--   | MidiMsgSongPosition !Position
+--   | MidiMsgSongSelect !Song
+--   | MidiMsgTuneRequest
+--   | MidiMsgSrtClock
+--   | MidiMsgSrtStart
+--   | MidiMsgSrtContinue
+--   | MidiMsgSrtStop
+--   | MidiMsgActiveSensing
+--   | MidiMsgReset
+--   deriving stock (Eq, Show, Generic)
+
+-- instance ByteSized MidiMsg where
+--   byteSize mp =
+--     1 + case mp of
+--       MidiMsgChanVoice (ChanVoiceMsg _ dat) ->
+--         case dat of
+--           ChanVoiceNoteOnOff _ _ -> 2
+--           ChanVoicePolyAftertouch _ _ -> 2
+--           ChanVoiceCC _ _ -> 2
+--           ChanVoiceProgramChange _ -> 1
+--           ChanVoiceAftertouch _ -> 1
+--           ChanVoicePitchWheel _ -> 2
+--       MidiMsgSysex _ sbs -> 1 + byteSize sbs
+--       MidiMsgQuarterFrame _ -> 1
+--       MidiMsgSongPosition _ -> 2
+--       MidiMsgSongSelect _ -> 1
+--       MidiMsgTuneRequest -> 0
+--       MidiMsgSrtClock -> 0
+--       MidiMsgSrtStart -> 0
+--       MidiMsgSrtContinue -> 0
+--       MidiMsgSrtStop -> 0
+--       MidiMsgActiveSensing -> 0
+--       MidiMsgReset -> 0
+
+-- TODO remove this entirely
+instance Binary MidiMsg where
   get = error "TODO"
   put = error "TODO"
 
--- TODO(ejconlon) Implement ChannelMode message
--- https://www.midi.org/specifications/item/table-1-summary-of-midi-message
--- Also break this into status byte + data bytes by category
-data MidiMsg =
-    MidiMsgChanVoice !ChanVoiceMsg
-  | MidiMsgSysex !Manf !SysExString
-  | MidiMsgQuarterFrame !QuarterTime
-  | MidiMsgSongPosition !Position
-  | MidiMsgSongSelect !Song
-  | MidiMsgTuneRequest
-  | MidiMsgSrtClock
-  | MidiMsgSrtStart
-  | MidiMsgSrtContinue
-  | MidiMsgSrtStop
-  | MidiMsgActiveSensing
-  | MidiMsgReset
-  deriving stock (Eq, Show, Generic)
 
-instance ByteSized MidiMsg where
-  byteSize mp =
-    1 + case mp of
-      MidiMsgChanVoice (ChanVoiceMsg _ dat) ->
-        case dat of
-          ChanVoiceNoteOnOff _ _ -> 2
-          ChanVoicePolyAftertouch _ _ -> 2
-          ChanVoiceCC _ _ -> 2
-          ChanVoiceProgramChange _ -> 1
-          ChanVoiceAftertouch _ -> 1
-          ChanVoicePitchWheel _ -> 2
-      MidiMsgSysex _ sbs -> 1 + byteSize sbs
-      MidiMsgQuarterFrame _ -> 1
-      MidiMsgSongPosition _ -> 2
-      MidiMsgSongSelect _ -> 1
-      MidiMsgTuneRequest -> 0
-      MidiMsgSrtClock -> 0
-      MidiMsgSrtStart -> 0
-      MidiMsgSrtContinue -> 0
-      MidiMsgSrtStop -> 0
-      MidiMsgActiveSensing -> 0
-      MidiMsgReset -> 0
+-- instance Binary MidiMsg where
+--   get = do
+--     x <- get @Word8
+--     error "TODO"
 
-instance Binary MidiMsg where
-  get = do
-    x <- get @Word8
-    error "TODO"
-
-  put = \case
-    MidiMsgChanVoice (ChanVoiceMsg (Channel c) dat) ->
-      let !d = min 15 c
-      in case dat of
-        ChanVoiceNoteOnOff (Note n) (Velocity v) -> do
-          putWord8 (d .|. 0x90)
-          putWord8 n
-          putWord8 v
-        ChanVoicePolyAftertouch (Note n) (Pressure p) -> do
-          putWord8 (d .|. 0xA0)
-          putWord8 n
-          putWord8 p
-        ChanVoiceCC (ControlNum cn) (ControlVal cv) -> do
-          putWord8 (d .|. 0xB0)
-          putWord8 cn
-          putWord8 cv
-        ChanVoiceProgramChange (ProgramNum pn) -> do
-          putWord8 (d .|. 0xC0)
-          putWord8 pn
-        ChanVoiceAftertouch (Pressure p) -> do
-          putWord8 (d .|. 0xD0)
-          putWord8 p
-        ChanVoicePitchWheel (PitchBend pb) -> do
-          putWord8 (d .|. 0xE0)
-          let !w = min 16383 (max 0 (pb + 8192))
-          putWord8 (fromIntegral w .|. 0x7)
-          putWord8 (fromIntegral (shiftR w 7))
-    MidiMsgSysex (Manf m) ss -> do
-      putWord8 0xF0
-      putWord8 m
-      put ss
-    MidiMsgQuarterFrame qt -> do
-      putWord8 0xF1
-      putWord8 (quarterTimeKey qt)
-      putWord8 (quarterTimeValue qt)
-    MidiMsgSongPosition (Position p) -> do
-      putWord8 0xF2
-      putWord8 (fromIntegral p .|. 0x7)
-      putWord8 (fromIntegral (shiftR p 7))
-    MidiMsgSongSelect (Song s) -> do
-      putWord8 0xF3
-      putWord8 s
-    MidiMsgTuneRequest -> putWord8 0xF6
-    MidiMsgSrtClock -> putWord8 0xF8
-    MidiMsgSrtStart -> putWord8 0xFA
-    MidiMsgSrtContinue -> putWord8 0xFB
-    MidiMsgSrtStop -> putWord8 0xFC
-    MidiMsgActiveSensing -> putWord8 0xFE
-    MidiMsgReset -> putWord8 0xFF
+--   put = \case
+--     MidiMsgChanVoice (ChanVoiceMsg (Channel c) dat) ->
+--       let !d = min 15 c
+--       in case dat of
+--         ChanVoiceNoteOnOff (Note n) (Velocity v) -> do
+--           putWord8 (d .|. 0x90)
+--           putWord8 n
+--           putWord8 v
+--         ChanVoicePolyAftertouch (Note n) (Pressure p) -> do
+--           putWord8 (d .|. 0xA0)
+--           putWord8 n
+--           putWord8 p
+--         ChanVoiceCC (ControlNum cn) (ControlVal cv) -> do
+--           putWord8 (d .|. 0xB0)
+--           putWord8 cn
+--           putWord8 cv
+--         ChanVoiceProgramChange (ProgramNum pn) -> do
+--           putWord8 (d .|. 0xC0)
+--           putWord8 pn
+--         ChanVoiceAftertouch (Pressure p) -> do
+--           putWord8 (d .|. 0xD0)
+--           putWord8 p
+--         ChanVoicePitchWheel (PitchBend pb) -> do
+--           putWord8 (d .|. 0xE0)
+--           let !w = min 16383 (max 0 (pb + 8192))
+--           putWord8 (fromIntegral w .|. 0x7)
+--           putWord8 (fromIntegral (shiftR w 7))
+--     MidiMsgSysex (Manf m) ss -> do
+--       putWord8 0xF0
+--       putWord8 m
+--       put ss
+--     MidiMsgQuarterFrame qt -> do
+--       putWord8 0xF1
+--       putWord8 (quarterTimeKey qt)
+--       putWord8 (quarterTimeValue qt)
+--     MidiMsgSongPosition (Position p) -> do
+--       putWord8 0xF2
+--       putWord8 (fromIntegral p .|. 0x7)
+--       putWord8 (fromIntegral (shiftR p 7))
+--     MidiMsgSongSelect (Song s) -> do
+--       putWord8 0xF3
+--       putWord8 s
+--     MidiMsgTuneRequest -> putWord8 0xF6
+--     MidiMsgSrtClock -> putWord8 0xF8
+--     MidiMsgSrtStart -> putWord8 0xFA
+--     MidiMsgSrtContinue -> putWord8 0xFB
+--     MidiMsgSrtStop -> putWord8 0xFC
+--     MidiMsgActiveSensing -> putWord8 0xFE
+--     MidiMsgReset -> putWord8 0xFF
 
 newtype VarInt = VarInt { unVarInt :: Word32 }
   deriving stock (Show)
