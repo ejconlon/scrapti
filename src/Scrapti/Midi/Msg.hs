@@ -24,7 +24,7 @@ module Scrapti.Midi.Msg
 
 import Control.Monad (unless)
 import Dahdit (Binary (..), BinaryRep (..), ByteCount, ByteSized (..), ExactBytes (..), Get, StaticByteSized (..),
-               ViaBinaryRep (..), ViaGeneric (..), ViaStaticByteSized (..), Word16BE (..), byteSizeFoldable,
+               ViaBinaryRep (..), ViaStaticByteSized (..), Word16BE (..), byteSizeFoldable,
                getByteString, getLookAhead, getSeq, getWord8, putByteString, putSeq, putWord8, PutM)
 import Data.Bits (Bits (..))
 import Data.ByteString.Short (ShortByteString)
@@ -35,6 +35,7 @@ import qualified Data.Sequence as Seq
 import Data.String (IsString)
 import Data.Word (Word16, Word32, Word8)
 import GHC.Generics (Generic)
+import Scrapti.Midi.Notes (LinNote (..))
 
 newtype Channel = Channel { unChannel :: Word8 }
   deriving stock (Show)
@@ -182,8 +183,13 @@ data RtStatus =
   | RtStatusActiveSystemReset
   deriving stock (Eq, Show)
 
+data ChanStatusPair = ChanStatusPair
+  { cspChan :: !Channel
+  , cspStatus:: !ChanStatus
+  } deriving stock (Eq, Show)
+
 data MidiStatus =
-    MidiStatusChan !Channel !ChanStatus
+    MidiStatusChan !ChanStatusPair
   | MidiStatusSysEx
   | MidiStatusSysCommon !CommonStatus
   | MidiStatusSysRt !RtStatus
@@ -202,7 +208,7 @@ instance Binary MidiStatus where
       | x == 0xF -> error "TODO parse system msgs"
       | otherwise -> do
         let !d = b .&. 0xF
-        pure $! MidiStatusChan (Channel d) $ case x of
+        pure $! MidiStatusChan $ ChanStatusPair (Channel d) $ case x of
           0x8 -> ChanStatusNoteOff
           0x9 -> ChanStatusNoteOn
           0xA -> ChanStatusAftertouch
@@ -212,7 +218,7 @@ instance Binary MidiStatus where
           0xE -> ChanStatusPitchBend
           _ -> error "impossible"
   put = \case
-    MidiStatusChan (Channel c) cs ->
+    MidiStatusChan (ChanStatusPair (Channel c) cs) ->
       let !d = min 15 c
           !x = case cs of
             ChanStatusNoteOff -> 0x90
@@ -242,24 +248,65 @@ instance Binary MidiStatus where
             RtStatusActiveSystemReset -> 0x7
       in putWord8 (0xF8 .|. x)
 
-data MidiMsg = MidiMsgWhatever
+data ChanVoiceData =
+    ChanVoiceDataNoteOff !LinNote
+  | ChanVoiceDataNodeOn !LinNote !Velocity
+  | ChanVoiceAftertouch
   deriving stock (Eq, Show)
 
-instance ByteSized MidiMsg where
+data ChanModeData = XXX
+  deriving stock (Eq, Show)
+
+data SysExData = SysExData
+  { sedManf :: !Manf
+  , sedBody :: !SysExString
+  } deriving stock (Eq, Show)
+
+data CommonData = YYY
+  deriving stock (Eq, Show)
+
+data RtData = ZZZ
+  deriving stock (Eq, Show)
+
+data MidiData =
+    MidiDataChanVoice !ChanVoiceData
+  | MidiDataChanMode !ChanModeData
+  | MidiDataSysEx !SysExData
+  | MidiDataSysCommon !CommonData
+  | MidiDataSysRt !RtData
+  deriving stock (Eq, Show)
+
+instance ByteSized MidiData where
   byteSize = error "TODO"
 
+-- Running status is for Voice and Mode messages only!
+getMidiData :: Maybe ChanStatus -> MidiStatus -> Get MidiData
+getMidiData = undefined
+
+putMidiData :: Maybe ChanStatus -> MidiData -> PutM ChanStatus
+putMidiData = undefined
+
+data MidiMsg =
+    MidiMsgChanVoice !ChanStatusPair !ChanVoiceData
+  | MidiMsgChanMode !ChanStatusPair !ChanModeData
+  | MidiMsgSysEx !SysExData
+  | MidiMsgSysCommon !CommonStatus !CommonData
+  | MidiMsgSysRt !RtStatus !RtData
+  deriving stock (Eq, Show)
+
 midiMsgStatus :: MidiMsg -> MidiStatus
-midiMsgStatus = undefined
+midiMsgStatus = \case
+  MidiMsgChanVoice csp _ -> MidiStatusChan csp
+  MidiMsgChanMode csp _ -> MidiStatusChan csp
+  MidiMsgSysEx _ -> MidiStatusSysEx
+  MidiMsgSysCommon cs _ -> MidiStatusSysCommon cs
+  MidiMsgSysRt rs _ -> MidiStatusSysRt rs
 
 midiMsgIsChan :: MidiMsg -> Bool
-midiMsgIsChan = undefined
-
--- Running status is for Voice and Mode messages only!
-getMidiMsg :: Maybe ChanStatus -> MidiStatus -> Get MidiMsg
-getMidiMsg = undefined
-
-putMidiMsg :: Maybe ChanStatus -> MidiMsg -> PutM ChanStatus
-putMidiMsg = undefined
+midiMsgIsChan = \case
+  MidiMsgChanVoice _ _ -> True
+  MidiMsgChanMode _ _ -> True
+  _ -> False
 
 -- -- TODO(ejconlon) Implement ChannelMode message
 -- -- https://www.midi.org/specifications/item/table-1-summary-of-midi-message
@@ -302,11 +349,9 @@ putMidiMsg = undefined
 --       MidiMsgActiveSensing -> 0
 --       MidiMsgReset -> 0
 
--- TODO remove this entirely
-instance Binary MidiMsg where
+instance Binary MidiData where
   get = error "TODO"
   put = error "TODO"
-
 
 -- instance Binary MidiMsg where
 --   get = do
@@ -398,7 +443,14 @@ data MidiEvent = MidiEvent
   { meTimeDelta :: !VarInt
   , meMessage :: !MidiMsg
   } deriving stock (Eq, Show, Generic)
-    deriving (ByteSized, Binary) via (ViaGeneric MidiEvent)
+    -- deriving (ByteSized, Binary) via (ViaGeneric MidiEvent)
+
+instance ByteSized MidiEvent where
+  byteSize = error "TODO"
+
+instance Binary MidiEvent where
+  get = error "TODO"
+  put = error "TODO"
 
 type MidiTrackMagic = ExactBytes "MTrk"
 
@@ -407,7 +459,8 @@ newtype MidiTrack = MidiTrack { unMidiTrack :: Seq MidiEvent }
   deriving newtype (Eq)
 
 instance ByteSized MidiTrack where
-  byteSize (MidiTrack events) = 6 + byteSizeFoldable events
+  -- byteSize (MidiTrack events) = 6 + byteSizeFoldable events
+  byteSize = error "TODO"
 
 instance Binary MidiTrack where
   get = do
