@@ -42,10 +42,13 @@ newtype Tempo = Tempo { unTempo :: Rational }
   deriving stock (Show)
   deriving newtype (Eq, Ord)
 
--- tempo = 120 bpm how long does a beat take? in seconds per beat 1 minute (60 s) a 120 beats/min
--- is 60 s/min / 120 beats/min
-beatPeriod :: Tempo -> Rational
-beatPeriod (Tempo t) =  60 / t
+instance Default Tempo where
+  def = Tempo 120
+
+-- -- tempo = 120 bpm how long does a beat take? in seconds per beat 1 minute (60 s) a 120 beats/min
+-- -- is 60 s/min / 120 beats/min
+-- beatPeriod :: Tempo -> Rational
+-- beatPeriod (Tempo t) = 60 / t
 
 type PtiSample = LiftedPrimArray Int16LE
 

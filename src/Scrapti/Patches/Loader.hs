@@ -1,6 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Scrapti.Patches.Loader where
+module Scrapti.Patches.Loader
+  ( Sample (..)
+  , matchSamples
+  , defaultInst
+  ) where
 
 import Scrapti.Midi.Notes (OctNote, parseNote)
 import Scrapti.Midi.Msg (Velocity (..))
@@ -11,6 +15,9 @@ import System.Directory (listDirectory)
 import Text.Regex.TDFA ((=~~))
 import Text.Read (readMaybe)
 import Data.Maybe (maybeToList)
+import Scrapti.Patches.Inst (InstSpec)
+import Data.Sequence (Seq)
+import qualified Data.Sequence as Seq
 
 data Sample = Sample
   { samplePath :: !FilePath
@@ -54,7 +61,10 @@ parseSample fp parts = do
   let mayVel = mayVelStr >>= parseVel
   pure $! Sample fp octNote mayVel mayUniqStr
 
-matchSamples :: Text -> Text -> FilePath -> IO [Sample]
+matchSamples :: Text -> Text -> FilePath -> IO (Seq Sample)
 matchSamples prefix fileExt dir = do
   pairs <- matchFiles prefix fileExt dir
-  pure $! pairs >>= maybeToList . uncurry parseSample
+  pure $! Seq.fromList $ pairs >>= maybeToList . uncurry parseSample
+
+defaultInst :: Seq Sample -> InstSpec FilePath
+defaultInst = error "TODO"

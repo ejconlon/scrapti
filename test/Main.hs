@@ -40,6 +40,10 @@ import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, testCase, (@?=))
+import Scrapti.Patches.Loader (matchSamples, Sample (Sample))
+import Scrapti.Midi.Notes (OctNote(..), NoteName (..), Octave (..))
+import qualified Data.Text.IO as TIO
+import Scrapti.Patches.Sfz (parseSfz)
 -- import Text.Pretty.Simple (pPrint)
 
 drumFmtOffset :: ByteCount
@@ -585,8 +589,25 @@ testDspFadeWider = testCase "fade wider" $ do
 testDsp :: TestTree
 testDsp = testGroup "dsp" [testDspMono, testDspFadeOne, testDspFadeSome, testDspFadeWider]
 
+-- TODO tests: sft to inst, inst to sfz, inst to pti
+
+testMatchSamples :: TestTree
+testMatchSamples = testCase "match samples" $ do
+  samps <- matchSamples "DX-EPiano1" "wav" "testdata"
+  samps @?= Seq.singleton (Sample "testdata/DX-EPiano1-C1.wav" (OctNote (Octave 1) NoteNameC) Nothing Nothing)
+
+testPatchSfz :: TestTree
+testPatchSfz = testCase "sfz" $ do
+  sfzContents <- TIO.readFile "testdata/DX-EPiano1.sfz"
+  _sfzFile <- either fail pure (parseSfz sfzContents)
+  -- TODO some kind of assertions about file
+  pure ()
+
+testPatches :: TestTree
+testPatches = testGroup "patches" [testPatchSfz]
+
 testScrapti :: TestTree
-testScrapti = testGroup "Scrapti" [testWav, testAiff, testSfont, testPti, testProject, testConvert, testDsp, testOtherSizes]
+testScrapti = testGroup "Scrapti" [testWav, testAiff, testSfont, testPti, testProject, testConvert, testDsp, testOtherSizes, testPatches]
 
 main :: IO ()
 main = defaultMain testScrapti
