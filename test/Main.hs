@@ -40,10 +40,12 @@ import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, testCase, (@?=))
-import Scrapti.Patches.Loader (matchSamples, Sample (Sample))
+import Scrapti.Patches.Loader (matchSamples, Sample (Sample), defaultInst)
 import Scrapti.Midi.Notes (OctNote(..), NoteName (..), Octave (..))
 import qualified Data.Text.IO as TIO
-import Scrapti.Patches.Sfz (parseSfz)
+import Scrapti.Patches.Sfz (parseSfz, renderSfz)
+import Scrapti.Patches.Inst (InstSpec(..))
+import Scrapti.Patches.ConvertSfz (sfzToInst)
 -- import Text.Pretty.Simple (pPrint)
 
 drumFmtOffset :: ByteCount
@@ -591,20 +593,34 @@ testDsp = testGroup "dsp" [testDspMono, testDspFadeOne, testDspFadeSome, testDsp
 
 -- TODO tests: sft to inst, inst to sfz, inst to pti
 
+testPatchSfz :: TestTree
+testPatchSfz = testCase "sfz" $ do
+  sfzContents <- TIO.readFile "testdata/DX-EPiano1.sfz"
+  -- test that we can parse and render the sfz
+  sfzFile <- either fail pure (parseSfz sfzContents)
+  let sfzContents' = renderSfz sfzFile
+  sfzFile' <- either fail pure (parseSfz sfzContents')
+  sfzFile' @?= sfzFile
+  -- test that we can convert it to an intstrument
+  (mayRelPath, inst) <- either fail pure (sfzToInst sfzFile)
+  mayRelPath @?= Nothing
+  Seq.length (isRegions inst) @?= 1
+
 testMatchSamples :: TestTree
 testMatchSamples = testCase "match samples" $ do
   samps <- matchSamples "DX-EPiano1" "wav" "testdata"
   samps @?= Seq.singleton (Sample "testdata/DX-EPiano1-C1.wav" (OctNote (Octave 1) NoteNameC) Nothing Nothing)
+  inst <- defaultInst samps
+  Seq.length (isRegions inst) @?= 1
 
-testPatchSfz :: TestTree
-testPatchSfz = testCase "sfz" $ do
-  sfzContents <- TIO.readFile "testdata/DX-EPiano1.sfz"
-  _sfzFile <- either fail pure (parseSfz sfzContents)
-  -- TODO some kind of assertions about file
-  pure ()
+-- testInitInst :: TestTree
+-- testInitInst = testCase "init sfz" $ do
+--   sfzContents <- TIO.readFile "testdata/DX-EPiano1.sfz"
+--   sfzFile <- either fail pure (parseSfz sfzContents)
+--   samps <- matchSamples "DX-EPiano1" "wav" "testdata"
 
 testPatches :: TestTree
-testPatches = testGroup "patches" [testPatchSfz]
+testPatches = testGroup "patches" [testPatchSfz, testMatchSamples]
 
 testScrapti :: TestTree
 testScrapti = testGroup "Scrapti" [testWav, testAiff, testSfont, testPti, testProject, testConvert, testDsp, testOtherSizes, testPatches]

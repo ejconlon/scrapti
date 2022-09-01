@@ -1,9 +1,12 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Scrapti.Convert
-  ( Neutral (..)
+  ( loadAiff
+  , loadWav
+  , Neutral (..)
   , aiffToNeutral
   , wavToNeutral
+  , loadNeutral
   , neutralToWav
   , neutralMono
   , neutralCrossFade
@@ -22,6 +25,7 @@ import Scrapti.Dsp (Mod, PcmContainer (..), PcmMeta (..), applyMod, applyModGene
                     linearCrossFade)
 import Scrapti.Wav (Wav, WavChunk (..), wavAddChunks, wavFromPcmContainer, wavGatherMarkers, wavToPcmContainer,
                     wavUseLoopPoints, wavUseMarkers)
+import System.FilePath (splitExtension)
 
 convertMod :: (LiftedPrim a, LiftedPrim b) => Mod a b -> PcmContainer -> Either ConvertErr PcmContainer
 convertMod modx con = either (Left . ConvertErrDsp) Right (applyMod modx con)
@@ -29,11 +33,22 @@ convertMod modx con = either (Left . ConvertErrDsp) Right (applyMod modx con)
 convertModGeneric :: (forall a. (LiftedPrim a, Integral a) => Mod a a) -> PcmContainer -> Either ConvertErr PcmContainer
 convertModGeneric modx con = either (Left . ConvertErrDsp) Right (applyModGeneric modx con)
 
+loadAiff :: FilePath -> IO Aiff
+loadAiff = fmap fst . runGetFile get
+
+loadWav :: FilePath -> IO Wav
+loadWav = fmap fst . runGetFile get
+
 data Neutral = Neutral
   { neCon :: !PcmContainer
   , neMarks :: !(Seq SimpleMarker)
   , neLoopMarks :: !(Maybe LoopMarkPoints)
   } deriving stock (Eq, Show)
+
+guardSr :: Int -> Neutral -> IO ()
+guardSr expectedSr ne = do
+  let actualSr = pmSampleRate (pcMeta (neCon ne))
+  unless (expectedSr == actualSr ) (fail ("Expected SR: " ++ show expectedSr ++ " but got " ++ show actualSr))
 
 -- NOTE: Taking sr as a param here so we don't have to interpret extended fp
 aiffToNeutral :: Int -> Aiff -> Maybe LoopMarkNames -> Either ConvertErr Neutral
@@ -49,6 +64,20 @@ wavToNeutral wav mayNames = do
   let !neMarks = wavGatherMarkers wav
   neLoopMarks <- maybe (pure Nothing) (fmap Just . (`findLoopMarks` neMarks)) mayNames
   pure $! Neutral { .. }
+
+loadNeutral :: Int -> Maybe LoopMarkNames -> FilePath -> IO Neutral
+loadNeutral sr mayNames fp = do
+  let (_, ext) = splitExtension fp
+  ne <- if
+    | ext == ".wav" -> do
+        wav <- loadWav fp
+        rethrow (wavToNeutral wav mayNames)
+    | ext == ".aif" || ext == ".aifc" || ext == ".aiff" -> do
+        aiff <- loadAiff fp
+        rethrow (aiffToNeutral sr aiff mayNames)
+    | otherwise -> fail ("Could not load with unknown extension: " ++ fp)
+  guardSr sr ne
+  pure ne
 
 neutralToWav :: Int -> Neutral -> Wav
 neutralToWav note (Neutral {..}) =
