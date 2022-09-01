@@ -60,15 +60,15 @@ data InstFilter = InstFilter
   , ifResonance :: !Rational
   } deriving stock (Eq, Show)
 
-data InstParams = InstParams
-  { ipPanning :: !Rational
-  , ipTune :: !Rational
-  , ipFilter :: !(Maybe InstFilter)
-  , ipAuto :: !(InstBlock (Maybe InstAuto))
+data InstConfig = InstConfig
+  { icPanning :: !Rational
+  , icTune :: !Rational
+  , icFilter :: !(Maybe InstFilter)
+  , icAuto :: !(InstBlock (Maybe InstAuto))
   } deriving stock (Eq, Show)
 
-instance Default InstParams where
-  def = InstParams 0 0 Nothing (pureInstBlock Nothing)
+instance Default InstConfig where
+  def = InstConfig 0 0 Nothing (pureInstBlock Nothing)
 
 data InstKeyRange = InstKeyRange
   { ikrLowkey :: !Integer
@@ -101,7 +101,7 @@ data InstRegion x = InstRegion
   } deriving stock (Eq, Show, Functor, Foldable, Traversable)
 
 data InstSpec x = InstSpec
-  { isParams :: !InstParams
+  { isConfig :: !InstConfig
   , isRegions :: !(Seq (InstRegion x))
   } deriving stock (Eq, Show, Functor, Foldable, Traversable)
 

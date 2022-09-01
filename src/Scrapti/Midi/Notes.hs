@@ -22,6 +22,26 @@ data NoteName =
   | NoteNameB
   deriving stock (Eq, Ord, Enum, Bounded, Show)
 
+data NotePref = NotePrefSharp | NotePrefFlat
+  deriving stock (Eq, Enum, Bounded, Show)
+
+renderNoteName :: NotePref -> NoteName -> Text
+renderNoteName pref nn =
+  let sharp = case pref of { NotePrefSharp -> True; _ -> False }
+  in case nn of
+    NoteNameC -> "C"
+    NoteNameCS -> if sharp then "C#" else "Db"
+    NoteNameD -> "D"
+    NoteNameDS -> if sharp then "D#" else "Eb"
+    NoteNameE -> "E"
+    NoteNameF -> "F"
+    NoteNameFS -> if sharp then "F#" else "Gb"
+    NoteNameG -> "G"
+    NoteNameGS -> if sharp then "G#" else "Ab"
+    NoteNameA -> "A"
+    NoteNameAS -> if sharp then "A#" else "Bb"
+    NoteNameB -> "B"
+
 newtype Octave = Octave { unOctave :: Int }
   deriving stock (Show)
   deriving newtype (Eq, Ord, Enum)
@@ -67,6 +87,9 @@ linAddInterval (Interval i) (LinNote n) = LinNote (i + n)
 linToOct :: LinNote -> OctNote
 linToOct (LinNote n) = OctNote (Octave (div n 12 - 1)) (toEnum (mod n 12))
 
+linSubInterval :: LinNote -> LinNote -> Interval
+linSubInterval (LinNote a) (LinNote b) = Interval (a - b)
+
 octToLin :: OctNote -> LinNote
 octToLin (OctNote (Octave oct) nn) = LinNote (((oct + 1) * 12) + fromEnum nn)
 
@@ -108,3 +131,7 @@ parseNote ns = do
   octStart <- readMaybe @Int (T.unpack octRaw)
   let !oct = Octave (octStart + off)
   pure $! OctNote oct nn
+
+renderNote :: NotePref -> OctNote -> Text
+renderNote pref (OctNote o nn) =
+  renderNoteName pref nn <> T.pack (show (unOctave o))

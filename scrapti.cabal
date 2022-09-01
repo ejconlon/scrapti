@@ -42,7 +42,6 @@ library
       Scrapti.Riff
       Scrapti.Sfont
       Scrapti.Tracker.Checked
-      Scrapti.Tracker.Convert
       Scrapti.Tracker.Loader
       Scrapti.Tracker.Mt
       Scrapti.Tracker.Mtp

@@ -25,9 +25,6 @@ module Scrapti.Tracker.Pti
   , Header (..)
   , Pti (..)
   , mkPti
-  , ptiToPcmContainer
-  , ptiWithPcmContainer
-  , ptiFromPcmContainer
   ) where
 
 import Dahdit (Binary (..), BinaryRep (..), BoolByte (..), ByteSized (..), ExactBytes, FloatLE, Int16LE,
@@ -40,8 +37,6 @@ import Data.Proxy (Proxy (..))
 import Data.Word (Word8)
 import GHC.Generics (Generic)
 import Scrapti.Binary (QuietLiftedArray (..))
-import Scrapti.Common (ConvertErr)
-import Scrapti.Dsp (PcmContainer)
 import Scrapti.Tracker.Checked (Checked (..), mkChecked, updateCheckedCode, verifyCheckedCode)
 
 data WavetableWindowSize =
@@ -189,6 +184,9 @@ data AutoType =
   deriving stock (Eq, Ord, Show, Enum, Bounded)
   deriving (ByteSized, StaticByteSized, Binary) via (ViaBinaryRep AutoType)
 
+instance Default AutoType where
+  def = ATOff
+
 instance BinaryRep Word16LE AutoType where
   fromBinaryRep = \case
     0x0000 -> Right ATOff
@@ -205,6 +203,9 @@ data Auto = Auto
   , autoType :: !AutoType
   } deriving stock (Eq, Show, Generic)
     deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Auto)
+
+instance Default Auto where
+  def = Auto def def
 
 data LfoType =
     LTRevSaw
@@ -479,12 +480,3 @@ instance Default Pti where
 
 mkPti :: Header -> LiftedPrimArray Int16LE -> Pti
 mkPti hd = Pti (mkChecked hd) . QuietLiftedArray
-
-ptiToPcmContainer :: Pti -> PcmContainer
-ptiToPcmContainer = error "TODO"
-
-ptiWithPcmContainer :: Pti -> PcmContainer -> Either ConvertErr Pti
-ptiWithPcmContainer = error "TODO"
-
-ptiFromPcmContainer :: PcmContainer -> Either ConvertErr Pti
-ptiFromPcmContainer = error "TODO"

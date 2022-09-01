@@ -24,7 +24,7 @@ import qualified Data.Text as T
 import Data.Traversable (for)
 import Scrapti.Patches.Inst (InstAuto (..), InstAutoTarget (..), InstBlock (..), InstCrop (..), InstEnv (..),
                              InstFilter (..), InstFilterType (..), InstKeyRange (..), InstLfo (..), InstLfoWave (..),
-                             InstLoop (..), InstLoopType (..), InstParams (..), InstRegion (..), InstSpec (..),
+                             InstLoop (..), InstLoopType (..), InstConfig (..), InstRegion (..), InstSpec (..),
                              traverseBlock_)
 import Scrapti.Patches.Sfz (SfzAttrs, SfzFile (..), SfzSection (..), SfzVal (..), sfzValFloat, sfzValInt, sfzValText,
                             textSfzVal)
@@ -233,14 +233,14 @@ readFiltM = do
         <*> defaultValM sfzValFloat "resonance" 0
       Nothing -> fail ("Invalid filter type: " ++ T.unpack filTypeStr)
 
-readParamsM :: SfzReader SfzFile InstParams
+readParamsM :: SfzReader SfzFile InstConfig
 readParamsM =
   fmap (fromMaybe def) $ askSectionM "global" $ do
     pan <- defaultValM sfzValFloat "pan" 0
     tune <- defaultValM sfzValFloat "tune" 0
     filt <- readFiltM
     auto <- readAutoBlockM
-    pure $! InstParams pan tune filt auto
+    pure $! InstConfig pan tune filt auto
 
 forbidValM :: Text -> SfzReader SfzSection ()
 forbidValM k = do
@@ -323,14 +323,14 @@ writeAutoM target auto =
     InstAutoEnv env -> writeAutoEnvM (mkKey "env") cat env
     InstAutoLfo lfo -> writeAutoLfoM (mkKey "lfo") cat lfo
 
-instParamM :: InstParams -> SfzWriter SfzAttrs ()
-instParamM (InstParams {..}) = do
+instConfigM :: InstConfig -> SfzWriter SfzAttrs ()
+instConfigM (InstConfig {..}) = do
   tell $ Map.fromList
-    [ ("pan", SfzValFloat ipPanning)
-    , ("tune", SfzValFloat ipTune)
+    [ ("pan", SfzValFloat icPanning)
+    , ("tune", SfzValFloat icTune)
     ]
-  for_ ipFilter writeFiltM
-  traverseBlock_ writeAutoM ipAuto
+  for_ icFilter writeFiltM
+  traverseBlock_ writeAutoM icAuto
 
 instRegionM :: InstRegion SfzSample -> SfzWriter SfzAttrs ()
 instRegionM (InstRegion {..}) = do
@@ -356,6 +356,6 @@ instRegionM (InstRegion {..}) = do
 instToSfz :: Maybe FilePath -> InstSpec SfzSample -> Either String SfzFile
 instToSfz mayDefPath (InstSpec {..}) = do
   let controlS = SfzSection "control" (Map.fromList (join [fmap (("default_path",) . textSfzVal) (maybeToList mayDefPath)]))
-  globalS <- fmap (SfzSection "global") (execSfzWriter (instParamM isParams))
+  globalS <- fmap (SfzSection "global") (execSfzWriter (instConfigM isConfig))
   regionSS <- traverse (fmap (SfzSection "region") . execSfzWriter . instRegionM) isRegions
   pure $! SfzFile (controlS :<| globalS :<| regionSS)
