@@ -7,9 +7,13 @@ module Scrapti.Patches.Sfz
   , sfzValInt
   , sfzValFloat
   , textSfzVal
+  , sfzValSimilar
   , SfzAttrs
+  , sfzAttrsSimilar
   , SfzSection (..)
+  , sfzSectionSimilar
   , SfzFile (..)
+  , sfzFileSimilar
   , parseSfz
   , renderSfz
   ) where
@@ -29,6 +33,7 @@ import Prettyprinter (Pretty (..))
 import qualified Prettyprinter as P
 import qualified Prettyprinter.Render.Text as PT
 import Text.Read (readEither)
+import Data.Functor.Classes (Eq1(..))
 
 {-
 SFZ params
@@ -87,6 +92,15 @@ sfzValFloat = \case
 textSfzVal :: Pretty a => a -> SfzVal
 textSfzVal = SfzValText . PT.renderStrict . P.layoutCompact . pretty
 
+sfzValSimilar :: SfzVal -> SfzVal -> Bool
+sfzValSimilar x y =
+  case (x, y) of
+    (SfzValFloat xf, _) -> Just xf == sfzValFloat y
+    (_, SfzValFloat yf) -> sfzValFloat x == Just yf
+    (SfzValInt xi, _) -> Just xi == sfzValInt y
+    (_, SfzValInt yi) -> sfzValInt x == Just yi
+    (SfzValText xt, _) -> Just xt == sfzValText y
+
 instance Pretty SfzVal where
   pretty = \case
     SfzValText x -> pretty x
@@ -95,10 +109,16 @@ instance Pretty SfzVal where
 
 type SfzAttrs = Map Text SfzVal
 
+sfzAttrsSimilar :: SfzAttrs -> SfzAttrs -> Bool
+sfzAttrsSimilar = liftEq sfzValSimilar
+
 data SfzSection = SfzSection
   { ssName :: !Text
   , ssAttrs :: !SfzAttrs
   } deriving stock (Eq, Show)
+
+sfzSectionSimilar :: SfzSection -> SfzSection -> Bool
+sfzSectionSimilar (SfzSection n1 m1) (SfzSection n2 m2) = n1 == n2 && sfzAttrsSimilar m1 m2
 
 instance Pretty SfzSection where
   pretty (SfzSection name attrs) = P.vsep (nameDoc:attrsDocs) where
@@ -107,6 +127,9 @@ instance Pretty SfzSection where
 
 newtype SfzFile = SfzFile { unSfzFile :: Seq SfzSection }
   deriving stock (Eq, Show)
+
+sfzFileSimilar :: SfzFile -> SfzFile -> Bool
+sfzFileSimilar (SfzFile s1) (SfzFile s2) = liftEq sfzSectionSimilar s1 s2
 
 instance Pretty SfzFile where
   pretty (SfzFile sections) = P.sep (fmap pretty (toList sections))

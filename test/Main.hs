@@ -45,7 +45,8 @@ import Scrapti.Midi.Notes (OctNote(..), NoteName (..), Octave (..))
 import qualified Data.Text.IO as TIO
 import Scrapti.Patches.Sfz (parseSfz, renderSfz)
 import Scrapti.Patches.Inst (InstSpec(..))
-import Scrapti.Patches.ConvertSfz (sfzToInst)
+import Scrapti.Patches.ConvertSfz (sfzToInst, instToSfz)
+import Scrapti.Patches.Sfz (sfzFileSimilar)
 -- import Text.Pretty.Simple (pPrint)
 
 drumFmtOffset :: ByteCount
@@ -605,6 +606,8 @@ testPatchSfz = testCase "sfz" $ do
   (mayRelPath, inst) <- either fail pure (sfzToInst sfzFile)
   mayRelPath @?= Nothing
   Seq.length (isRegions inst) @?= 1
+  sfzFile'' <- either fail pure (instToSfz mayRelPath inst)
+  assertBool "sfz file similarity" (sfzFileSimilar sfzFile'' sfzFile)
 
 testMatchSamples :: TestTree
 testMatchSamples = testCase "match samples" $ do
