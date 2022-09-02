@@ -1,0 +1,35 @@
+{
+    "spec": {
+        "config": {
+            "auto": {
+                "cutoff": null,
+                "finetune": null,
+                "panning": null,
+                "volume": null
+            },
+            "panning": {
+                "denominator": 1,
+                "numerator": 0
+            },
+            "tune": {
+                "denominator": 1,
+                "numerator": 0
+            }
+        },
+        "regions": [
+            {
+                "key_range": {
+                    "highkey": 127,
+                    "lowkey": 0,
+                    "samp_key": 36
+                },
+                "loop": {
+                    "loop_end": 33096,
+                    "loop_start": 11181,
+                    "type": "forward"
+                },
+                "sample": "DX-EPiano1-C1.wav"
+            }
+        ]
+    }
+}

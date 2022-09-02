@@ -5,6 +5,13 @@
 
 packages:
 - completed:
+    hackage: aeson-via-0.2.0@sha256:10828137d9efe99cc2274fc82b908937fb87a21247dbea94925ed3231fb80dd2,1902
+    pantry-tree:
+      size: 310
+      sha256: f2ccbe69e2a3013a03873f06d74c18ffa6ec13cab1abe92ce57536f9971e763e
+  original:
+    hackage: aeson-via-0.2.0
+- completed:
     name: dahdit
     version: 0.1.0
     git: git@github.com:ejconlon/dahdit.git

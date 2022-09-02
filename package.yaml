@@ -30,6 +30,9 @@ dependencies:
 - transformers >= 0.5 && < 0.6
 - microlens >= 0.4 && < 0.5
 - prettyprinter >= 1.7 && < 1.8
+- aeson >= 2.0 && < 2.2
+- aeson-via >= 0.2 && < 0.3
+- aeson-pretty >= 0.8 && < 0.9
 
 default-extensions:
 - BangPatterns

@@ -25,9 +25,10 @@ import Data.Traversable (for)
 import Scrapti.Patches.Inst (InstAuto (..), InstAutoTarget (..), InstBlock (..), InstCrop (..), InstEnv (..),
                              InstFilter (..), InstFilterType (..), InstKeyRange (..), InstLfo (..), InstLfoWave (..),
                              InstLoop (..), InstLoopType (..), InstConfig (..), InstRegion (..), InstSpec (..),
-                             traverseBlock_)
+                             traverseBlock_, InstDef (..))
 import Scrapti.Patches.Sfz (SfzAttrs, SfzFile (..), SfzSection (..), SfzVal (..), sfzValFloat, sfzValInt, sfzValText,
                             textSfzVal)
+import Data.Aeson (ToJSON (..), FromJSON (..), Value (..))
 
 renderWaveNum :: InstLfoWave -> Integer
 renderWaveNum = \case
@@ -85,6 +86,18 @@ data SfzSample =
     SfzSampleFile !FilePath
   | SfzSampleBuiltin !Text
   deriving stock (Eq, Show)
+
+instance ToJSON SfzSample where
+  toJSON = toJSON . renderSfzSample
+
+instance FromJSON SfzSample where
+  parseJSON = \case
+    String txt ->
+      if
+        | T.null txt -> fail "Empty SfzSample"
+        | T.head txt == '*' -> pure (SfzSampleBuiltin (T.tail txt))
+        | otherwise -> pure (SfzSampleFile (T.unpack txt))
+    _ -> fail "Non-string SfzSample"
 
 renderSfzSample :: SfzSample -> Text
 renderSfzSample = \case
@@ -272,13 +285,13 @@ readRegionM = do
 readRegionsM :: SfzReader SfzFile (Seq (InstRegion SfzSample))
 readRegionsM = onRegionsM readRegionM
 
-sfzToInst :: SfzFile -> Either String (Maybe FilePath, InstSpec SfzSample)
+sfzToInst :: SfzFile -> Either String (InstDef SfzSample)
 sfzToInst = runSfzReader $ do
   mayDefPath <- readDefPathM
   params <- readParamsM
   regions <- readRegionsM
   let inst = InstSpec params regions
-  pure (mayDefPath, inst)
+  pure $! InstDef mayDefPath inst
 
 newtype SfzWriter w a = SfzWriter { unSfzWriter :: WriterT w (Except String) a }
   deriving newtype (Functor, Applicative, Monad, MonadWriter w)
@@ -353,8 +366,8 @@ instRegionM (InstRegion {..}) = do
     unless (icStart == 0) (fail "Can only crop end (start not supported)")
     tell $ Map.singleton "end" (SfzValInt icEnd)
 
-instToSfz :: Maybe FilePath -> InstSpec SfzSample -> Either String SfzFile
-instToSfz mayDefPath (InstSpec {..}) = do
+instToSfz :: InstDef SfzSample -> Either String SfzFile
+instToSfz (InstDef mayDefPath (InstSpec {..})) = do
   let controlS = SfzSection "control" (Map.fromList (join [fmap (("default_path",) . textSfzVal) (maybeToList mayDefPath)]))
   globalS <- fmap (SfzSection "global") (execSfzWriter (instConfigM isConfig))
   regionSS <- traverse (fmap (SfzSection "region") . execSfzWriter . instRegionM) isRegions

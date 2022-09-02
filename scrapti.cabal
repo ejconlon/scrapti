@@ -79,7 +79,10 @@ library
       TypeFamilies
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints -fno-warn-unused-top-binds -fwrite-ide-info -hiedir=.hie
   build-depends:
-      base >=4.12 && <5
+      aeson >=2.0 && <2.2
+    , aeson-pretty ==0.8.*
+    , aeson-via ==0.2.*
+    , base >=4.12 && <5
     , bytestring ==0.10.*
     , containers ==0.6.*
     , dahdit ==0.1.*
@@ -131,7 +134,10 @@ executable scrapti-exe
       TypeFamilies
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints -fno-warn-unused-top-binds -fwrite-ide-info -hiedir=.hie -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      base >=4.12 && <5
+      aeson >=2.0 && <2.2
+    , aeson-pretty ==0.8.*
+    , aeson-via ==0.2.*
+    , base >=4.12 && <5
     , bytestring ==0.10.*
     , containers ==0.6.*
     , dahdit ==0.1.*
@@ -185,7 +191,10 @@ test-suite scrapti-test
       TypeFamilies
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints -fno-warn-unused-top-binds -fwrite-ide-info -hiedir=.hie -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      base >=4.12 && <5
+      aeson >=2.0 && <2.2
+    , aeson-pretty ==0.8.*
+    , aeson-via ==0.2.*
+    , base >=4.12 && <5
     , bytestring ==0.10.*
     , containers ==0.6.*
     , dahdit ==0.1.*

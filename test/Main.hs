@@ -44,7 +44,7 @@ import Scrapti.Patches.Loader (matchSamples, Sample (Sample), defaultInst)
 import Scrapti.Midi.Notes (OctNote(..), NoteName (..), Octave (..))
 import qualified Data.Text.IO as TIO
 import Scrapti.Patches.Sfz (parseSfz, renderSfz)
-import Scrapti.Patches.Inst (InstSpec(..))
+import Scrapti.Patches.Inst (InstDef (..), InstSpec(..), jsonToInst)
 import Scrapti.Patches.ConvertSfz (sfzToInst, instToSfz)
 import Scrapti.Patches.Sfz (sfzFileSimilar)
 -- import Text.Pretty.Simple (pPrint)
@@ -602,12 +602,16 @@ testPatchSfz = testCase "sfz" $ do
   let sfzContents' = renderSfz sfzFile
   sfzFile' <- either fail pure (parseSfz sfzContents')
   sfzFile' @?= sfzFile
-  -- test that we can convert it to an intstrument
-  (mayRelPath, inst) <- either fail pure (sfzToInst sfzFile)
+  -- test that we can convert it to an instrument
+  instDef@(InstDef mayRelPath instSpec) <- either fail pure (sfzToInst sfzFile)
   mayRelPath @?= Nothing
-  Seq.length (isRegions inst) @?= 1
-  sfzFile'' <- either fail pure (instToSfz mayRelPath inst)
+  Seq.length (isRegions instSpec) @?= 1
+  sfzFile'' <- either fail pure (instToSfz instDef)
   assertBool "sfz file similarity" (sfzFileSimilar sfzFile'' sfzFile)
+  -- test that our conversion is what we expect
+  jsonContents <- TIO.readFile "testdata/DX-EPiano1.inst.json"
+  jsonInstDef <- either fail pure (jsonToInst jsonContents)
+  instDef @?= jsonInstDef
 
 testMatchSamples :: TestTree
 testMatchSamples = testCase "match samples" $ do
