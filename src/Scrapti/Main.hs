@@ -1,15 +1,29 @@
-module Scrapti.Main (main) where
-import System.Environment (getArgs)
-import System.Exit (die)
+module Scrapti.Main
+  ( main
+  ) where
 
-convert :: FilePath -> FilePath -> IO ()
-convert _aiffPath _wavPath = do
-  putStrLn "TODO"
+import Options.Applicative
+
+data Action =
+    ActionStart !String
+  | ActionStop
+  deriving stock (Eq, Show)
+
+run :: Action -> IO ()
+run = print
+
+parser :: Parser Action
+parser = subparser
+  ( command "start" (info (ActionStart <$> argument str idm) idm)
+ <> command "stop"  (info (pure ActionStop) idm) )
+
+parserInfo :: ParserInfo Action
+parserInfo = info (parser <**> helper)
+  ( fullDesc
+  <> progDesc "Some program"
+  <> header "More about my program" )
 
 main :: IO ()
 main = do
-  args <- getArgs
-  case args of
-    ["convert-aif", aifPath, wavPath] ->
-      convert aifPath wavPath
-    _ -> die "no dice"
+  a <- execParser parserInfo
+  run a
