@@ -25,19 +25,22 @@ module Scrapti.Midi.Msg
 import Control.Monad (unless)
 import Dahdit (Binary (..), BinaryRep (..), ByteCount, ByteSized (..), ExactBytes (..), Get, StaticByteSized (..),
                ViaBinaryRep (..), ViaStaticByteSized (..), Word16BE (..), byteSizeFoldable,
-               getByteString, getLookAhead, getSeq, getWord8, putByteString, putSeq, putWord8, PutM)
+               getByteString, getLookAhead, getSeq, getWord8, putByteString, putSeq, putWord8, PutM, Put)
 import Data.Bits (Bits (..))
 import Data.ByteString.Short (ShortByteString)
 import qualified Data.ByteString.Short as BSS
 import Data.Int (Int16)
-import Data.Sequence (Seq)
+import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
 import Data.String (IsString)
 import Data.Word (Word16, Word32, Word8)
 import GHC.Generics (Generic)
-import Scrapti.Midi.Notes (LinNote (..))
 
 newtype Channel = Channel { unChannel :: Word8 }
+  deriving stock (Show)
+  deriving newtype (Eq, Ord, Num)
+
+newtype ChannelCount = ChannelCount { unChannelCount :: Word8 }
   deriving stock (Show)
   deriving newtype (Eq, Ord, Num)
 
@@ -123,19 +126,6 @@ quarterTimeValue = \case
 -- noteOff :: Channel -> Note -> MidiMsg
 -- noteOff c k = noteOn c k 0
 
--- data ChanVoiceData =
---     ChanVoiceNoteOnOff !Note !Velocity
---   | ChanVoicePolyAftertouch !Note !Pressure
---   | ChanVoiceCC !ControlNum !ControlVal
---   | ChanVoiceProgramChange !ProgramNum
---   | ChanVoiceAftertouch !Pressure
---   | ChanVoicePitchWheel !PitchBend
---   deriving stock (Eq, Show, Generic)
-
--- data ChanVoiceMsg =
---   ChanVoiceMsg !Channel !ChanVoiceData
---   deriving stock (Eq, Show, Generic)
-
 newtype SysExString = SysExString { unSysExString :: ShortByteString }
   deriving stock (Show)
   deriving newtype (Eq, Ord, IsString)
@@ -147,7 +137,7 @@ findDataLength :: Get ByteCount
 findDataLength = getLookAhead (go 0) where
   go !i = do
     w <- getWord8
-    if w .&. 0x70 == 0
+    if w .&. 0x80 == 0
       then go (i + 1)
       else pure i
 
@@ -155,14 +145,13 @@ instance Binary SysExString where
   get = fmap SysExString (findDataLength >>= getByteString)
   put (SysExString ss) = putByteString ss
 
-data ChanStatus =
+data ChanStatusType =
     ChanStatusNoteOff
   | ChanStatusNoteOn
-  | ChanStatusAftertouch
-  | ChanStatusControl
-  -- ^ Can also be chan mode status but need to see second byte
-  | ChanStatusProgram
-  | ChanStatusPressure
+  | ChanStatusKeyAftertouch
+  | ChanStatusControlChange
+  | ChanStatusProgramChange
+  | ChanStatusChanAftertouch
   | ChanStatusPitchBend
   deriving stock (Eq, Show)
 
@@ -183,13 +172,11 @@ data RtStatus =
   | RtStatusActiveSystemReset
   deriving stock (Eq, Show)
 
-data ChanStatusPair = ChanStatusPair
-  { cspChan :: !Channel
-  , cspStatus:: !ChanStatus
-  } deriving stock (Eq, Show)
+data ChanStatus = ChanStatus !Channel !ChanStatusType
+  deriving stock (Eq, Show)
 
 data MidiStatus =
-    MidiStatusChan !ChanStatusPair
+    MidiStatusChan !ChanStatus
   | MidiStatusSysEx
   | MidiStatusSysCommon !CommonStatus
   | MidiStatusSysRt !RtStatus
@@ -198,6 +185,28 @@ data MidiStatus =
 
 instance StaticByteSized MidiStatus where
   staticByteSize _ = 1
+
+midiStatusIsChan :: MidiStatus -> Bool
+midiStatusIsChan = \case
+  MidiStatusChan _ -> True
+  _ -> False
+
+midiStatusAsChan :: MidiStatus -> Maybe ChanStatus
+midiStatusAsChan = \case
+  MidiStatusChan cs -> Just cs
+  _ -> Nothing
+
+data StatusPeek =
+    StatusPeekYes
+  | StatusPeekNo !Word8
+  deriving stock (Eq, Show)
+
+peekStatus :: Get StatusPeek
+peekStatus = getLookAhead $ do
+  b <- getWord8
+  pure $! if b .&. 0x80 == 0
+    then StatusPeekNo b
+    else StatusPeekYes
 
 instance Binary MidiStatus where
   get = do
@@ -208,25 +217,25 @@ instance Binary MidiStatus where
       | x == 0xF -> error "TODO parse system msgs"
       | otherwise -> do
         let !d = b .&. 0xF
-        pure $! MidiStatusChan $ ChanStatusPair (Channel d) $ case x of
+        pure $! MidiStatusChan $ ChanStatus (Channel d) $ case x of
           0x8 -> ChanStatusNoteOff
           0x9 -> ChanStatusNoteOn
-          0xA -> ChanStatusAftertouch
-          0xB -> ChanStatusControl
-          0xC -> ChanStatusProgram
-          0xD -> ChanStatusPressure
+          0xA -> ChanStatusKeyAftertouch
+          0xB -> ChanStatusControlChange
+          0xC -> ChanStatusProgramChange
+          0xD -> ChanStatusChanAftertouch
           0xE -> ChanStatusPitchBend
           _ -> error "impossible"
   put = \case
-    MidiStatusChan (ChanStatusPair (Channel c) cs) ->
+    MidiStatusChan (ChanStatus (Channel c) cs) ->
       let !d = min 15 c
           !x = case cs of
-            ChanStatusNoteOff -> 0x90
+            ChanStatusNoteOff -> 0x80
             ChanStatusNoteOn -> 0x90
-            ChanStatusAftertouch -> 0xA0
-            ChanStatusControl -> 0xB0
-            ChanStatusProgram -> 0xC0
-            ChanStatusPressure -> 0xD0
+            ChanStatusKeyAftertouch -> 0xA0
+            ChanStatusControlChange -> 0xB0
+            ChanStatusProgramChange -> 0xC0
+            ChanStatusChanAftertouch -> 0xD0
             ChanStatusPitchBend -> 0xE0
       in putWord8 (d .|. x)
     MidiStatusSysEx -> putWord8 0xF0
@@ -249,24 +258,169 @@ instance Binary MidiStatus where
       in putWord8 (0xF8 .|. x)
 
 data ChanVoiceData =
-    ChanVoiceDataNoteOff !LinNote
-  | ChanVoiceDataNodeOn !LinNote !Velocity
-  | ChanVoiceAftertouch
+    ChanVoiceDataNoteOff !Note !Velocity
+  | ChanVoiceDataNodeOn !Note !Velocity
+  | ChanVoiceKeyAftertouch !Note !Pressure
+  | ChanVoiceControlChange !ControlNum !ControlVal
+  | ChanVoiceProgramChange !ProgramNum
+  | ChanVoiceChanAftertouch !Pressure
+  | ChanVoicePitchBend !PitchBend
   deriving stock (Eq, Show)
 
-data ChanModeData = XXX
+instance ByteSized ChanVoiceData where
+  byteSize = \case
+    ChanVoiceDataNoteOff _ _ -> 2
+    ChanVoiceDataNodeOn _ _ -> 2
+    ChanVoiceKeyAftertouch _ _ -> 2
+    ChanVoiceControlChange _ _ -> 2
+    ChanVoiceProgramChange _ -> 1
+    ChanVoiceChanAftertouch _ -> 1
+    ChanVoicePitchBend _ -> 2
+
+putChanVoiceData :: ChanVoiceData -> Put
+putChanVoiceData = \case
+  ChanVoiceDataNoteOff (Note n) (Velocity v) -> do
+    putWord8 n
+    putWord8 v
+  ChanVoiceDataNodeOn (Note n) (Velocity v) -> do
+    putWord8 n
+    putWord8 v
+  ChanVoiceKeyAftertouch (Note n) (Pressure p) -> do
+    putWord8 n
+    putWord8 p
+  ChanVoiceControlChange (ControlNum cn) (ControlVal cv) -> do
+    putWord8 cn
+    putWord8 cv
+  ChanVoiceProgramChange (ProgramNum pn) -> do
+    putWord8 pn
+  ChanVoiceChanAftertouch (Pressure p) -> do
+    putWord8 p
+  ChanVoicePitchBend (PitchBend pb) -> do
+    let !w = min 16383 (max 0 (pb + 8192))
+    putWord8 (fromIntegral w .|. 0x7)
+    putWord8 (fromIntegral (shiftR w 7))
+
+data ChanModeData =
+    ChanModeAllSoundOff
+  | ChanModeResetAllControllers
+  | ChanModeLocalControlOff
+  | ChanModeLocalControlOn
+  | ChanModeAllNotesOff
+  | ChanModeOmniOff
+  | ChanModeOmniOn
+  | ChanModeMonoOn !ChannelCount
+  | ChanModeMonoOff
   deriving stock (Eq, Show)
+  deriving (ByteSized) via (ViaStaticByteSized ChanModeData)
+
+instance StaticByteSized ChanModeData where
+  staticByteSize _ = 2
+
+putChanModeData :: ChanModeData -> Put
+putChanModeData = \case
+  ChanModeAllSoundOff -> do
+    putWord8 120
+    putWord8 0
+  ChanModeResetAllControllers -> do
+    putWord8 121
+    putWord8 0
+  ChanModeLocalControlOff -> do
+    putWord8 122
+    putWord8 0
+  ChanModeLocalControlOn -> do
+    putWord8 122
+    putWord8 127
+  ChanModeAllNotesOff -> do
+    putWord8 123
+    putWord8 0
+  ChanModeOmniOff -> do
+    putWord8 124
+    putWord8 0
+  ChanModeOmniOn -> do
+    putWord8 125
+    putWord8 0
+  ChanModeMonoOn (ChannelCount cc) -> do
+    putWord8 126
+    putWord8 cc
+  ChanModeMonoOff -> do
+    putWord8 127
+    putWord8 0
+
+data ChanData =
+    ChanDataVoice !ChanVoiceData
+  | ChanDataMode !ChanModeData
+  deriving stock (Eq, Show)
+
+getChanData :: ChanStatus -> Get ChanData
+getChanData (ChanStatus _ ty) = case ty of
+  ChanStatusNoteOff -> error "TODO"
+  ChanStatusNoteOn -> error "TODO"
+  ChanStatusKeyAftertouch -> error "TODO"
+  ChanStatusControlChange -> error "TODO"
+  ChanStatusProgramChange -> error "TODO"
+  ChanStatusChanAftertouch -> error "TODO"
+  ChanStatusPitchBend -> error "TODO"
+
 
 data SysExData = SysExData
   { sedManf :: !Manf
   , sedBody :: !SysExString
   } deriving stock (Eq, Show)
 
-data CommonData = YYY
+instance ByteSized SysExData where
+  byteSize (SysExData _ body) = 1 + byteSize body
+
+getSysExData :: Get SysExData
+getSysExData = error "TODO"
+
+putSysExData :: SysExData -> Put
+putSysExData = error "TODO"
+
+data CommonData =
+    CommonDataTimeFrame !QuarterTime
+  | CommonDataSongPointer !Position
+  | CommonDataSongSelect !Song
+  | CommonDataTuneRequest
+  | CommonDataEndExclusive
   deriving stock (Eq, Show)
 
-data RtData = ZZZ
+instance ByteSized CommonData where
+  byteSize = \case
+    CommonDataTimeFrame _ -> 1
+    CommonDataSongPointer _ -> 2
+    CommonDataSongSelect _ -> 1
+    CommonDataTuneRequest -> 0
+    CommonDataEndExclusive -> 0
+
+getCommonData :: CommonStatus -> Get CommonData
+getCommonData = error "TODO"
+
+putCommonData :: CommonData -> Put
+putCommonData = \case
+  CommonDataTimeFrame _qt -> error "TODO"
+  CommonDataSongPointer _po -> error "TODO"
+  CommonDataSongSelect _so -> error "TODO"
+  CommonDataTuneRequest -> pure ()
+  CommonDataEndExclusive -> pure ()
+
+data RtData =
+    RtDataTimingClock
+  | RtDataStart
+  | RtDataContinue
+  | RtDataStop
+  | RtDataActiveSensing
+  | RtDataSystemReset
   deriving stock (Eq, Show)
+  deriving (ByteSized) via (ViaStaticByteSized RtData)
+
+instance StaticByteSized RtData where
+  staticByteSize _ = 0
+
+getRtData :: RtStatus -> Get RtData
+getRtData = error "TODO"
+
+putRtData :: RtData -> Put
+putRtData _ = pure ()
 
 data MidiData =
     MidiDataChanVoice !ChanVoiceData
@@ -277,18 +431,55 @@ data MidiData =
   deriving stock (Eq, Show)
 
 instance ByteSized MidiData where
-  byteSize = error "TODO"
+  byteSize = \case
+    MidiDataChanVoice cvd -> byteSize cvd
+    MidiDataChanMode cmd -> byteSize cmd
+    MidiDataSysEx sed -> byteSize sed
+    MidiDataSysCommon cd -> byteSize cd
+    MidiDataSysRt rd -> byteSize rd
+
+getMidiMsg :: MidiStatus -> Get MidiMsg
+getMidiMsg = error "TODO"
 
 -- Running status is for Voice and Mode messages only!
-getMidiData :: Maybe ChanStatus -> MidiStatus -> Get MidiData
-getMidiData = undefined
+getMidiDataRunning :: Maybe ChanStatus -> Get MidiMsg
+getMidiDataRunning mayLastStatus = do
+  peeked <- peekStatus
+  case peeked of
+    StatusPeekYes -> do
+      status <- get @MidiStatus
+      getMidiMsg status
+    StatusPeekNo dat ->
+      case mayLastStatus of
+        Nothing -> fail ("Expected status byte (no running status): " ++ show dat)
+        Just lastStatus -> getMidiMsg (MidiStatusChan lastStatus)
 
-putMidiData :: Maybe ChanStatus -> MidiData -> PutM ChanStatus
-putMidiData = undefined
+putMidiDataRunning :: Maybe ChanStatus -> MidiMsg -> PutM (Maybe ChanStatus)
+putMidiDataRunning mayLastStatus = \case
+  MidiMsgChanVoice cs cvd -> do
+    unless (mayLastStatus == Just cs) (put (MidiStatusChan cs))
+    putChanVoiceData cvd
+    pure (Just cs)
+  MidiMsgChanMode cs cmd -> do
+    unless (mayLastStatus == Just cs) (put (MidiStatusChan cs))
+    putChanModeData cmd
+    pure (Just cs)
+  MidiMsgSysEx sed -> do
+    put MidiStatusSysEx
+    putSysExData sed
+    pure Nothing
+  MidiMsgSysCommon cs cd -> do
+    put (MidiStatusSysCommon cs)
+    putCommonData cd
+    pure Nothing
+  MidiMsgSysRt rs rd -> do
+    put (MidiStatusSysRt rs)
+    putRtData rd
+    pure Nothing
 
 data MidiMsg =
-    MidiMsgChanVoice !ChanStatusPair !ChanVoiceData
-  | MidiMsgChanMode !ChanStatusPair !ChanModeData
+    MidiMsgChanVoice !ChanStatus !ChanVoiceData
+  | MidiMsgChanMode !ChanStatus !ChanModeData
   | MidiMsgSysEx !SysExData
   | MidiMsgSysCommon !CommonStatus !CommonData
   | MidiMsgSysRt !RtStatus !RtData
@@ -296,67 +487,19 @@ data MidiMsg =
 
 midiMsgStatus :: MidiMsg -> MidiStatus
 midiMsgStatus = \case
-  MidiMsgChanVoice csp _ -> MidiStatusChan csp
-  MidiMsgChanMode csp _ -> MidiStatusChan csp
+  MidiMsgChanVoice cs _ -> MidiStatusChan cs
+  MidiMsgChanMode cs _ -> MidiStatusChan cs
   MidiMsgSysEx _ -> MidiStatusSysEx
   MidiMsgSysCommon cs _ -> MidiStatusSysCommon cs
   MidiMsgSysRt rs _ -> MidiStatusSysRt rs
 
-midiMsgIsChan :: MidiMsg -> Bool
-midiMsgIsChan = \case
-  MidiMsgChanVoice _ _ -> True
-  MidiMsgChanMode _ _ -> True
-  _ -> False
-
--- -- TODO(ejconlon) Implement ChannelMode message
--- -- https://www.midi.org/specifications/item/table-1-summary-of-midi-message
--- -- Also break this into status byte + data bytes by category
--- data MidiMsg =
---     MidiMsgChanVoice !ChanVoiceMsg
---   | MidiMsgSysex !Manf !SysExString
---   | MidiMsgQuarterFrame !QuarterTime
---   | MidiMsgSongPosition !Position
---   | MidiMsgSongSelect !Song
---   | MidiMsgTuneRequest
---   | MidiMsgSrtClock
---   | MidiMsgSrtStart
---   | MidiMsgSrtContinue
---   | MidiMsgSrtStop
---   | MidiMsgActiveSensing
---   | MidiMsgReset
---   deriving stock (Eq, Show, Generic)
-
--- instance ByteSized MidiMsg where
---   byteSize mp =
---     1 + case mp of
---       MidiMsgChanVoice (ChanVoiceMsg _ dat) ->
---         case dat of
---           ChanVoiceNoteOnOff _ _ -> 2
---           ChanVoicePolyAftertouch _ _ -> 2
---           ChanVoiceCC _ _ -> 2
---           ChanVoiceProgramChange _ -> 1
---           ChanVoiceAftertouch _ -> 1
---           ChanVoicePitchWheel _ -> 2
---       MidiMsgSysex _ sbs -> 1 + byteSize sbs
---       MidiMsgQuarterFrame _ -> 1
---       MidiMsgSongPosition _ -> 2
---       MidiMsgSongSelect _ -> 1
---       MidiMsgTuneRequest -> 0
---       MidiMsgSrtClock -> 0
---       MidiMsgSrtStart -> 0
---       MidiMsgSrtContinue -> 0
---       MidiMsgSrtStop -> 0
---       MidiMsgActiveSensing -> 0
---       MidiMsgReset -> 0
-
-instance Binary MidiData where
-  get = error "TODO"
-  put = error "TODO"
-
--- instance Binary MidiMsg where
---   get = do
---     x <- get @Word8
---     error "TODO"
+midiMsgData :: MidiMsg -> MidiData
+midiMsgData = \case
+  MidiMsgChanVoice _ cvd -> MidiDataChanVoice cvd
+  MidiMsgChanMode _ cmd -> MidiDataChanMode cmd
+  MidiMsgSysEx sed -> MidiDataSysEx sed
+  MidiMsgSysCommon _ cd -> MidiDataSysCommon cd
+  MidiMsgSysRt _ rd -> MidiDataSysRt rd
 
 --   put = \case
 --     MidiMsgChanVoice (ChanVoiceMsg (Channel c) dat) ->
@@ -443,14 +586,6 @@ data MidiEvent = MidiEvent
   { meTimeDelta :: !VarInt
   , meMessage :: !MidiMsg
   } deriving stock (Eq, Show, Generic)
-    -- deriving (ByteSized, Binary) via (ViaGeneric MidiEvent)
-
-instance ByteSized MidiEvent where
-  byteSize = error "TODO"
-
-instance Binary MidiEvent where
-  get = error "TODO"
-  put = error "TODO"
 
 type MidiTrackMagic = ExactBytes "MTrk"
 
@@ -458,21 +593,61 @@ newtype MidiTrack = MidiTrack { unMidiTrack :: Seq MidiEvent }
   deriving stock (Show)
   deriving newtype (Eq)
 
+byteSizeEventsLoop :: ByteCount -> Maybe ChanStatus -> Seq MidiEvent -> ByteCount
+byteSizeEventsLoop !bc !mayLastStatus = \case
+  Empty -> bc
+  MidiEvent td msg :<| mes ->
+    let !tc = byteSize td
+        !anyNextStatus = midiMsgStatus msg
+        !mayNextStatus = midiStatusAsChan anyNextStatus
+        !sc = case mayNextStatus of
+          Just _ | mayNextStatus == mayLastStatus -> 0
+          _ -> byteSize anyNextStatus
+        !mc = byteSize (midiMsgData msg)
+    in byteSizeEventsLoop (bc + tc + sc + mc) mayNextStatus mes
+
+byteSizeEvents :: Seq MidiEvent -> ByteCount
+byteSizeEvents = byteSizeEventsLoop 0 Nothing
+
 instance ByteSized MidiTrack where
-  -- byteSize (MidiTrack events) = 6 + byteSizeFoldable events
-  byteSize = error "TODO"
+  byteSize (MidiTrack events) = 6 + byteSizeEvents events
+
+getEventsLoop :: Int -> Seq MidiEvent -> Maybe ChanStatus -> Get (Seq MidiEvent)
+getEventsLoop !numLeft !acc !mayLastStatus =
+  if numLeft <= 0
+    then pure acc
+    else do
+      td <- get
+      msg <- getMidiDataRunning mayLastStatus
+      let !me = MidiEvent td msg
+          !mayNextStatus = midiStatusAsChan (midiMsgStatus msg)
+      getEventsLoop (numLeft - 1) (acc :|> me) mayNextStatus
+
+getEvents :: Int -> Get (Seq MidiEvent)
+getEvents numLeft = getEventsLoop numLeft Empty Nothing
+
+putEventsLoop :: Maybe ChanStatus -> Seq MidiEvent -> Put
+putEventsLoop !mayLastStatus = \case
+  Empty -> pure ()
+  MidiEvent td msg :<| mes -> do
+    put td
+    mayNextStatus <- putMidiDataRunning mayLastStatus msg
+    putEventsLoop mayNextStatus mes
+
+putEvents :: Seq MidiEvent -> Put
+putEvents = putEventsLoop Nothing
 
 instance Binary MidiTrack where
   get = do
     _ <- get @MidiTrackMagic
     Word16BE numEvents <- get
-    events <- getSeq (fromIntegral numEvents) get
+    events <- getEvents (fromIntegral numEvents)
     pure $! MidiTrack events
 
   put (MidiTrack events) = do
     put @MidiTrackMagic (ExactBytes ())
     put (Word16BE (fromIntegral (Seq.length events)))
-    putSeq put events
+    putEvents events
 
 data MidiFileType =
     MidiFileTypeSingle
