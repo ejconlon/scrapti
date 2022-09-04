@@ -13,6 +13,7 @@ import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Builder as TLB
 import qualified Data.Text.Encoding as TE
 import Data.Aeson.Encode.Pretty (encodePrettyToTextBuilder)
+import Scrapti.Midi.Notes (LinNote (..))
 
 data InstEnv = InstEnv
   { ieAttack :: !Rational
@@ -141,6 +142,10 @@ data InstSpec x = InstSpec
   , isRegions :: !(Seq (InstRegion x))
   } deriving stock (Eq, Show, Functor, Foldable, Traversable, Generic)
     deriving (ToJSON, FromJSON) via (AesonRecord (InstSpec x))
+
+annotateNotes :: InstSpec x -> InstSpec (LinNote, x)
+annotateNotes (InstSpec config regions) = InstSpec config (fmap go regions) where
+  go reg = let note = LinNote (fromInteger (ikrSampKey (irKeyRange reg))) in reg { irSample = (note, irSample reg) }
 
 data InstDef x = InstDef
   { idPath :: !(Maybe FilePath)

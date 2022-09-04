@@ -4,7 +4,7 @@ module Main (main) where
 
 import Dahdit (Binary (..), ByteCount, ElementCount, Get, Int16LE (..), ShortByteString, StaticByteSized (..),
                StaticBytes, Word16LE, Word8, byteSize, getExact, getSkip, getWord32LE, liftedPrimArrayFromList,
-               runGetFile, runGetIO, runPut, sizeofLiftedPrimArray)
+               runGetFile, runGetIO, runPut, sizeofLiftedPrimArray, runPutFile)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Short as BSS
@@ -15,12 +15,13 @@ import Data.Maybe (fromMaybe)
 import Data.Primitive.ByteArray (indexByteArray, sizeofByteArray)
 import Data.Proxy (Proxy (..))
 import qualified Data.Sequence as Seq
+import qualified Data.Text as T
 import Scrapti.Aiff (Aiff (..), AiffDataBody (..), lookupAiffDataChunk)
 import qualified Scrapti.Aiff as Aiff
 import Scrapti.Binary (QuietArray (..), QuietLiftedArray (..))
 import Scrapti.Common (LoopMarks (..), UnparsedBody (..), chunkHeaderSize, defaultLoopMarkNames, defaultNoteNumber,
                        defineLoopMarks, getChunkSizeLE, getExpectLabel, guardChunk, rethrow)
-import Scrapti.Convert (Neutral (..), aiffToNeutral, neutralMono, neutralToSampleWav, neutralToWav, wavToNeutral)
+import Scrapti.Convert (Neutral (..), aiffToNeutral, neutralMono, neutralToSampleWav, neutralToWav, wavToNeutral, loadNeutral, neutralCrossFade, neutralCropLoop)
 import Scrapti.Dsp (ModMeta (..), PcmContainer (..), linearCrossFade, monoFromLeft, runMod)
 import Scrapti.Riff (Chunk (..), KnownChunk (..), KnownListChunk (..), KnownOptChunk (..), labelRiff)
 import Scrapti.Sfont (Bag, Gen, InfoChunk (..), Inst, Mod, PdtaChunk (..), Phdr, Sdta (..), SdtaChunk (..), Sfont (..),
@@ -36,16 +37,17 @@ import Scrapti.Wav (Wav (..), WavAdtlChunk, WavAdtlData (..), WavAdtlElem (..), 
                     WavFormatBody (..), WavFormatChunk, WavHeader (..), WavInfoElem (..), lookupWavDataChunk,
                     lookupWavFormatChunk, wavToPcmContainer)
 import System.Directory (doesFileExist)
-import System.FilePath ((</>))
+import System.FilePath ((</>), (<.>))
 import System.IO.Temp (withSystemTempDirectory)
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, testCase, (@?=))
-import Scrapti.Patches.Loader (matchSamples, Sample (Sample), defaultInst)
+import Scrapti.Patches.Loader (matchSamples, Sample (..), defaultInst)
 import Scrapti.Midi.Notes (OctNote(..), NoteName (..), Octave (..))
 import qualified Data.Text.IO as TIO
 import Scrapti.Patches.Sfz (parseSfz, renderSfz)
-import Scrapti.Patches.Inst (InstDef (..), InstSpec(..), jsonToInst)
+import Scrapti.Patches.Inst (InstDef (..), InstSpec(..), InstKeyRange (..), jsonToInst)
 import Scrapti.Patches.ConvertSfz (sfzToInst, instToSfz)
+import Scrapti.Patches.ConvertPti (PtiPatch (..), instToPtiPatches)
 import Scrapti.Patches.Sfz (sfzFileSimilar)
 -- import Text.Pretty.Simple (pPrint)
 
@@ -592,7 +594,12 @@ testDspFadeWider = testCase "fade wider" $ do
 testDsp :: TestTree
 testDsp = testGroup "dsp" [testDspMono, testDspFadeOne, testDspFadeSome, testDspFadeWider]
 
--- TODO tests: sft to inst, inst to sfz, inst to pti
+testMatchSamples :: TestTree
+testMatchSamples = testCase "match samples" $ do
+  samps <- matchSamples "DX-EPiano1" "wav" "testdata"
+  samps @?= Seq.singleton (Sample "testdata/DX-EPiano1-C1.wav" (OctNote (Octave 1) NoteNameC) Nothing Nothing)
+  inst <- defaultInst samps
+  Seq.length (isRegions inst) @?= 1
 
 testPatchSfz :: TestTree
 testPatchSfz = testCase "sfz" $ do
@@ -613,21 +620,30 @@ testPatchSfz = testCase "sfz" $ do
   jsonInstDef <- either fail pure (jsonToInst jsonContents)
   instDef @?= jsonInstDef
 
-testMatchSamples :: TestTree
-testMatchSamples = testCase "match samples" $ do
-  samps <- matchSamples "DX-EPiano1" "wav" "testdata"
-  samps @?= Seq.singleton (Sample "testdata/DX-EPiano1-C1.wav" (OctNote (Octave 1) NoteNameC) Nothing Nothing)
-  inst <- defaultInst samps
-  Seq.length (isRegions inst) @?= 1
+loadSamp :: Maybe FilePath -> FilePath -> IO PcmContainer
+loadSamp mayRelPath fp = do
+  let fp' = maybe fp (</> fp) mayRelPath
+  ne <- loadNeutral 44100 (Just defaultLoopMarkNames) fp'
+  ne' <- rethrow (neutralMono ne)
+  pure $! neCon ne'
 
--- testInitInst :: TestTree
--- testInitInst = testCase "init sfz" $ do
---   sfzContents <- TIO.readFile "testdata/DX-EPiano1.sfz"
---   sfzFile <- either fail pure (parseSfz sfzContents)
---   samps <- matchSamples "DX-EPiano1" "wav" "testdata"
+testPatchPti :: TestTree
+testPatchPti = testCase "pti" $ do
+  jsonContents <- TIO.readFile "testdata/DX-EPiano1.inst.json"
+  InstDef mayRelPath fileSpec <- either fail pure (jsonToInst jsonContents)
+  mayRelPath @?= Nothing
+  loadedSpec <- traverse (loadSamp (Just "testdata")) fileSpec
+  patches <- either fail pure (instToPtiPatches "DX-EPiano1" Nothing def loadedSpec)
+  Seq.length patches @?= 1
+  -- TODO remove this
+  for_ patches $ \(PtiPatch name _ pti) -> do
+    let fp = "testdata" </> T.unpack name <.> "pti"
+    runPutFile fp (put pti)
+  (expectedPti, _) <- runGetFile get "testdata/DX-EPiano1-C1.pti"
+  patches @?= Seq.singleton (PtiPatch "DX-EPiano1-C1" (InstKeyRange 0 24 127) expectedPti)
 
 testPatches :: TestTree
-testPatches = testGroup "patches" [testPatchSfz, testMatchSamples]
+testPatches = testGroup "patches" [testMatchSamples, testPatchSfz, testPatchPti]
 
 testScrapti :: TestTree
 testScrapti = testGroup "Scrapti" [testWav, testAiff, testSfont, testPti, testProject, testConvert, testDsp, testOtherSizes, testPatches]

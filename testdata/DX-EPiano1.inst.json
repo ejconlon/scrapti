@@ -21,7 +21,7 @@
                 "key_range": {
                     "highkey": 127,
                     "lowkey": 0,
-                    "samp_key": 36
+                    "samp_key": 24
                 },
                 "loop": {
                     "loop_end": 33096,

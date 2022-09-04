@@ -1,12 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Scrapti.Patches.ConvertPti
-  ( PtiSample
+  ( Tempo (..)
   , PtiPatch (..)
   , instToPtiPatches
   ) where
 
-import Dahdit (Int16LE, LiftedPrimArray, BoolByte (..), StaticBytes (..), sizeofLiftedPrimArray, Word16LE (..), FloatLE (..))
+import Dahdit (LiftedPrimArray (..), BoolByte (..), StaticBytes (..), Word16LE (..), FloatLE (..))
 import Scrapti.Tracker.Pti (Pti, mkPti, Header (..), Preamble (..), Block (..), SamplePlayback (..), Auto (..), Filter (..), Lfo (..), InstParams (..), FilterType (..), AutoType (..), AutoEnvelope (..), LfoType (..), LfoSteps (..))
 import Scrapti.Patches.Inst (InstSpec (..), InstKeyRange (..), InstConfig (..), InstRegion (..), InstCrop (..), InstLoop (..), InstLoopType (..), InstBlock (..), InstFilter (..), InstAuto (..), InstFilterType (..), InstEnv (..), InstLfo (..), InstLfoWave (..))
 import Data.Sequence (Seq)
@@ -19,6 +19,7 @@ import qualified Data.ByteString.Short as BSS
 import Control.Monad (unless)
 import Data.Ratio ((%))
 import Data.Foldable (minimumBy)
+import Scrapti.Dsp (PcmContainer(..), PcmMeta (pmNumSamples), linearCrossFade, applyModGeneric, crop)
 
 minimumOn :: Ord b => (a -> b) -> [a] -> a
 minimumOn f = minimumBy (\x y -> compare (f x) (f y))
@@ -50,18 +51,17 @@ instance Default Tempo where
 -- beatPeriod :: Tempo -> Rational
 -- beatPeriod (Tempo t) = 60 / t
 
-type PtiSample = LiftedPrimArray Int16LE
-
 data PtiPatch = PtiPatch
-  { ppKeyRange :: !InstKeyRange
+  { ppName :: !Text
+  , ppKeyRange :: !InstKeyRange
   , ppPti :: !Pti
   } deriving stock (Eq, Show)
 
-convertPreamble :: Text -> LinNote -> InstRegion PtiSample -> Preamble
-convertPreamble namePrefix linNote (InstRegion samp _ mayLoop mayCrop) =
+convertPreamble :: Text -> LinNote -> InstRegion PcmContainer -> (Text, Preamble)
+convertPreamble namePrefix linNote (InstRegion con _ mayLoop mayCrop) =
   let prettyNote = renderNote NotePrefFlat (linToOct linNote)
       name = namePrefix <> "-" <> prettyNote
-      sampLen = sizeofLiftedPrimArray samp
+      sampLen = pmNumSamples (pcMeta con)
       sampPlay = case mayLoop of
         Nothing -> SPOneShot
         Just (InstLoop ty _ _) -> case ty of
@@ -82,16 +82,17 @@ convertPreamble namePrefix linNote (InstRegion samp _ mayLoop mayCrop) =
         Just (InstLoop _ _ end) -> shortRatioPercent end sampLen
         Nothing -> 0
       loopEnd = if loopEndRaw < playEnd then loopEndRaw else playEnd - 1
-  in def
-    { preIsWavetable = BoolByte False
-    , preName = StaticBytes (BSS.toShort (TE.encodeUtf8 name))
-    , preSampleLength = fromIntegral sampLen
-    , preSamplePlayback = sampPlay
-    , prePlaybackStart = playStart
-    , preLoopStart = loopStart
-    , preLoopEnd = loopEnd
-    , prePlaybackEnd = playEnd
-    }
+      preamble = def
+        { preIsWavetable = BoolByte False
+        , preName = StaticBytes (BSS.toShort (TE.encodeUtf8 name))
+        , preSampleLength = fromIntegral sampLen
+        , preSamplePlayback = sampPlay
+        , prePlaybackStart = playStart
+        , preLoopStart = loopStart
+        , preLoopEnd = loopEnd
+        , prePlaybackEnd = playEnd
+        }
+    in (name, preamble)
 
 convertFilter :: Maybe InstFilter -> Either String Filter
 convertFilter = \case
@@ -202,21 +203,33 @@ convertParams interval _panning tune = do
     , ipPanning = panningArg
     }
 
-instRegionToPti :: Text -> Maybe LinNote -> Tempo -> InstConfig -> InstRegion PtiSample -> Either String Pti
+instRegionToPti :: Text -> Maybe LinNote -> Tempo -> InstConfig -> InstRegion PcmContainer -> Either String (Text, Pti)
 instRegionToPti namePrefix mayCenterNote tempo instConfig instRegion = do
   let linNote = LinNote (fromInteger (ikrSampKey (irKeyRange instRegion)))
       interval = maybe 0 (linSubInterval linNote) mayCenterNote
-  let preamble = convertPreamble namePrefix linNote instRegion
+  let (name, preamble) = convertPreamble namePrefix linNote instRegion
   (autoBlock, lfoBlock) <- convertAuto tempo (icAuto instConfig)
   filt <- convertFilter (icFilter instConfig)
   ptiParams <- convertParams interval (icPanning instConfig) (icTune instConfig)
   let header = Header preamble autoBlock lfoBlock filt ptiParams def def def
-  let samp = irSample instRegion
-  pure $! mkPti header samp
+  let con = irSample instRegion
+  con' <- case irLoop instRegion of
+    Nothing -> pure con
+    Just (InstLoop _ start end) ->
+      let ea = applyModGeneric (linearCrossFade 16 (fromInteger start) (fromInteger end)) con
+      in either (Left . show) pure ea
+  con'' <- case irCrop instRegion of
+    Nothing -> pure con'
+    Just (InstCrop start end) ->
+      let ea = applyModGeneric (crop (fromInteger start) (fromInteger end)) con
+      in either (Left . show) pure ea
+  let samp = LiftedPrimArray (pcData con'')
+  let pti = mkPti header samp
+  pure (name, pti)
 
-instToPtiPatches :: Text -> Maybe LinNote -> Tempo -> InstSpec PtiSample -> Either String (Seq PtiPatch)
+instToPtiPatches :: Text -> Maybe LinNote -> Tempo -> InstSpec PcmContainer -> Either String (Seq PtiPatch)
 instToPtiPatches namePrefix mayCenterNote tempo (InstSpec instParams regions) = do
   for regions $ \region -> do
     let kr = irKeyRange region
-    pti <- instRegionToPti namePrefix mayCenterNote tempo instParams region
-    pure $! PtiPatch kr pti
+    (name, pti) <- instRegionToPti namePrefix mayCenterNote tempo instParams region
+    pure $! PtiPatch name kr pti
