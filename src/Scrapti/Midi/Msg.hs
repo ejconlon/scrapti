@@ -9,14 +9,13 @@ module Scrapti.Midi.Msg
   , Pressure (..)
   , ProgramNum (..)
   , PitchBend (..)
-  -- , noteOn
-  -- , noteOff
-  -- , ChanVoiceData (..)
   , ChanStatus (..)
   , CommonStatus (..)
   , RtStatus (..)
   , MidiStatus (..)
   , MidiMsg (..)
+  , midiMsgNoteOn
+  , midiMsgNoteOff
   , MidiEvent (..)
   , MidiTrack (..)
   , MidiFile (..)
@@ -120,12 +119,6 @@ quarterTimeValue = \case
   QTHoursLow w -> w
   QTHoursHigh w -> w
 
--- noteOn :: Channel -> Note -> Velocity -> MidiMsg
--- noteOn c k v = MidiMsgChanVoice (ChanVoiceMsg c (ChanVoiceNoteOnOff k v))
-
--- noteOff :: Channel -> Note -> MidiMsg
--- noteOff c k = noteOn c k 0
-
 newtype SysExString = SysExString { unSysExString :: ShortByteString }
   deriving stock (Show)
   deriving newtype (Eq, Ord, IsString)
@@ -169,7 +162,7 @@ data RtStatus =
   | RtStatusContinue
   | RtStatusStop
   | RtStatusActiveSensing
-  | RtStatusActiveSystemReset
+  | RtStatusSystemReset
   deriving stock (Eq, Show)
 
 data ChanStatus = ChanStatus !Channel !ChanStatusType
@@ -214,7 +207,21 @@ instance Binary MidiStatus where
     let !x = shiftL b 4
     if
       | x < 0x8 -> fail ("Midi status byte with high bit clear: " ++ show x)
-      | x == 0xF -> error "TODO parse system msgs"
+      | x == 0xF ->
+        case b of
+          0xF0 -> pure MidiStatusSysEx
+          0xF1 -> pure $! MidiStatusSysCommon CommonStatusTimeFrame
+          0xF2 -> pure $! MidiStatusSysCommon CommonStatusSongPointer
+          0xF3 -> pure $! MidiStatusSysCommon CommonStatusSongSelect
+          0xF6 -> pure $! MidiStatusSysCommon CommonStatusTuneRequest
+          0xF7 -> pure $! MidiStatusSysCommon CommonStatusEndExclusive
+          0xF8 -> pure $! MidiStatusSysRt RtStatusTimingClock
+          0xFA -> pure $! MidiStatusSysRt RtStatusStart
+          0xFB -> pure $! MidiStatusSysRt RtStatusContinue
+          0xFC -> pure $! MidiStatusSysRt RtStatusStop
+          0xFE -> pure $! MidiStatusSysRt RtStatusActiveSensing
+          0xFF -> pure $! MidiStatusSysRt RtStatusSystemReset
+          _ -> fail ("Unknown system status byte: " ++ show b)
       | otherwise -> do
         let !d = b .&. 0xF
         pure $! MidiStatusChan $ ChanStatus (Channel d) $ case x of
@@ -254,12 +261,12 @@ instance Binary MidiStatus where
             RtStatusContinue -> 0x3
             RtStatusStop -> 0x4
             RtStatusActiveSensing -> 0x6
-            RtStatusActiveSystemReset -> 0x7
+            RtStatusSystemReset -> 0x7
       in putWord8 (0xF8 .|. x)
 
 data ChanVoiceData =
     ChanVoiceDataNoteOff !Note !Velocity
-  | ChanVoiceDataNodeOn !Note !Velocity
+  | ChanVoiceDataNoteOn !Note !Velocity
   | ChanVoiceKeyAftertouch !Note !Pressure
   | ChanVoiceControlChange !ControlNum !ControlVal
   | ChanVoiceProgramChange !ProgramNum
@@ -270,7 +277,7 @@ data ChanVoiceData =
 instance ByteSized ChanVoiceData where
   byteSize = \case
     ChanVoiceDataNoteOff _ _ -> 2
-    ChanVoiceDataNodeOn _ _ -> 2
+    ChanVoiceDataNoteOn _ _ -> 2
     ChanVoiceKeyAftertouch _ _ -> 2
     ChanVoiceControlChange _ _ -> 2
     ChanVoiceProgramChange _ -> 1
@@ -282,7 +289,7 @@ putChanVoiceData = \case
   ChanVoiceDataNoteOff (Note n) (Velocity v) -> do
     putWord8 n
     putWord8 v
-  ChanVoiceDataNodeOn (Note n) (Velocity v) -> do
+  ChanVoiceDataNoteOn (Note n) (Velocity v) -> do
     putWord8 n
     putWord8 v
   ChanVoiceKeyAftertouch (Note n) (Pressure p) -> do
@@ -403,31 +410,12 @@ putCommonData = \case
   CommonDataTuneRequest -> pure ()
   CommonDataEndExclusive -> pure ()
 
-data RtData =
-    RtDataTimingClock
-  | RtDataStart
-  | RtDataContinue
-  | RtDataStop
-  | RtDataActiveSensing
-  | RtDataSystemReset
-  deriving stock (Eq, Show)
-  deriving (ByteSized) via (ViaStaticByteSized RtData)
-
-instance StaticByteSized RtData where
-  staticByteSize _ = 0
-
-getRtData :: RtStatus -> Get RtData
-getRtData = error "TODO"
-
-putRtData :: RtData -> Put
-putRtData _ = pure ()
-
 data MidiData =
     MidiDataChanVoice !ChanVoiceData
   | MidiDataChanMode !ChanModeData
   | MidiDataSysEx !SysExData
   | MidiDataSysCommon !CommonData
-  | MidiDataSysRt !RtData
+  | MidiDataSysRt
   deriving stock (Eq, Show)
 
 instance ByteSized MidiData where
@@ -436,7 +424,7 @@ instance ByteSized MidiData where
     MidiDataChanMode cmd -> byteSize cmd
     MidiDataSysEx sed -> byteSize sed
     MidiDataSysCommon cd -> byteSize cd
-    MidiDataSysRt rd -> byteSize rd
+    MidiDataSysRt -> 0
 
 getMidiMsg :: MidiStatus -> Get MidiMsg
 getMidiMsg = error "TODO"
@@ -472,9 +460,8 @@ putMidiDataRunning mayLastStatus = \case
     put (MidiStatusSysCommon cs)
     putCommonData cd
     pure Nothing
-  MidiMsgSysRt rs rd -> do
+  MidiMsgSysRt rs -> do
     put (MidiStatusSysRt rs)
-    putRtData rd
     pure Nothing
 
 data MidiMsg =
@@ -482,7 +469,7 @@ data MidiMsg =
   | MidiMsgChanMode !ChanStatus !ChanModeData
   | MidiMsgSysEx !SysExData
   | MidiMsgSysCommon !CommonStatus !CommonData
-  | MidiMsgSysRt !RtStatus !RtData
+  | MidiMsgSysRt !RtStatus
   deriving stock (Eq, Show)
 
 midiMsgStatus :: MidiMsg -> MidiStatus
@@ -491,7 +478,7 @@ midiMsgStatus = \case
   MidiMsgChanMode cs _ -> MidiStatusChan cs
   MidiMsgSysEx _ -> MidiStatusSysEx
   MidiMsgSysCommon cs _ -> MidiStatusSysCommon cs
-  MidiMsgSysRt rs _ -> MidiStatusSysRt rs
+  MidiMsgSysRt rs -> MidiStatusSysRt rs
 
 midiMsgData :: MidiMsg -> MidiData
 midiMsgData = \case
@@ -499,7 +486,13 @@ midiMsgData = \case
   MidiMsgChanMode _ cmd -> MidiDataChanMode cmd
   MidiMsgSysEx sed -> MidiDataSysEx sed
   MidiMsgSysCommon _ cd -> MidiDataSysCommon cd
-  MidiMsgSysRt _ rd -> MidiDataSysRt rd
+  MidiMsgSysRt _ -> MidiDataSysRt
+
+midiMsgNoteOn :: Channel -> Note -> Velocity -> MidiMsg
+midiMsgNoteOn c k v = MidiMsgChanVoice (ChanStatus c ChanStatusNoteOn) (ChanVoiceDataNoteOn k v)
+
+midiMsgNoteOff :: Channel -> Note -> MidiMsg
+midiMsgNoteOff c k = midiMsgNoteOn c k 0
 
 --   put = \case
 --     MidiMsgChanVoice (ChanVoiceMsg (Channel c) dat) ->
