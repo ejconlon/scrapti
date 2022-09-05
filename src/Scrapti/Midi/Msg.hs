@@ -360,14 +360,36 @@ data ChanData =
 
 getChanData :: ChanStatus -> Get ChanData
 getChanData (ChanStatus _ ty) = case ty of
-  ChanStatusNoteOff -> error "TODO"
-  ChanStatusNoteOn -> error "TODO"
-  ChanStatusKeyAftertouch -> error "TODO"
-  ChanStatusControlChange -> error "TODO"
-  ChanStatusProgramChange -> error "TODO"
-  ChanStatusChanAftertouch -> error "TODO"
-  ChanStatusPitchBend -> error "TODO"
-
+  ChanStatusNoteOff -> do
+    n <- fmap Note getWord8
+    v <- fmap Velocity getWord8
+    pure $! ChanDataVoice $ ChanVoiceDataNoteOff n v
+  ChanStatusNoteOn -> do
+    n <- fmap Note getWord8
+    v <- fmap Velocity getWord8
+    pure $! ChanDataVoice $ ChanVoiceDataNoteOn n v
+  ChanStatusKeyAftertouch -> do
+    n <- fmap Note getWord8
+    p <- fmap Pressure getWord8
+    pure $! ChanDataVoice $ ChanVoiceKeyAftertouch n p
+  ChanStatusControlChange -> do
+    cn <- fmap ControlNum getWord8
+    cv <- fmap ControlVal getWord8
+    pure $! if unControlNum cn < 120
+      then ChanDataVoice $ ChanVoiceControlChange cn cv
+      else error "TODO" -- interpret as chan mode data
+  ChanStatusProgramChange -> do
+    pn <- fmap ProgramNum getWord8
+    pure $! ChanDataVoice $ ChanVoiceProgramChange pn
+  ChanStatusChanAftertouch -> do
+    p <- fmap Pressure getWord8
+    pure $! ChanDataVoice $ ChanVoiceChanAftertouch p
+  ChanStatusPitchBend -> do
+    wl :: Int16 <- fmap fromIntegral getWord8
+    wh :: Int16 <- fmap fromIntegral getWord8
+    let !w = shiftR wh 7 .|. wl
+        !pb = PitchBend (w - 8192)
+    pure $! ChanDataVoice $ ChanVoicePitchBend pb
 
 data SysExData = SysExData
   { sedManf :: !Manf
@@ -377,11 +399,9 @@ data SysExData = SysExData
 instance ByteSized SysExData where
   byteSize (SysExData _ body) = 1 + byteSize body
 
-getSysExData :: Get SysExData
-getSysExData = error "TODO"
-
-putSysExData :: SysExData -> Put
-putSysExData = error "TODO"
+instance Binary SysExData where
+  get = error "TODO"
+  put = error "TODO"
 
 data CommonData =
     CommonDataTimeFrame !QuarterTime
@@ -454,7 +474,7 @@ putMidiDataRunning mayLastStatus = \case
     pure (Just cs)
   MidiMsgSysEx sed -> do
     put MidiStatusSysEx
-    putSysExData sed
+    put sed
     pure Nothing
   MidiMsgSysCommon cs cd -> do
     put (MidiStatusSysCommon cs)
