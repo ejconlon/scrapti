@@ -9,6 +9,6 @@ packages:
 extra-deps:
 - aeson-via-0.2.0
 - git: git@github.com:ejconlon/dahdit.git
-  commit: 85904af492b53325ee02fdde65725e22091afcb5
+  commit: a3939939f36a6cc2cbd4899cfedb29faebe0039d
 - git: git@github.com:ejconlon/data-sword.git
   commit: 4a3efca54b337820446c7682bf3623d607f0365f
