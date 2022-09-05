@@ -13,6 +13,7 @@ import Control.Monad (join, unless, (>=>))
 import Control.Monad.Except (Except, MonadError (..), runExcept)
 import Control.Monad.Reader (MonadReader, ReaderT (..), asks)
 import Control.Monad.Writer.Strict (MonadWriter (..), WriterT, execWriterT)
+import Data.Aeson (FromJSON (..), ToJSON (..), Value (..))
 import Data.Default (Default (..))
 import Data.Foldable (for_)
 import qualified Data.Map.Strict as Map
@@ -22,13 +23,12 @@ import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Traversable (for)
-import Scrapti.Patches.Inst (InstAuto (..), InstAutoTarget (..), InstBlock (..), InstCrop (..), InstEnv (..),
-                             InstFilter (..), InstFilterType (..), InstKeyRange (..), InstLfo (..), InstLfoWave (..),
-                             InstLoop (..), InstLoopType (..), InstConfig (..), InstRegion (..), InstSpec (..),
-                             traverseBlock_, InstDef (..))
+import Scrapti.Patches.Inst (InstAuto (..), InstAutoTarget (..), InstBlock (..), InstConfig (..), InstCrop (..),
+                             InstDef (..), InstEnv (..), InstFilter (..), InstFilterType (..), InstKeyRange (..),
+                             InstLfo (..), InstLfoWave (..), InstLoop (..), InstLoopType (..), InstRegion (..),
+                             InstSpec (..), traverseBlock_)
 import Scrapti.Patches.Sfz (SfzAttrs, SfzFile (..), SfzSection (..), SfzVal (..), sfzValFloat, sfzValInt, sfzValText,
                             textSfzVal)
-import Data.Aeson (ToJSON (..), FromJSON (..), Value (..))
 
 renderWaveNum :: InstLfoWave -> Integer
 renderWaveNum = \case

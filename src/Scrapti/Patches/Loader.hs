@@ -7,22 +7,23 @@ module Scrapti.Patches.Loader
   , defaultInst
   ) where
 
-import Scrapti.Midi.Notes (OctNote, parseNote, octToLin, LinNote (..))
-import Scrapti.Midi.Msg (Velocity (..))
-import Data.Text (Text)
-import qualified Data.Text as T
-import System.FilePath ((</>))
-import System.Directory (listDirectory)
-import Text.Regex.TDFA ((=~~))
-import Text.Read (readMaybe)
+import Data.Default (Default (..))
 import Data.Maybe (maybeToList)
-import Scrapti.Patches.Inst (InstSpec (..), InstRegion (..), InstKeyRange (InstKeyRange), InstLoop (..), InstLoopType (InstLoopTypeForward), InstCrop (..))
+import Data.Ord (Down (..))
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
-import Data.Ord (Down(..))
-import Data.Default (Default(..))
-import Scrapti.Convert (Neutral(..), loadNeutral)
-import Scrapti.Common (LoopMarkNames, defaultLoopMarkNames, LoopMarks (..), SimpleMarker (..))
+import Data.Text (Text)
+import qualified Data.Text as T
+import Scrapti.Common (LoopMarkNames, LoopMarks (..), SimpleMarker (..), defaultLoopMarkNames)
+import Scrapti.Convert (Neutral (..), loadNeutral)
+import Scrapti.Midi.Msg (Velocity (..))
+import Scrapti.Midi.Notes (LinNote (..), OctNote, octToLin, parseNote)
+import Scrapti.Patches.Inst (InstCrop (..), InstKeyRange (InstKeyRange), InstLoop (..),
+                             InstLoopType (InstLoopTypeForward), InstRegion (..), InstSpec (..))
+import System.Directory (listDirectory)
+import System.FilePath ((</>))
+import Text.Read (readMaybe)
+import Text.Regex.TDFA ((=~~))
 
 data Sample = Sample
   { samplePath :: !FilePath

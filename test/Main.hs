@@ -15,13 +15,21 @@ import Data.Maybe (fromMaybe)
 import Data.Primitive.ByteArray (indexByteArray, sizeofByteArray)
 import Data.Proxy (Proxy (..))
 import qualified Data.Sequence as Seq
+import qualified Data.Text.IO as TIO
 import Scrapti.Aiff (Aiff (..), AiffDataBody (..), lookupAiffDataChunk)
 import qualified Scrapti.Aiff as Aiff
 import Scrapti.Binary (QuietArray (..), QuietLiftedArray (..))
 import Scrapti.Common (LoopMarks (..), UnparsedBody (..), chunkHeaderSize, defaultLoopMarkNames, defaultNoteNumber,
                        defineLoopMarks, getChunkSizeLE, getExpectLabel, guardChunk, rethrow)
-import Scrapti.Convert (Neutral (..), aiffToNeutral, neutralMono, neutralToSampleWav, neutralToWav, wavToNeutral, loadNeutral)
+import Scrapti.Convert (Neutral (..), aiffToNeutral, loadNeutral, neutralMono, neutralToSampleWav, neutralToWav,
+                        wavToNeutral)
 import Scrapti.Dsp (ModMeta (..), PcmContainer (..), linearCrossFade, monoFromLeft, runMod)
+import Scrapti.Midi.Notes (NoteName (..), OctNote (..), Octave (..))
+import Scrapti.Patches.ConvertPti (PtiPatch (..), instToPtiPatches)
+import Scrapti.Patches.ConvertSfz (instToSfz, sfzToInst)
+import Scrapti.Patches.Inst (InstDef (..), InstKeyRange (..), InstSpec (..), jsonToInst)
+import Scrapti.Patches.Loader (Sample (..), defaultInst, matchSamples)
+import Scrapti.Patches.Sfz (parseSfz, renderSfz, sfzFileSimilar)
 import Scrapti.Riff (Chunk (..), KnownChunk (..), KnownListChunk (..), KnownOptChunk (..), labelRiff)
 import Scrapti.Sfont (Bag, Gen, InfoChunk (..), Inst, Mod, PdtaChunk (..), Phdr, Sdta (..), SdtaChunk (..), Sfont (..),
                       Shdr, labelSfbk)
@@ -40,13 +48,6 @@ import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, testCase, (@?=))
-import Scrapti.Patches.Loader (matchSamples, Sample (..), defaultInst)
-import Scrapti.Midi.Notes (OctNote(..), NoteName (..), Octave (..))
-import qualified Data.Text.IO as TIO
-import Scrapti.Patches.Sfz (parseSfz, renderSfz, sfzFileSimilar)
-import Scrapti.Patches.Inst (InstDef (..), InstSpec(..), InstKeyRange (..), jsonToInst)
-import Scrapti.Patches.ConvertSfz (sfzToInst, instToSfz)
-import Scrapti.Patches.ConvertPti (PtiPatch (..), instToPtiPatches)
 -- import Text.Pretty.Simple (pPrint)
 
 drumFmtOffset :: ByteCount

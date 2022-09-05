@@ -22,9 +22,9 @@ module Scrapti.Midi.Msg
   ) where
 
 import Control.Monad (unless)
-import Dahdit (Binary (..), BinaryRep (..), ByteCount, ByteSized (..), ExactBytes (..), Get, StaticByteSized (..),
-               ViaBinaryRep (..), ViaStaticByteSized (..), Word16BE (..), byteSizeFoldable,
-               getByteString, getLookAhead, getSeq, getWord8, putByteString, putSeq, putWord8, PutM, Put)
+import Dahdit (Binary (..), BinaryRep (..), ByteCount, ByteSized (..), ExactBytes (..), Get, Put, PutM,
+               StaticByteSized (..), ViaBinaryRep (..), ViaStaticByteSized (..), Word16BE (..), byteSizeFoldable,
+               getByteString, getLookAhead, getSeq, getWord8, putByteString, putSeq, putWord8)
 import Data.Bits (Bits (..))
 import Data.ByteString.Short (ShortByteString)
 import qualified Data.ByteString.Short as BSS

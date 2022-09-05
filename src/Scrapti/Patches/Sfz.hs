@@ -23,6 +23,7 @@ import Control.Monad.Except (Except, MonadError (..), runExcept)
 import Control.Monad.State.Strict (MonadState (..), StateT (..))
 import Data.Char (isAlpha, isDigit)
 import Data.Foldable (for_, toList)
+import Data.Functor.Classes (Eq1 (..))
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Sequence (Seq (..))
@@ -33,7 +34,6 @@ import Prettyprinter (Pretty (..))
 import qualified Prettyprinter as P
 import qualified Prettyprinter.Render.Text as PT
 import Text.Read (readEither)
-import Data.Functor.Classes (Eq1(..))
 
 {-
 SFZ params

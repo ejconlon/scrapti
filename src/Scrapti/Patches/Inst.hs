@@ -2,17 +2,17 @@
 
 module Scrapti.Patches.Inst where
 
+import AesonVia (AesonRecord (..), AesonTag (..), HasTagPrefix (..))
+import Data.Aeson (FromJSON, ToJSON, eitherDecodeStrict')
+import Data.Aeson.Encode.Pretty (encodePrettyToTextBuilder)
 import Data.Default (Default (..))
 import Data.Foldable (traverse_)
 import Data.Sequence (Seq)
-import GHC.Generics (Generic)
-import AesonVia (AesonRecord (..), AesonTag (..), HasTagPrefix (..))
-import Data.Aeson (FromJSON, ToJSON, eitherDecodeStrict')
 import Data.Text (Text)
+import qualified Data.Text.Encoding as TE
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Builder as TLB
-import qualified Data.Text.Encoding as TE
-import Data.Aeson.Encode.Pretty (encodePrettyToTextBuilder)
+import GHC.Generics (Generic)
 import Scrapti.Midi.Notes (LinNote (..))
 
 data InstEnv = InstEnv

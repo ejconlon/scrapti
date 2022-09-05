@@ -6,20 +6,24 @@ module Scrapti.Patches.ConvertPti
   , instToPtiPatches
   ) where
 
-import Dahdit (LiftedPrimArray (..), BoolByte (..), StaticBytes (..), Word16LE (..), FloatLE (..))
-import Scrapti.Tracker.Pti (Pti, mkPti, Header (..), Preamble (..), Block (..), SamplePlayback (..), Auto (..), Filter (..), Lfo (..), InstParams (..), FilterType (..), AutoType (..), AutoEnvelope (..), LfoType (..), LfoSteps (..))
-import Scrapti.Patches.Inst (InstSpec (..), InstKeyRange (..), InstConfig (..), InstRegion (..), InstCrop (..), InstLoop (..), InstLoopType (..), InstBlock (..), InstFilter (..), InstAuto (..), InstFilterType (..), InstEnv (..), InstLfo (..), InstLfoWave (..))
-import Data.Sequence (Seq)
-import Data.Traversable (for)
-import Data.Default (Default(..))
-import Data.Text (Text)
-import Scrapti.Midi.Notes (NotePref(..), renderNote, LinNote (..), linToOct, linSubInterval, Interval (..))
-import qualified Data.Text.Encoding as TE
-import qualified Data.ByteString.Short as BSS
 import Control.Monad (unless)
-import Data.Ratio ((%))
+import Dahdit (BoolByte (..), FloatLE (..), LiftedPrimArray (..), StaticBytes (..), Word16LE (..))
+import qualified Data.ByteString.Short as BSS
+import Data.Default (Default (..))
 import Data.Foldable (minimumBy)
-import Scrapti.Dsp (PcmContainer(..), PcmMeta (pmNumSamples), linearCrossFade, applyModGeneric, crop)
+import Data.Ratio ((%))
+import Data.Sequence (Seq)
+import Data.Text (Text)
+import qualified Data.Text.Encoding as TE
+import Data.Traversable (for)
+import Scrapti.Dsp (PcmContainer (..), PcmMeta (pmNumSamples), applyModGeneric, crop, linearCrossFade)
+import Scrapti.Midi.Notes (Interval (..), LinNote (..), NotePref (..), linSubInterval, linToOct, renderNote)
+import Scrapti.Patches.Inst (InstAuto (..), InstBlock (..), InstConfig (..), InstCrop (..), InstEnv (..),
+                             InstFilter (..), InstFilterType (..), InstKeyRange (..), InstLfo (..), InstLfoWave (..),
+                             InstLoop (..), InstLoopType (..), InstRegion (..), InstSpec (..))
+import Scrapti.Tracker.Pti (Auto (..), AutoEnvelope (..), AutoType (..), Block (..), Filter (..), FilterType (..),
+                            Header (..), InstParams (..), Lfo (..), LfoSteps (..), LfoType (..), Preamble (..), Pti,
+                            SamplePlayback (..), mkPti)
 
 minimumOn :: Ord b => (a -> b) -> [a] -> a
 minimumOn f = minimumBy (\x y -> compare (f x) (f y))
