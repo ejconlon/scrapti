@@ -39,3 +39,25 @@ This project is BSD-licensed. Some soundfont parser code is derived from [HCodec
   * If any attrs are defined, then lfo/eg_{cat}={depth} must also be defined and all attrs must be defined with it
 * Must have at least one `<region>` section
   * Non-overlapping key ranges with `lokey=0` on lowest and `hikey=127` on highest for full coverage
+
+## Sampling workflow
+
+* Auto sampler settings:
+  * Range start: Cx
+  * Range end: Cy
+  * Sample every: 12 semi
+  * Round robin: No
+  * Sustain: 2.0 s
+  * Velocity layers: 1
+  * Velocity response: Custom
+  * Auto loop: Search with
+  * Auto loop start: 20
+  * Auto loop end: 90
+  * Input gain: -7 dB (depends on instrument)
+* Take a patch and remove all LFO/Env/Filter (pure oscillators)
+* Pick a middle C (one where 2 oct below and 2 oct above sound ok)
+* Play some notes and set the input gain so it doesn't clip
+* Sample those five notes for 3 seconds at velocity 100
+* Initialize the patch (TODO add command to scrapti exe)
+* Open in Sfortzando and edit according to model
+* Convert to PTI (TODO add command to scrapti exe)
