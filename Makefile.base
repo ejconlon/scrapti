@@ -4,15 +4,15 @@ clean:
 
 .PHONY: build
 build:
-	stack build --test --no-run-tests
+	stack build --fast --test --no-run-tests
 
 .PHONY: test
 test:
-	stack build --test
+	stack build --fast --test
 
 .PHONY: ghci
 ghci:
-	stack ghci --test --ghci-options "-ghci-script .ghci-manual"
+	stack ghci --fast --test --ghci-options "-ghci-script .ghci-manual"
 
 .PHONY: docs
 docs:
