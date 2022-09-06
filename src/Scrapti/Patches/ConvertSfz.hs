@@ -23,10 +23,10 @@ import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Traversable (for)
-import Scrapti.Patches.Inst (InstAuto (..), InstAutoTarget (..), InstBlock (..), InstConfig (..), InstCrop (..),
-                             InstDef (..), InstEnv (..), InstFilter (..), InstFilterType (..), InstKeyRange (..),
-                             InstLfo (..), InstLfoWave (..), InstLoop (..), InstLoopType (..), InstRegion (..),
-                             InstSpec (..), traverseBlock_)
+import Scrapti.Patches.Inst (InstAuto (..), InstAutoTarget (..), InstBlock (..), InstConfig (..), InstControl (..),
+                             InstCrop (..), InstDef (..), InstEnv (..), InstFilter (..), InstFilterType (..),
+                             InstKeyRange (..), InstLfo (..), InstLfoWave (..), InstLoop (..), InstLoopType (..),
+                             InstRegion (..), InstSpec (..), Tempo (..), traverseBlock_)
 import Scrapti.Patches.Sfz (SfzAttrs, SfzFile (..), SfzSection (..), SfzVal (..), sfzValFloat, sfzValInt, sfzValText,
                             textSfzVal)
 
@@ -111,32 +111,6 @@ renderAutoTarget = \case
   InstAutoTargetCutoff -> ("03", "cutoff")
   InstAutoTargetFinetune -> ("04", "finetune")
 
-{-
-mapping:
-lfr/eg01 -> volume
-lfo/eg02 -> panning
-lfo/eg03 -> cutoff
-lfo/eg04 -> pitch
-
-lfo attrs:
-lfoXX_wave = wav type as int
-lfoXX_freq = 0 to 20 in Hz
-lfoXX_{cat}={depth}
-(for pti translation need to convert Hz to steps:
-24,16,12,8,6,4,3,2,3/2,1,3/4,1/2,3/8,1/3,....)
-
-eg attrs:
-egXX_attack = 0 to 100 float in seconds
-egXX_decay = 0 to 100 float in seconds
-egXX_sustain = 0 to 100 float in %
-egXX_release = 0 to 100 float in seconds
-egXX_{cat}={depth}
-
-only ONE can be defined per category
-if any attrs are defined, then lfo/eg_{cat}={depth} must also be defined
-and all attrs must be defined with it
--}
-
 data PatchErr = PatchErrWhatever
   deriving (Eq, Show)
 
@@ -201,10 +175,12 @@ onRegionsM act = do
       Left e -> fail e
       Right a -> pure a
 
-readDefPathM :: SfzReader SfzFile (Maybe FilePath)
-readDefPathM =
-  fmap join $ askSectionM "control" $ do
-    askValM (fmap T.unpack . sfzValText) "default_path"
+readControlM :: SfzReader SfzFile InstControl
+readControlM = do
+  fmap (fromMaybe def) $ askSectionM "control" $
+    InstControl
+      <$> askValM (fmap Tempo . sfzValFloat) "hint_tempo"
+      <*> askValM (fmap T.unpack . sfzValText) "default_path"
 
 data AutoChoice = AutoChoiceLfo | AutoChoiceEnv
   deriving stock (Eq, Show)
@@ -287,11 +263,11 @@ readRegionsM = onRegionsM readRegionM
 
 sfzToInst :: SfzFile -> Either String (InstDef SfzSample)
 sfzToInst = runSfzReader $ do
-  mayDefPath <- readDefPathM
+  control <- readControlM
   params <- readParamsM
   regions <- readRegionsM
   let inst = InstSpec params regions
-  pure $! InstDef mayDefPath inst
+  pure $! InstDef control inst
 
 newtype SfzWriter w a = SfzWriter { unSfzWriter :: WriterT w (Except String) a }
   deriving newtype (Functor, Applicative, Monad, MonadWriter w)
@@ -367,8 +343,11 @@ instRegionM (InstRegion {..}) = do
     tell $ Map.singleton "end" (SfzValInt icEnd)
 
 instToSfz :: InstDef SfzSample -> Either String SfzFile
-instToSfz (InstDef mayDefPath (InstSpec {..})) = do
-  let controlS = SfzSection "control" (Map.fromList (join [fmap (("default_path",) . textSfzVal) (maybeToList mayDefPath)]))
+instToSfz (InstDef (InstControl mayTempo mayDefPath) (InstSpec {..})) = do
+  let controlS = SfzSection "control" $ Map.fromList $ join
+        [ fmap (("default_path",) . textSfzVal) (maybeToList mayDefPath)
+        , fmap (("hint_tempo",) . SfzValFloat . unTempo) (maybeToList mayTempo)
+        ]
   globalS <- fmap (SfzSection "global") (execSfzWriter (instConfigM isConfig))
   regionSS <- traverse (fmap (SfzSection "region") . execSfzWriter . instRegionM) isRegions
   pure $! SfzFile (controlS :<| globalS :<| regionSS)

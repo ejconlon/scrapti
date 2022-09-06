@@ -609,8 +609,8 @@ testPatchSfz = testCase "sfz" $ do
   sfzFile' <- either fail pure (parseSfz sfzContents')
   sfzFile' @?= sfzFile
   -- test that we can convert it to an instrument
-  instDef@(InstDef mayRelPath instSpec) <- either fail pure (sfzToInst sfzFile)
-  mayRelPath @?= Nothing
+  instDef@(InstDef instControl instSpec) <- either fail pure (sfzToInst sfzFile)
+  instControl @?= def
   Seq.length (isRegions instSpec) @?= 1
   sfzFile'' <- either fail pure (instToSfz instDef)
   assertBool "sfz file similarity" (sfzFileSimilar sfzFile'' sfzFile)
@@ -629,8 +629,8 @@ loadSamp mayRelPath fp = do
 testPatchPti :: TestTree
 testPatchPti = testCase "pti" $ do
   jsonContents <- TIO.readFile "testdata/DX-EPiano1.inst.json"
-  InstDef mayRelPath fileSpec <- either fail pure (jsonToInst jsonContents)
-  mayRelPath @?= Nothing
+  InstDef instControl fileSpec <- either fail pure (jsonToInst jsonContents)
+  instControl @?= def
   loadedSpec <- traverse (loadSamp (Just "testdata")) fileSpec
   patches <- either fail pure (instToPtiPatches "DX-EPiano1" Nothing def loadedSpec)
   Seq.length patches @?= 1

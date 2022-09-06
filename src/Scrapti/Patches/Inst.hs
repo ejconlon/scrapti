@@ -15,6 +15,19 @@ import qualified Data.Text.Lazy.Builder as TLB
 import GHC.Generics (Generic)
 import Scrapti.Midi.Notes (LinNote (..))
 
+-- Tempo in BPM
+newtype Tempo = Tempo { unTempo :: Rational }
+  deriving stock (Show)
+  deriving newtype (Eq, Ord, ToJSON, FromJSON)
+
+instance Default Tempo where
+  def = Tempo 120
+
+-- tempo = 120 bpm how long does a beat take? in seconds per beat 1 minute (60 s) a 120 beats/min
+-- is 60 s/min / 120 beats/min
+beatPeriod :: Tempo -> Rational
+beatPeriod (Tempo t) = 60 / t
+
 data InstEnv = InstEnv
   { ieAttack :: !Rational
   , ieDecay :: !Rational
@@ -147,8 +160,17 @@ annotateNotes :: InstSpec x -> InstSpec (LinNote, x)
 annotateNotes (InstSpec config regions) = InstSpec config (fmap go regions) where
   go reg = let note = LinNote (fromInteger (ikrSampKey (irKeyRange reg))) in reg { irSample = (note, irSample reg) }
 
+data InstControl = InstControl
+  { icTempo :: !(Maybe Tempo)
+  , icPath :: !(Maybe FilePath)
+  } deriving stock (Eq, Show, Generic)
+    deriving (ToJSON, FromJSON) via (AesonRecord InstControl)
+
+instance Default InstControl where
+  def = InstControl Nothing Nothing
+
 data InstDef x = InstDef
-  { idPath :: !(Maybe FilePath)
+  { idControl :: !InstControl
   , idSpec :: !(InstSpec x)
   } deriving stock (Eq, Show, Functor, Foldable, Traversable, Generic)
     deriving (ToJSON, FromJSON) via (AesonRecord (InstDef x))

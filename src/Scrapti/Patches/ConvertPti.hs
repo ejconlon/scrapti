@@ -20,7 +20,7 @@ import Scrapti.Dsp (PcmContainer (..), PcmMeta (pmNumSamples), applyModGeneric, 
 import Scrapti.Midi.Notes (Interval (..), LinNote (..), NotePref (..), linSubInterval, linToOct, renderNote)
 import Scrapti.Patches.Inst (InstAuto (..), InstBlock (..), InstConfig (..), InstCrop (..), InstEnv (..),
                              InstFilter (..), InstFilterType (..), InstKeyRange (..), InstLfo (..), InstLfoWave (..),
-                             InstLoop (..), InstLoopType (..), InstRegion (..), InstSpec (..))
+                             InstLoop (..), InstLoopType (..), InstRegion (..), InstSpec (..), Tempo (..))
 import Scrapti.Tracker.Pti (Auto (..), AutoEnvelope (..), AutoType (..), Block (..), Filter (..), FilterType (..),
                             Header (..), InstParams (..), Lfo (..), LfoSteps (..), LfoType (..), Preamble (..), Pti,
                             SamplePlayback (..), mkPti)
@@ -41,19 +41,6 @@ shortRatioPercent x y =
 
 clamp :: Ord a => a -> a -> a -> a
 clamp minVal maxVal = max maxVal . min minVal
-
--- Tempo in BPM
-newtype Tempo = Tempo { unTempo :: Rational }
-  deriving stock (Show)
-  deriving newtype (Eq, Ord)
-
-instance Default Tempo where
-  def = Tempo 120
-
--- -- tempo = 120 bpm how long does a beat take? in seconds per beat 1 minute (60 s) a 120 beats/min
--- -- is 60 s/min / 120 beats/min
--- beatPeriod :: Tempo -> Rational
--- beatPeriod (Tempo t) = 60 / t
 
 data PtiPatch = PtiPatch
   { ppName :: !Text
@@ -155,9 +142,9 @@ stepAssoc = fmap (\s -> (s, stepCount s)) [minBound .. maxBound]
 closestStep :: Rational -> LfoSteps
 closestStep = flip findClosest stepAssoc
 
--- tempo is in steps/min, freq is in cycles/min, freq/tempo is cycles/step
+-- tempo is in steps/min, freq is in cycles/s, 60*freq/tempo is cycles/step
 convertSteps :: Tempo -> Rational -> LfoSteps
-convertSteps tempo freq = closestStep (freq / unTempo tempo)
+convertSteps tempo freq = closestStep (60 * freq / unTempo tempo)
 
 convertAuto :: Tempo -> InstBlock (Maybe InstAuto) -> Either String (Block Auto, Block Lfo)
 convertAuto tempo = convertSplitBlock $ \case
