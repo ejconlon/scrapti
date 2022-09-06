@@ -137,6 +137,7 @@ combine intDistTot intDist1 one two =
 -- Cross fade:  | --------- PreStart Start PostStart PreEnd End PostEnd ---- |
 -- Guarded to ensure inequalities are strict
 -- Width here is one-sided
+-- Width is number of samples to fade over
 linearCrossFade :: (LiftedPrim a, Integral a) => Int -> Int -> Int -> Mod a a
 linearCrossFade width loopStart loopEnd = Mod $ \mm src -> do
   guardFade width loopStart loopEnd

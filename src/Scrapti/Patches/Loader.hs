@@ -3,6 +3,7 @@
 module Scrapti.Patches.Loader
   ( Sample (..)
   , matchSamples
+  , LoadedSample (..)
   , initializeInst
   , defaultInst
   ) where

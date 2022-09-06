@@ -4,26 +4,39 @@ module Scrapti.Main
   ( main
   ) where
 
+import Control.Exception (throwIO)
 import Control.Monad (unless, when)
+import Dahdit (put, runPutFile)
 import qualified Data.Sequence as Seq
 import qualified Data.Text as T
+import qualified Data.Text.IO as TIO
+import Data.Traversable (for)
 import Options.Applicative
-import Scrapti.Patches.Loader (matchSamples)
-import System.Directory (canonicalizePath, createDirectoryIfMissing, doesDirectoryExist, doesPathExist,
+import Scrapti.Common
+import Scrapti.Convert (loadNeutral, neutralToSampleWav)
+import Scrapti.Midi.Notes (LinNote (..), octToLin)
+import Scrapti.Patches.ConvertSfz (SfzSample (..), instToSfz)
+import Scrapti.Patches.Inst (InstControl (..), InstDef (..))
+import Scrapti.Patches.Loader (LoadedSample (..), Sample (sampleNote, samplePath), initializeInst, matchSamples)
+import Scrapti.Patches.Sfz (renderSfz)
+import System.Directory (canonicalizePath, createDirectoryIfMissing, doesDirectoryExist, doesFileExist, doesPathExist,
                          removeDirectoryRecursive)
-import System.FilePath ((</>))
+import System.FilePath ((<.>), (</>))
 
 data PackRef = PackRef !FilePath !String
   deriving stock (Eq, Show)
 
+mkPackDir :: PackRef -> FilePath
+mkPackDir (PackRef fp name) = fp </> name
+
 parsePackRef :: Parser PackRef
 parsePackRef = PackRef <$> argument str idm <*> argument str idm
 
-canonPackRef :: PackRef -> IO PackRef
+canonPackRef :: PackRef -> IO (FilePath, String)
 canonPackRef (PackRef fp name) = do
   fp' <- canonicalizePath fp
   assertDirExists fp'
-  pure $! PackRef fp name
+  pure (fp' </> name, name)
 
 data Action =
     ActionInit !PackRef
@@ -47,22 +60,39 @@ assertNotExists fp = do
 
 runInit :: PackRef -> IO ()
 runInit pr = do
-  PackRef pack name <- canonPackRef pr
+  -- constants
+  let sr = 44100
+      xfadeWidth = 2250
+      markNames = Just defaultLoopMarkNames
+  (packDir, name) <- canonPackRef pr
   -- Resolve src and dest dirs
-  let srcDir = pack </> "source" </> name
-      convDir = pack </> "converted" </> name
+  let srcDir = packDir </> "sources"
+      sampDir = packDir </> "samples"
+      sfzFile = packDir </> name <.> "sfz"
   assertDirExists srcDir
-  assertNotExists convDir
+  -- Remove existing sample dir
+  removeDirectoryIfExists sampDir
   -- Find samples
   srcSamples <- matchSamples (T.pack name) "aif" srcDir
   when (Seq.null srcSamples) (fail "Found no samples")
-  -- Convert them
-  -- TODO
-  -- Write them out
-  createDirectoryIfMissing True convDir
-  -- TODO
+  -- Convert them and write them out
+  createDirectoryIfMissing True sampDir
+  newSamples <- for srcSamples $ \srcSample -> do
+    let srcFile = samplePath srcSample
+        destFile = srcFile <.> "wav"
+    sourceNe <- loadNeutral sr markNames srcFile
+    let noteNum = unLinNote (octToLin (sampleNote srcSample))
+    convertedWav <- either throwIO pure (neutralToSampleWav noteNum xfadeWidth sourceNe)
+    runPutFile destFile (put convertedWav)
+    pure $! srcSample { samplePath = destFile }
   -- Initialize instrument
-  -- TODO
+  sfzExists <- doesFileExist sfzFile
+  unless sfzExists $ do
+    instSpec <- initializeInst sr markNames newSamples
+    let instDef = InstDef (InstControl Nothing (Just "samples")) (fmap (SfzSampleFile . lsPath) instSpec)
+    sfzRep <- either fail pure (instToSfz instDef)
+    let sfzContents = renderSfz sfzRep
+    TIO.writeFile sfzFile sfzContents
 
 removeDirectoryIfExists :: FilePath -> IO ()
 removeDirectoryIfExists fp = do
@@ -71,16 +101,16 @@ removeDirectoryIfExists fp = do
 
 runClean :: PackRef -> IO ()
 runClean pr = do
-  PackRef pack name <- canonPackRef pr
+  (packDir, _) <- canonPackRef pr
   -- Resolve dirs
-  let convDir = pack </> "converted" </> name
+  let sampDir = packDir </> "samples"
   -- Make sure
-  putStrLn ("Are you sure you want to clean pack " ++ convDir ++ " ? [no|yes] ")
+  putStrLn ("Are you sure you want to clean pack " ++ packDir ++ " ? [no|yes] ")
   ans <- getLine
   case ans of
     "yes" -> do
       putStrLn "Cleaning..."
-      removeDirectoryIfExists convDir
+      removeDirectoryIfExists sampDir
       putStrLn "Done"
     _ -> putStrLn "Skipping"
 

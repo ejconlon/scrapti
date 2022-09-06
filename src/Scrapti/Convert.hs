@@ -17,6 +17,7 @@ module Scrapti.Convert
 
 import Control.Monad (unless)
 import Dahdit (Int16LE, LiftedPrim, LiftedPrimArray (..), Seq (..), get, runGetFile)
+import Data.Maybe (isJust)
 import qualified Data.Sequence as Seq
 import Scrapti.Aiff (Aiff, aiffGatherMarkers, aiffToPcmContainer)
 import Scrapti.Common (ConvertErr (..), LoopMarkNames, LoopMarkPoints, LoopMarks (..), SimpleMarker (..), adjustMarker,
@@ -116,8 +117,14 @@ neutralCropLoop (Neutral {..}) = do
   con' <- convertModGeneric (crop (fromIntegral startPos) (fromIntegral loopEndPos)) neCon
   pure $! Neutral { neCon = con', neLoopMarks = Just finalLoopMarks, neMarks = finalMarks }
 
+neutralIfHasMarks :: (Neutral -> Either e Neutral) -> Neutral -> Either e Neutral
+neutralIfHasMarks f ne = do
+  if isJust (neLoopMarks ne)
+    then f ne
+    else Right ne
+
 neutralToSampleWav :: Int -> Int -> Neutral -> Either ConvertErr Wav
-neutralToSampleWav width note ne = fmap (neutralToWav note) (neutralMono ne >>= neutralCrossFade width >>= neutralCropLoop)
+neutralToSampleWav width note ne = fmap (neutralToWav note) (neutralMono ne >>= neutralIfHasMarks (neutralCrossFade width) >>= neutralIfHasMarks neutralCropLoop)
 
 readPtiWav :: Maybe LoopMarkNames -> FilePath -> IO (LiftedPrimArray Int16LE, Maybe LoopMarkPoints)
 readPtiWav mayNames fp = do
