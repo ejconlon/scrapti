@@ -21,7 +21,7 @@ import Scrapti.Patches.Loader (LoadedSample (..), Sample (sampleNote, samplePath
 import Scrapti.Patches.Sfz (renderSfz)
 import System.Directory (canonicalizePath, createDirectoryIfMissing, doesDirectoryExist, doesFileExist, doesPathExist,
                          removeDirectoryRecursive)
-import System.FilePath ((<.>), (</>))
+import System.FilePath (takeFileName, (<.>), (</>))
 
 data PackRef = PackRef !FilePath !String
   deriving stock (Eq, Show)
@@ -80,6 +80,7 @@ runInit pr = do
   newSamples <- for srcSamples $ \srcSample -> do
     let srcFile = samplePath srcSample
         destFile = srcFile <.> "wav"
+    putStrLn ("Processing: " ++ srcFile)
     sourceNe <- loadNeutral sr markNames srcFile
     let noteNum = unLinNote (octToLin (sampleNote srcSample))
     convertedWav <- either throwIO pure (neutralToSampleWav noteNum xfadeWidth sourceNe)
@@ -89,7 +90,7 @@ runInit pr = do
   sfzExists <- doesFileExist sfzFile
   unless sfzExists $ do
     instSpec <- initializeInst sr markNames newSamples
-    let instDef = InstDef (InstControl Nothing (Just "samples")) (fmap (SfzSampleFile . lsPath) instSpec)
+    let instDef = InstDef (InstControl Nothing (Just "samples")) (fmap (SfzSampleFile . takeFileName . lsPath) instSpec)
     sfzRep <- either fail pure (instToSfz instDef)
     let sfzContents = renderSfz sfzRep
     TIO.writeFile sfzFile sfzContents

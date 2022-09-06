@@ -61,3 +61,9 @@ This project is BSD-licensed. Some soundfont parser code is derived from [HCodec
 * Initialize the patch (TODO add command to scrapti exe)
 * Open in Sfortzando and edit according to model
 * Convert to PTI (TODO add command to scrapti exe)
+
+## Commands
+
+Can set `REBUILD=1` to force builds.
+
+    ./scrapti.sh init ./scrapti.sh init ../slaw-packs/packs/SS01 Saucer

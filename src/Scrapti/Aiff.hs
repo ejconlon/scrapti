@@ -20,7 +20,7 @@ module Scrapti.Aiff
   ) where
 
 import Control.Monad (unless)
-import Dahdit (Binary (..), ByteCount (..), ByteSized (..), ShortByteString, StaticByteSized (..), StaticBytes,
+import Dahdit (Binary (..), ByteCount (..), ByteSized (..), ShortByteString, StaticByteSized (..), StaticBytes (..),
                ViaGeneric (..), ViaStaticByteSized (..), Word16BE, Word32BE (..), byteSizeFoldable, getByteString,
                getExact, getLookAhead, getRemainingByteArray, getRemainingSeq, getSeq, getSkip, getWord16BE, getWord8,
                putByteArray, putByteString, putSeq, putWord16BE, putWord8)
@@ -45,9 +45,10 @@ import Scrapti.Dsp (PcmContainer (PcmContainer), PcmMeta (PcmMeta))
 -- We could use a lot of the same structures to read the file... If they were
 -- big-endian.
 
-labelForm, labelAifc, labelComm, labelSsnd, labelFver, labelAnno, labelMark :: Label
+labelForm, labelAifc, labelAiff, labelComm, labelSsnd, labelFver, labelAnno, labelMark :: Label
 labelForm = "FORM"
 labelAifc = "AIFC"
+labelAiff = "AIFF"
 labelComm = "COMM"
 labelSsnd = "SSND"
 labelFver = "FVER"
@@ -263,11 +264,13 @@ aiffHeaderSize = 2 * labelSize + countSize
 instance StaticByteSized AiffHeader where
   staticByteSize _ = aiffHeaderSize
 
+-- Accepts AIFC or AIFF in header but always produces AIFC
 instance Binary AiffHeader where
   get = do
     getExpectLabel labelForm
     sz <- getChunkSizeBE
-    getExpectLabel labelAifc
+    lab <- get @Label
+    unless (lab == labelAifc || lab == labelAiff) (fail ("Expected label AIFC or AIFF in header but got: " ++ show (unStaticBytes lab)))
     pure $! AiffHeader (sz - labelSize)
   put (AiffHeader remSz) = do
     put labelForm
