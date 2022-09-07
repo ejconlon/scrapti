@@ -23,7 +23,7 @@ import Scrapti.Aiff (Aiff, aiffGatherMarkers, aiffToPcmContainer)
 import Scrapti.Common (ConvertErr (..), LoopMarkNames, LoopMarkPoints, LoopMarks (..), SimpleMarker (..), adjustMarker,
                        findLoopMarks, recallLoopMarkNames, rethrow)
 import Scrapti.Dsp (Mod, PcmContainer (..), PcmMeta (..), applyMod, applyModGeneric, crop, ensureMonoFromLeft,
-                    linearCrossFade)
+                    linearCrossFade, reduceBitDepth)
 import Scrapti.Wav (Wav, WavChunk (..), wavAddChunks, wavFromPcmContainer, wavGatherMarkers, wavToPcmContainer,
                     wavUseLoopPoints, wavUseMarkers)
 import System.FilePath (splitExtension)
@@ -94,6 +94,15 @@ neutralMono ne@(Neutral {..}) = do
   con' <- convertModGeneric ensureMonoFromLeft neCon
   pure $! ne { neCon = con' }
 
+neutralDepth :: Neutral -> Either ConvertErr Neutral
+neutralDepth ne@(Neutral {..}) = do
+  case pmBitsPerSample (pcMeta neCon) of
+    16 -> pure ne
+    24 -> do
+      con' <- convertMod reduceBitDepth neCon
+      pure $! ne { neCon = con' }
+    y -> Left (ConvertErrBadBps y)
+
 neutralCrossFade :: Int -> Neutral -> Either ConvertErr Neutral
 neutralCrossFade width ne@(Neutral {..}) = do
   LoopMarks _ (_, !loopStart) (_, !loopEnd) _ <- maybe (Left ConvertErrNoLoopMarks) Right neLoopMarks
@@ -124,7 +133,7 @@ neutralIfHasMarks f ne = do
     else Right ne
 
 neutralToSampleWav :: Int -> Int -> Neutral -> Either ConvertErr Wav
-neutralToSampleWav width note ne = fmap (neutralToWav note) (neutralMono ne >>= neutralIfHasMarks (neutralCrossFade width) >>= neutralIfHasMarks neutralCropLoop)
+neutralToSampleWav width note ne = fmap (neutralToWav note) (neutralMono ne >>= neutralDepth >>= neutralIfHasMarks (neutralCrossFade width) >>= neutralIfHasMarks neutralCropLoop)
 
 readPtiWav :: Maybe LoopMarkNames -> FilePath -> IO (LiftedPrimArray Int16LE, Maybe LoopMarkPoints)
 readPtiWav mayNames fp = do

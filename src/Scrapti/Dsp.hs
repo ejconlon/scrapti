@@ -5,6 +5,7 @@ module Scrapti.Dsp
   , monoFromRight
   , monoFromAvg
   , ensureMonoFromLeft
+  , reduceBitDepth
   , stereoFromMono
   , linearCrossFade
   , crop
@@ -20,8 +21,8 @@ module Scrapti.Dsp
 
 import Control.Exception (Exception)
 import Control.Monad (unless)
-import Dahdit (Int16LE, Int24LE, Int32LE, Int8, LiftedPrim (..), LiftedPrimArray (LiftedPrimArray),
-               cloneLiftedPrimArray, generateLiftedPrimArray, indexLiftedPrimArray, proxyForF, sizeofLiftedPrimArray)
+import Dahdit (Int16LE, Int24LE, Int32LE, Int8, LiftedPrim (..), LiftedPrimArray (..), cloneLiftedPrimArray,
+               generateLiftedPrimArray, indexLiftedPrimArray, proxyForF, sizeofLiftedPrimArray)
 import Data.Bits (Bits (..))
 import Data.Primitive.ByteArray (ByteArray, sizeofByteArray)
 import Data.Proxy (Proxy (..))
@@ -107,6 +108,21 @@ ensureMonoFromSel sel = Mod $ \mm src -> do
 
 ensureMonoFromLeft :: LiftedPrim a => Mod a a
 ensureMonoFromLeft = ensureMonoFromSel selMonoLeft
+
+-- NOTE only implemented 16->16 (noop) and 24->16 conversion - will fail otherwise
+reduceBitDepth :: Mod Int24LE Int16LE
+reduceBitDepth = Mod $ \mm src -> do
+  let !mm' = mm { mmBitsPerSample = 16 }
+  let !src24 = LiftedPrimArray (unLiftedPrimArray src) :: LiftedPrimArray Int24LE
+  let go i =
+        let x = indexLiftedPrimArray src24 i :: Int24LE
+            y = shiftR (toInteger x) 8
+        in fromInteger y :: Int16LE
+  let !dest16 = generateLiftedPrimArray (sizeofLiftedPrimArray src24) go :: LiftedPrimArray Int16LE
+  unless (sizeofLiftedPrimArray src24 == sizeofLiftedPrimArray dest16) (error "Bad size (lifted array)")
+  unless (2 * sizeofByteArray (unLiftedPrimArray src24) == 3 * sizeofByteArray (unLiftedPrimArray dest16)) (error "Bad size (byte array)")
+  let !dest = LiftedPrimArray (unLiftedPrimArray dest16)
+  pure (mm', dest)
 
 stereoFromMono :: LiftedPrim a => Mod a a
 stereoFromMono = Mod $ \mm src -> do

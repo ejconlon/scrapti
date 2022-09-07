@@ -15,7 +15,6 @@ module Scrapti.Aiff
   , lookupAiffCommonChunk
   , lookupAiffDataChunk
   , aiffToPcmContainer
-  , aiffFromPcmContainer
   , aiffGatherMarkers
   ) where
 
@@ -379,12 +378,12 @@ swappedByteArray3 arr = go 0 Empty where
       else go (i + 3) (acc :|> indexByteArray arr (i + 2) :|> indexByteArray arr (i + 1) :|> indexByteArray arr i)
 
 swapArrayEndian :: Int -> ByteArray -> ByteArray
-swapArrayEndian bitWidth arr =
+swapArrayEndian bitDepth arr =
   if
-    | bitWidth == 8 -> arr
-    | bitWidth == 16 -> byteArrayFromListN (sizeofByteArray arr) (swappedByteArray2 arr)
-    | bitWidth == 24 -> byteArrayFromListN (sizeofByteArray arr) (swappedByteArray3 arr)
-    | otherwise -> error ("Unsupported endian swap width: " ++ show bitWidth)
+    | bitDepth == 8 -> arr
+    | bitDepth == 16 -> byteArrayFromListN (sizeofByteArray arr) (swappedByteArray2 arr)
+    | bitDepth == 24 -> byteArrayFromListN (sizeofByteArray arr) (swappedByteArray3 arr)
+    | otherwise -> error ("Unsupported endian swap depth: " ++ show bitDepth)
 
 lookupAiffChunk :: (AiffChunk -> Bool) -> Aiff -> Maybe AiffChunk
 lookupAiffChunk p (Aiff _ chunks) = fmap (Seq.index chunks) (Seq.findIndexL p chunks)
@@ -418,9 +417,6 @@ aiffToPcmContainer sr aiff = do
       !meta = PcmMeta nc ns bps sr
       !arr = unQuietArray (adbSoundData dataBody)
   pure $! PcmContainer meta arr
-
-aiffFromPcmContainer :: PcmContainer -> Aiff
-aiffFromPcmContainer = error "TODO"
 
 aiffGatherMarkers :: Aiff -> Seq SimpleMarker
 aiffGatherMarkers aiff =
