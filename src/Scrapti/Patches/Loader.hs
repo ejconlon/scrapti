@@ -86,11 +86,14 @@ loadSample sr mayNames s = do
 toRegion :: Int -> Maybe LoopMarkNames -> Sample -> InstKeyRange -> IO (InstRegion LoadedSample)
 toRegion sr mayNames samp range = do
   ls <- loadSample sr mayNames samp
+  -- Sforzando wants these end ranges INCLUSIVE not EXCLUSIVE
   let mayLoopMarks = neLoopMarks (lsContents ls)
       mayLoop = fmap (\(LoopMarks _ (_, start) (_, end) _) ->
-        InstLoop InstLoopTypeForward (toInteger (smPosition start)) (toInteger (smPosition end))) mayLoopMarks
+        let adjEnd = toInteger (smPosition end) - 1
+        in InstLoop InstLoopTypeForward (toInteger (smPosition start)) adjEnd) mayLoopMarks
       mayCrop = fmap (\(LoopMarks (_, start) _ _ (_, end)) ->
-        InstCrop (toInteger (smPosition start)) (toInteger (smPosition end))) mayLoopMarks
+        let adjEnd = toInteger (smPosition end) - 1
+        in InstCrop (toInteger (smPosition start)) adjEnd) mayLoopMarks
   pure $! InstRegion ls range mayLoop mayCrop
 
 calcRangedSamps :: Seq Sample -> Seq (Sample, InstKeyRange)
