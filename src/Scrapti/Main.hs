@@ -90,7 +90,7 @@ runInit pr = do
   sfzExists <- doesFileExist sfzFile
   unless sfzExists $ do
     instSpec <- initializeInst sr markNames newSamples
-    let instDef = InstDef (InstControl Nothing (Just "samples")) (fmap (SfzSampleFile . takeFileName . lsPath) instSpec)
+    let instDef = InstDef (InstControl Nothing (Just "samples/")) (fmap (SfzSampleFile . takeFileName . lsPath) instSpec)
     sfzRep <- either fail pure (instToSfz instDef)
     let sfzContents = renderSfz sfzRep
     TIO.writeFile sfzFile sfzContents

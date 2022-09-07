@@ -10,7 +10,6 @@ module Scrapti.Patches.Loader
 
 import Data.Default (Default (..))
 import Data.Maybe (maybeToList)
-import Data.Ord (Down (..))
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
 import Data.Text (Text)
@@ -110,7 +109,7 @@ calcRangedSamps = go 0 Empty where
 -- TODO account for multi-samples of notes? Need to group by note
 initializeInst :: Int -> Maybe LoopMarkNames -> Seq Sample -> IO (InstSpec LoadedSample)
 initializeInst sr mayNames unordSamps = do
-  let ordSamps = Seq.sortOn (Down . sampleNote) unordSamps
+  let ordSamps = Seq.sortOn sampleNote unordSamps
   regions <- traverse (uncurry (toRegion sr mayNames)) (calcRangedSamps ordSamps)
   pure $! InstSpec def regions
 
