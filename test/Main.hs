@@ -411,9 +411,6 @@ testConvertDx = testCase "DX" $ do
   let !width = 2500 -- double this is 0.1s of total fade
   swav <- rethrow (neutralToSampleWav width defaultNoteNumber ne)
   assertReparses swav
-  -- TODO
-  -- yne <- rethrow (wavToNeutral swav (Just defaultLoopMarkNames))
-  -- yne @?= ne
 
 aifSamples :: Aiff -> [Word8]
 aifSamples aif =

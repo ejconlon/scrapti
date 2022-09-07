@@ -20,16 +20,20 @@ module Scrapti.Aiff
   ) where
 
 import Control.Monad (unless)
-import Dahdit (Binary (..), ByteCount (..), ByteSized (..), ShortByteString, StaticByteSized (..), StaticBytes (..),
-               ViaGeneric (..), ViaStaticByteSized (..), Word16BE, Word32BE (..), byteSizeFoldable, getByteString,
-               getExact, getLookAhead, getRemainingByteArray, getRemainingSeq, getSeq, getSkip, getWord16BE, getWord8,
-               putByteArray, putByteString, putSeq, putWord16BE, putWord8)
+import Dahdit (Binary (..), ByteArray, ByteCount (..), ByteSized (..), Get, Put, ShortByteString, StaticByteSized (..),
+               StaticBytes (..), ViaGeneric (..), ViaStaticByteSized (..), Word16BE, Word32BE (..), byteSizeFoldable,
+               getByteString, getExact, getLookAhead, getRemainingByteArray, getRemainingSeq, getSeq, getSkip,
+               getWord16BE, getWord8, putByteArray, putByteString, putSeq, putWord16BE, putWord8)
+import qualified Data.ByteString.Char8 as BSC
 import qualified Data.ByteString.Short as BSS
 import Data.Default (Default (..))
-import Data.Primitive.ByteArray (sizeofByteArray)
+import Data.Foldable (toList)
+import Data.Maybe (fromMaybe)
+import Data.Primitive.ByteArray (byteArrayFromListN, indexByteArray, sizeofByteArray)
 import Data.Proxy (Proxy (..))
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
+import Data.Word (Word8)
 import GHC.Generics (Generic)
 import Scrapti.Binary (QuietArray (..))
 import Scrapti.Common (ConvertErr, KnownLabel (..), Label, SimpleMarker (..), UnparsedBody, chunkHeaderSize, countSize,
@@ -45,7 +49,7 @@ import Scrapti.Dsp (PcmContainer (PcmContainer), PcmMeta (PcmMeta))
 -- We could use a lot of the same structures to read the file... If they were
 -- big-endian.
 
-labelForm, labelAifc, labelAiff, labelComm, labelSsnd, labelFver, labelAnno, labelMark :: Label
+labelForm, labelAifc, labelAiff, labelComm, labelSsnd, labelFver, labelAnno, labelMark, labelSowt :: Label
 labelForm = "FORM"
 labelAifc = "AIFC"
 labelAiff = "AIFF"
@@ -54,6 +58,7 @@ labelSsnd = "SSND"
 labelFver = "FVER"
 labelAnno = "ANNO"
 labelMark = "MARK"
+labelSowt = "sowt"
 
 data Chunk a = Chunk
   { chunkLabel :: !Label
@@ -135,6 +140,9 @@ instance Binary PascalString where
     putByteString sbs
     unless (odd usz) (putWord8 0)
 
+notCompressed :: PascalString
+notCompressed = PascalString (BSS.toShort (BSC.pack "not compressed"))
+
 -- | "80 bit IEEE Standard 754 floating point number"
 newtype ExtendedFloat = ExtendedFloat { unExtendedFloat :: StaticBytes 10 }
   deriving stock (Show)
@@ -154,6 +162,35 @@ instance KnownLabel AiffCommonBody where
   knownLabel _ = labelComm
 
 type AiffCommonChunk = KnownChunk AiffCommonBody
+
+data AiffCommonBodyOld = AiffCommonBodyOld
+  { aceoNumChannels :: !Word16BE
+  , aceoNumSampleFrames :: !Word32BE
+  , aceoSampleSize :: !Word16BE
+  , aceoSampleRate :: !ExtendedFloat
+  } deriving stock (Eq, Show, Generic)
+    deriving (ByteSized, Binary) via (ViaGeneric AiffCommonBodyOld)
+
+instance KnownLabel AiffCommonBodyOld where
+  knownLabel _ = labelComm
+
+type AiffCommonChunkOld = KnownChunk AiffCommonBodyOld
+
+oldToNewCommonChunk :: KnownChunk AiffCommonBodyOld -> KnownChunk AiffCommonBody
+oldToNewCommonChunk (KnownChunk (AiffCommonBodyOld x y z w)) = KnownChunk (AiffCommonBody x y z w labelSowt notCompressed)
+
+newToOldCommonChunk :: KnownChunk AiffCommonBody -> KnownChunk AiffCommonBodyOld
+newToOldCommonChunk (KnownChunk (AiffCommonBody x y z w _ _)) = KnownChunk (AiffCommonBodyOld x y z w)
+
+getCommonChunk :: Variant -> Get AiffCommonChunk
+getCommonChunk = \case
+  VariantAiff -> fmap oldToNewCommonChunk get
+  VariantAifc -> get
+
+putCommonChunk :: Variant -> AiffCommonChunk -> Put
+putCommonChunk = \case
+  VariantAiff -> put . newToOldCommonChunk
+  VariantAifc -> put
 
 data AiffDataBody = AiffDataBody
   { adbOffset :: !Word32BE
@@ -234,28 +271,37 @@ instance ByteSized AiffChunk where
     AiffChunkMark x -> byteSize x
     AiffChunkUnparsed x -> byteSize x
 
-instance Binary AiffChunk where
-  get = do
-    label <- getLookAhead get
-    if
-      | label == labelComm -> fmap AiffChunkCommon get
-      | label == labelSsnd -> fmap AiffChunkData get
-      | label == labelFver -> fmap AiffChunkVersion get
-      | label == labelAnno -> fmap AiffChunkAnno get
-      | label == labelMark -> fmap AiffChunkMark get
-      | otherwise -> fmap AiffChunkUnparsed get
-  put = \case
-    AiffChunkCommon x -> put x
-    AiffChunkData x -> put x
-    AiffChunkVersion x -> put x
-    AiffChunkAnno x -> put x
-    AiffChunkMark x -> put x
-    AiffChunkUnparsed x -> put x
+getChunk :: Variant -> Get AiffChunk
+getChunk variant = do
+  label <- getLookAhead get
+  if
+    | label == labelComm -> fmap AiffChunkCommon (getCommonChunk variant)
+    | label == labelSsnd -> fmap AiffChunkData get
+    | label == labelFver -> fmap AiffChunkVersion get
+    | label == labelAnno -> fmap AiffChunkAnno get
+    | label == labelMark -> fmap AiffChunkMark get
+    | otherwise -> fmap AiffChunkUnparsed get
 
-newtype AiffHeader = AiffHeader
-  { wavHeaderRemainingSize :: ByteCount
-  } deriving stock (Show, Generic)
-    deriving newtype (Eq)
+putChunk :: Variant -> AiffChunk -> Put
+putChunk variant = \case
+  AiffChunkCommon x -> putCommonChunk variant x
+  AiffChunkData x -> put x
+  AiffChunkVersion x -> put x
+  AiffChunkAnno x -> put x
+  AiffChunkMark x -> put x
+  AiffChunkUnparsed x -> put x
+
+instance Binary AiffChunk where
+  get = getChunk VariantAifc
+  put = putChunk VariantAifc
+
+data Variant = VariantAiff | VariantAifc
+  deriving stock (Eq, Show)
+
+data AiffHeader = AiffHeader
+  { ahVariant :: !Variant
+  , ahRemainingSize :: ByteCount
+  } deriving stock (Eq, Show, Generic)
     deriving (ByteSized) via (ViaStaticByteSized AiffHeader)
 
 aiffHeaderSize :: ByteCount
@@ -264,39 +310,84 @@ aiffHeaderSize = 2 * labelSize + countSize
 instance StaticByteSized AiffHeader where
   staticByteSize _ = aiffHeaderSize
 
--- Accepts AIFC or AIFF in header but always produces AIFC
 instance Binary AiffHeader where
   get = do
     getExpectLabel labelForm
     sz <- getChunkSizeBE
-    lab <- get @Label
-    unless (lab == labelAifc || lab == labelAiff) (fail ("Expected label AIFC or AIFF in header but got: " ++ show (unStaticBytes lab)))
-    pure $! AiffHeader (sz - labelSize)
-  put (AiffHeader remSz) = do
+    label <- get @Label
+    variant <- if
+      | label == labelAiff -> pure VariantAiff
+      | label == labelAifc -> pure VariantAifc
+      | otherwise -> fail ("Expected label AIFC or AIFF in header but got: " ++ show (unStaticBytes label))
+    pure $! AiffHeader variant (sz - labelSize)
+  put (AiffHeader variant remSz) = do
     put labelForm
     putChunkSizeBE (remSz + labelSize)
-    put labelAifc
+    put $ case variant of
+      VariantAiff -> labelAiff
+      VariantAifc -> labelAifc
 
-newtype Aiff = Aiff
-  { aiffChunks :: Seq AiffChunk
-  } deriving stock (Show)
-    deriving newtype (Eq)
+data Aiff = Aiff
+  { aiffVariant :: !Variant
+  , aiffChunks :: !(Seq AiffChunk)
+  } deriving stock (Eq, Show)
 
 instance ByteSized Aiff where
-  byteSize (Aiff chunks) = aiffHeaderSize + byteSizeFoldable chunks
+  byteSize (Aiff _ chunks) = aiffHeaderSize + byteSizeFoldable chunks
 
 instance Binary Aiff where
   get = do
-    AiffHeader remSz <- get
-    chunks <- getExact remSz (getRemainingSeq get)
-    pure $! Aiff chunks
-  put (Aiff chunks)= do
-    let !remSz = byteSizeFoldable chunks
-    put (AiffHeader remSz)
-    putSeq put chunks
+    AiffHeader variant remSz <- get
+    chunks <- getExact remSz (getRemainingSeq (getChunk variant))
+    let !chunks' = swapDataEndian variant chunks
+    pure $! Aiff variant chunks'
+  put (Aiff variant chunks) = do
+    let !chunks' = swapDataEndian variant chunks
+    let !remSz = byteSizeFoldable chunks'
+    put (AiffHeader variant remSz)
+    putSeq (putChunk variant) chunks'
+
+swapDataEndian :: Variant -> Seq AiffChunk -> Seq AiffChunk
+swapDataEndian variant chunks =
+  case variant of
+    VariantAifc -> chunks
+    VariantAiff -> fromMaybe chunks $ do
+      let aiff = Aiff variant chunks
+      KnownChunk comBody <- lookupAiffCommonChunk aiff
+      KnownChunk (AiffDataBody x y (QuietArray arr)) <- lookupAiffDataChunk aiff
+      let arr' = swapArrayEndian (fromIntegral (aceSampleSize comBody)) arr
+      let datChunk' = KnownChunk (AiffDataBody x y (QuietArray arr'))
+      Just $! flip fmap chunks $ \c ->
+        case c of
+          AiffChunkData _ -> AiffChunkData datChunk'
+          _ -> c
+
+swappedByteArray2 :: ByteArray -> [Word8]
+swappedByteArray2 arr = go 0 Empty where
+  sz = sizeofByteArray arr
+  go !i !acc =
+    if i == sz
+      then toList acc
+      else go (i + 2) (acc :|> indexByteArray arr (i + 1) :|> indexByteArray arr i)
+
+swappedByteArray3 :: ByteArray -> [Word8]
+swappedByteArray3 arr = go 0 Empty where
+  sz = sizeofByteArray arr
+  go !i !acc =
+    if i == sz
+      then toList acc
+      else go (i + 3) (acc :|> indexByteArray arr (i + 2) :|> indexByteArray arr (i + 1) :|> indexByteArray arr i)
+
+swapArrayEndian :: Int -> ByteArray -> ByteArray
+swapArrayEndian bitWidth arr =
+  if
+    | bitWidth == 8 -> arr
+    | bitWidth == 16 -> byteArrayFromListN (sizeofByteArray arr) (swappedByteArray2 arr)
+    | bitWidth == 24 -> byteArrayFromListN (sizeofByteArray arr) (swappedByteArray3 arr)
+    | otherwise -> error ("Unsupported endian swap width: " ++ show bitWidth)
 
 lookupAiffChunk :: (AiffChunk -> Bool) -> Aiff -> Maybe AiffChunk
-lookupAiffChunk p (Aiff chunks) = fmap (Seq.index chunks) (Seq.findIndexL p chunks)
+lookupAiffChunk p (Aiff _ chunks) = fmap (Seq.index chunks) (Seq.findIndexL p chunks)
 
 lookupAiffCommonChunk :: Aiff -> Maybe AiffCommonChunk
 lookupAiffCommonChunk w =

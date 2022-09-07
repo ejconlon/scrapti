@@ -21,7 +21,7 @@ import Scrapti.Patches.Loader (LoadedSample (..), Sample (sampleNote, samplePath
 import Scrapti.Patches.Sfz (renderSfz)
 import System.Directory (canonicalizePath, createDirectoryIfMissing, doesDirectoryExist, doesFileExist, doesPathExist,
                          removeDirectoryRecursive)
-import System.FilePath (takeFileName, (<.>), (</>))
+import System.FilePath (takeBaseName, takeFileName, (<.>), (</>))
 
 data PackRef = PackRef !FilePath !String
   deriving stock (Eq, Show)
@@ -79,7 +79,7 @@ runInit pr = do
   createDirectoryIfMissing True sampDir
   newSamples <- for srcSamples $ \srcSample -> do
     let srcFile = samplePath srcSample
-        destFile = srcFile <.> "wav"
+        destFile = sampDir </> takeBaseName srcFile <.> "wav"
     putStrLn ("Processing: " ++ srcFile)
     sourceNe <- loadNeutral sr markNames srcFile
     let noteNum = unLinNote (octToLin (sampleNote srcSample))
