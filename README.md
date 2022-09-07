@@ -57,6 +57,7 @@ This project is BSD-licensed. Some soundfont parser code is derived from [HCodec
 * Take a patch and remove all LFO/Env/Filter (pure oscillators)
 * Pick a middle C (one where 2 oct below and 2 oct above sound ok)
 * Play some notes and set the input gain so it doesn't clip
+* Name the patch InstName
 * Sample those five notes for 3 seconds at velocity 100
 * Initialize the patch (TODO add command to scrapti exe)
 * Open in Sfortzando and edit according to model
