@@ -6,7 +6,6 @@ import AesonVia (AesonRecord (..), AesonTag (..), HasTagPrefix (..))
 import Data.Aeson (FromJSON, ToJSON, eitherDecodeStrict')
 import Data.Aeson.Encode.Pretty (encodePrettyToTextBuilder)
 import Data.Default (Default (..))
-import Data.Foldable (traverse_)
 import Data.Sequence (Seq)
 import Data.Text (Text)
 import qualified Data.Text.Encoding as TE
@@ -201,17 +200,17 @@ instToJson = TL.toStrict . TLB.toLazyText . encodePrettyToTextBuilder
 jsonToInst :: FromJSON x => Text -> Either String (InstDef x)
 jsonToInst = eitherDecodeStrict' . TE.encodeUtf8
 
-traverseBlock :: Applicative m => (InstAutoTarget -> InstAuto -> m InstAuto) -> InstBlock (Maybe InstAuto) -> m (InstBlock (Maybe InstAuto))
+traverseBlock :: Applicative m => (InstAutoTarget -> InstAuto -> m InstAuto) -> InstBlock InstAuto -> m (InstBlock InstAuto)
 traverseBlock onAuto (InstBlock volAuto panAuto cutoffAuto tuneAuto) =
   InstBlock
-  <$> traverse (onAuto InstAutoTargetVolume) volAuto
-  <*> traverse (onAuto InstAutoTargetPanning) panAuto
-  <*> traverse (onAuto InstAutoTargetCutoff) cutoffAuto
-  <*> traverse (onAuto InstAutoTargetFinetune) tuneAuto
+  <$> onAuto InstAutoTargetVolume volAuto
+  <*> onAuto InstAutoTargetPanning panAuto
+  <*> onAuto InstAutoTargetCutoff cutoffAuto
+  <*> onAuto InstAutoTargetFinetune tuneAuto
 
-traverseBlock_ :: Applicative m => (InstAutoTarget -> InstAuto -> m ()) -> InstBlock (Maybe InstAuto) -> m ()
+traverseBlock_ :: Applicative m => (InstAutoTarget -> InstAuto -> m ()) -> InstBlock InstAuto -> m ()
 traverseBlock_ onAuto (InstBlock volAuto panAuto cutoffAuto tuneAuto) =
-  traverse_ (onAuto InstAutoTargetVolume) volAuto *>
-  traverse_ (onAuto InstAutoTargetPanning) panAuto *>
-  traverse_ (onAuto InstAutoTargetCutoff) cutoffAuto *>
-  traverse_ (onAuto InstAutoTargetFinetune) tuneAuto
+  onAuto InstAutoTargetVolume volAuto *>
+  onAuto InstAutoTargetPanning panAuto *>
+  onAuto InstAutoTargetCutoff cutoffAuto *>
+  onAuto InstAutoTargetFinetune tuneAuto

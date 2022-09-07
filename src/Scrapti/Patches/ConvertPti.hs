@@ -20,7 +20,7 @@ import Scrapti.Dsp (PcmContainer (..), PcmMeta (pmNumSamples), applyModGeneric, 
 import Scrapti.Midi.Notes (Interval (..), LinNote (..), NotePref (..), linSubInterval, linToOct, renderNote)
 import Scrapti.Patches.Inst (InstAuto (..), InstBlock (..), InstConfig (..), InstCrop (..), InstEnv (..),
                              InstFilter (..), InstFilterType (..), InstKeyRange (..), InstLfo (..), InstLfoWave (..),
-                             InstLoop (..), InstLoopType (..), InstRegion (..), InstSpec (..), Tempo (..))
+                             InstLoop (..), InstLoopType (..), InstRegion (..), InstSpec (..), Tempo (..), InstAutoType (..))
 import Scrapti.Tracker.Pti (Auto (..), AutoEnvelope (..), AutoType (..), Block (..), Filter (..), FilterType (..),
                             Header (..), InstParams (..), Lfo (..), LfoSteps (..), LfoType (..), Preamble (..), Pti,
                             SamplePlayback (..), mkPti)
@@ -146,36 +146,40 @@ closestStep = flip findClosest stepAssoc
 convertSteps :: Tempo -> Rational -> LfoSteps
 convertSteps tempo freq = closestStep (60 * freq / unTempo tempo)
 
-convertAuto :: Tempo -> InstBlock (Maybe InstAuto) -> Either String (Block Auto, Block Lfo)
-convertAuto tempo = convertSplitBlock $ \case
-  Nothing -> Right (def { autoType = ATOff }, def)
-  Just instAuto ->
-    case instAuto of
-      InstAutoEnv instEnv ->
-        -- TODO appropriately scale env
-        let env = def
-              { aeAmount = fromRational (ieDepth instEnv)
-              , aeAttack = clamp 0 10000 (round (1000 * ieAttack instEnv))
-              , aeDecay = clamp 0 10000 (round (1000 * ieDecay instEnv))
-              , aeSustain = fromRational (ieSustain instEnv)
-              , aeRelease = clamp 0 10000 (round (1000 * ieRelease instEnv))
-              }
-            ae = def { autoType = ATEnvelope, autoEnvelope = env }
-        in Right (ae, def)
-      InstAutoLfo instLfo ->
-        -- TODO appropriately scale lfo
-        let ty = case ilWave instLfo of
-              InstLfoRevSaw -> LTRevSaw
-              InstLfoSaw -> LTSaw
-              InstLfoTriangle -> LTTriangle
-              InstLfoSquare -> LTSquare
-              InstLfoRandom -> LTRandom
-            lfo = def
+convertAutoTy :: InstAutoType -> AutoType
+convertAutoTy = \case
+  InstAutoTypeOff -> ATOff
+  InstAutoTypeEnv -> ATEnvelope
+  InstAutoTypeLfo -> ATLfo
+
+convertAuto :: Tempo -> InstBlock InstAuto -> Either String (Block Auto, Block Lfo)
+convertAuto tempo = convertSplitBlock $ \(InstAuto autoTy mayInstEnv mayInstLfo) ->
+  let env = case mayInstEnv of
+        Just instEnv ->
+          def
+            { aeAmount = fromRational (ieDepth instEnv)
+            , aeAttack = clamp 0 10000 (round (1000 * ieAttack instEnv))
+            , aeDecay = clamp 0 10000 (round (1000 * ieDecay instEnv))
+            , aeSustain = fromRational (ieSustain instEnv)
+            , aeRelease = clamp 0 10000 (round (1000 * ieRelease instEnv))
+            }
+        Nothing -> def
+      lfo = case mayInstLfo of
+        Just instLfo ->
+          -- TODO appropriately scale lfo
+          let ty = case ilWave instLfo of
+                InstLfoRevSaw -> LTRevSaw
+                InstLfoSaw -> LTSaw
+                InstLfoTriangle -> LTTriangle
+                InstLfoSquare -> LTSquare
+                InstLfoRandom -> LTRandom
+          in def
               { lfoType = ty
               , lfoSteps = convertSteps tempo (ilFreq instLfo)
               , lfoAmount = fromRational (ilDepth instLfo)
               }
-        in Right (def { autoType = ATLfo }, lfo)
+        Nothing -> def
+  in Right (def { autoType = convertAutoTy autoTy, autoEnvelope = env}, lfo)
 
 -- interval - negative difference from center note (possibly zero)
 -- tune - ratio of semitones

@@ -3,10 +3,18 @@
     "spec": {
         "config": {
             "auto": {
-                "cutoff": null,
-                "finetune": null,
-                "panning": null,
-                "volume": null
+                "cutoff": {
+                    "type": "off"
+                },
+                "finetune": {
+                    "type": "off"
+                },
+                "panning": {
+                    "type": "off"
+                },
+                "volume": {
+                    "type": "off"
+                }
             },
             "panning": {
                 "denominator": 1,

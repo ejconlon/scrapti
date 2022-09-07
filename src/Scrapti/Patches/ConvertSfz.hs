@@ -15,7 +15,7 @@ import Control.Monad.Reader (MonadReader, ReaderT (..), asks)
 import Control.Monad.Writer.Strict (MonadWriter (..), WriterT, execWriterT)
 import Data.Aeson (FromJSON (..), ToJSON (..), Value (..))
 import Data.Default (Default (..))
-import Data.Foldable (for_)
+import Data.Foldable (for_, traverse_)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe, isNothing, maybeToList)
 import Data.Sequence (Seq (..))
@@ -335,9 +335,9 @@ writeAutoLfoM mkKey cat (InstLfo {..}) =
 writeAutoM :: InstAutoTarget -> InstAuto -> SfzWriter SfzAttrs ()
 writeAutoM target (InstAuto _ env lfo) = do
   let (idx, cat) = renderAutoTarget target
-      mkKey ty key = ty <> idx <> "_" <> key
-  writeAutoEnvM (mkKey "env") cat env
-  writeAutoLfoM (mkKey "lfo") cat lfo
+      mkKey x key = x <> idx <> "_" <> key
+  traverse_ (writeAutoEnvM (mkKey "env") cat) env
+  traverse_ (writeAutoLfoM (mkKey "lfo") cat) lfo
 
 instConfigM :: InstConfig -> SfzWriter SfzAttrs ()
 instConfigM (InstConfig {..}) = do

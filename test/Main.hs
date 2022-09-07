@@ -612,6 +612,9 @@ testPatchSfz = testCase "sfz" $ do
   sfzFile'' <- either fail pure (instToSfz instDef)
   assertBool "sfz file similarity" (sfzFileSimilar sfzFile'' sfzFile)
   -- test that our conversion is what we expect
+  -- NOTE Just use this to update golden output
+  -- let outJsonContents = instToJson instDef
+  -- TIO.writeFile "testdata/DX-EPiano1.inst.json" outJsonContents
   jsonContents <- TIO.readFile "testdata/DX-EPiano1.inst.json"
   jsonInstDef <- either fail pure (jsonToInst jsonContents)
   instDef @?= jsonInstDef
