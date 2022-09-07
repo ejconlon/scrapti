@@ -66,4 +66,4 @@ This project is BSD-licensed. Some soundfont parser code is derived from [HCodec
 
 Can set `REBUILD=1` to force builds.
 
-    ./scrapti.sh init ./scrapti.sh init ../slaw-packs/packs/SS01 Saucer
+    ./scrapti.sh init ../slaw-packs/packs/SS01 Saucer
