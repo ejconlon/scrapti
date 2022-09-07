@@ -26,7 +26,7 @@ import Data.Traversable (for)
 import Scrapti.Patches.Inst (InstAuto (..), InstAutoTarget (..), InstBlock (..), InstConfig (..), InstControl (..),
                              InstCrop (..), InstDef (..), InstEnv (..), InstFilter (..), InstFilterType (..),
                              InstKeyRange (..), InstLfo (..), InstLfoWave (..), InstLoop (..), InstLoopType (..),
-                             InstRegion (..), InstSpec (..), Tempo (..), traverseBlock_)
+                             InstRegion (..), InstSpec (..), Tempo (..), traverseBlock_, InstAutoType (..))
 import Scrapti.Patches.Sfz (SfzAttrs, SfzFile (..), SfzSection (..), SfzVal (..), sfzValFloat, sfzValInt, sfzValText,
                             textSfzVal)
 
@@ -185,26 +185,54 @@ readControlM = do
 data AutoChoice = AutoChoiceLfo | AutoChoiceEnv
   deriving stock (Eq, Show)
 
-readAutoM :: Text -> Text -> SfzReader SfzSection (Maybe InstAuto)
+readMayLfoM :: (Text -> Text) -> Maybe Rational -> SfzReader SfzSection (Maybe InstLfo)
+readMayLfoM f mayDepth = do
+  mayWave <- askValM (sfzValInt >=> parseWaveNum) (f "wave")
+  mayFreq <- askValM sfzValFloat (f "freq")
+  pure $! InstLfo <$> mayWave <*> mayFreq <*> mayDepth
+
+readLfoM :: (Text -> Text) -> Rational -> SfzReader SfzSection InstLfo
+readLfoM f depth = do
+  wave <- requireValM (sfzValInt >=> parseWaveNum) (f "wave")
+  freq <- requireValM sfzValFloat (f "freq")
+  pure $! InstLfo wave freq depth
+
+readMayEnvM :: (Text -> Text) -> Maybe Rational -> SfzReader SfzSection (Maybe InstEnv)
+readMayEnvM f mayDepth = do
+  mayAttack <- askValM sfzValFloat (f "attack")
+  mayDecay <- askValM sfzValFloat (f "decay")
+  maySustain <- askValM sfzValFloat (f "sustain")
+  mayRelease <- askValM sfzValFloat (f "release")
+  pure $! InstEnv <$> mayAttack <*> mayDecay <*> maySustain <*> mayRelease <*> mayDepth
+
+readEnvM :: (Text -> Text) -> Rational -> SfzReader SfzSection InstEnv
+readEnvM f depth = do
+  attack <- requireValM sfzValFloat (f "attack")
+  decay <- requireValM sfzValFloat (f "decay")
+  sustain <- requireValM sfzValFloat (f "sustain")
+  release <- requireValM sfzValFloat (f "release")
+  pure $! InstEnv attack decay sustain release depth
+
+readAutoM :: Text -> Text -> SfzReader SfzSection InstAuto
 readAutoM idx cat = do
   let mkKey ty key = ty <> idx <> "_" <> key
   mayLfoDepth <- askValM sfzValFloat (mkKey "lfo" cat)
   mayEnvDepth <- askValM sfzValFloat (mkKey "env" cat)
-  case (mayLfoDepth, mayEnvDepth) of
-    (Just lfoDepth, Nothing) -> fmap (Just . InstAutoLfo) $ InstLfo
-      <$> requireValM (sfzValInt >=> parseWaveNum) (mkKey "lfo" "wave")
-      <*> requireValM sfzValFloat (mkKey "lfo" "freq")
-      <*> pure lfoDepth
-    (Nothing, Just envDepth) -> fmap (Just . InstAutoEnv) $ InstEnv
-      <$> requireValM sfzValFloat (mkKey "env" "attack")
-      <*> requireValM sfzValFloat (mkKey "lfo" "decay")
-      <*> requireValM sfzValFloat (mkKey "lfo" "sustain")
-      <*> requireValM sfzValFloat (mkKey "lfo" "release")
-      <*> pure envDepth
-    (Nothing, Nothing) -> pure Nothing
-    (Just _, Just _) -> fail ("Forbidden lfo and env for category " ++ T.unpack cat)
+  ty <- case (mayLfoDepth, mayEnvDepth) of
+    (Nothing, Nothing) -> pure InstAutoTypeOff
+    (Nothing, Just _) -> pure InstAutoTypeEnv
+    (Just _, Nothing) -> pure InstAutoTypeLfo
+    (Just lfoDepth, Just envDepth) ->
+      if
+        | lfoDepth == 0 && envDepth == 0 -> pure InstAutoTypeOff
+        | lfoDepth == 0 && envDepth /= 0 -> pure InstAutoTypeEnv
+        | lfoDepth /= 0 && envDepth == 0 -> pure InstAutoTypeLfo
+        | otherwise -> fail ("Forbidden lfo and env for category " ++ T.unpack cat)
+  mayEnv <- maybe (readMayEnvM (mkKey "env") mayEnvDepth) (fmap Just . readEnvM (mkKey "env")) mayEnvDepth
+  mayLfo <- maybe (readMayLfoM (mkKey "lfo") mayLfoDepth) (fmap Just . readLfoM (mkKey "lfo")) mayLfoDepth
+  pure $! InstAuto ty mayEnv mayLfo
 
-readAutoBlockM :: SfzReader SfzSection (InstBlock (Maybe InstAuto))
+readAutoBlockM :: SfzReader SfzSection (InstBlock InstAuto)
 readAutoBlockM = InstBlock
   <$> readAutoM "01" "volume"
   <*> readAutoM "02" "panning"
@@ -305,12 +333,11 @@ writeAutoLfoM mkKey cat (InstLfo {..}) =
     ]
 
 writeAutoM :: InstAutoTarget -> InstAuto -> SfzWriter SfzAttrs ()
-writeAutoM target auto =
+writeAutoM target (InstAuto _ env lfo) = do
   let (idx, cat) = renderAutoTarget target
       mkKey ty key = ty <> idx <> "_" <> key
-  in case auto of
-    InstAutoEnv env -> writeAutoEnvM (mkKey "env") cat env
-    InstAutoLfo lfo -> writeAutoLfoM (mkKey "lfo") cat lfo
+  writeAutoEnvM (mkKey "env") cat env
+  writeAutoLfoM (mkKey "lfo") cat lfo
 
 instConfigM :: InstConfig -> SfzWriter SfzAttrs ()
 instConfigM (InstConfig {..}) = do

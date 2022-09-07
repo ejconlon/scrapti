@@ -56,11 +56,28 @@ data InstLfo = InstLfo
   } deriving stock (Eq, Show, Generic)
     deriving (ToJSON, FromJSON) via (AesonRecord InstLfo)
 
-data InstAuto =
-    InstAutoEnv !InstEnv
-  | InstAutoLfo !InstLfo
+data InstAutoType =
+    InstAutoTypeOff
+  | InstAutoTypeEnv
+  | InstAutoTypeLfo
   deriving stock (Eq, Show, Generic)
-  deriving (ToJSON, FromJSON) via (AesonRecord InstAuto)
+  deriving (ToJSON, FromJSON) via (AesonTag InstAutoType)
+
+instance HasTagPrefix InstAutoType where
+  getTagPrefix _ = "InstAutoType"
+
+instance Default InstAutoType where
+  def = InstAutoTypeOff
+
+data InstAuto = InstAuto
+  { iaType :: !InstAutoType
+  , iaEnv :: !(Maybe InstEnv)
+  , iaLfo :: !(Maybe InstLfo)
+  } deriving stock (Eq, Show, Generic)
+    deriving (ToJSON, FromJSON) via (AesonRecord InstAuto)
+
+instance Default InstAuto where
+  def = InstAuto def Nothing Nothing
 
 data InstAutoTarget =
     InstAutoTargetVolume
@@ -84,6 +101,9 @@ data InstBlock a = InstBlock
 pureInstBlock :: a -> InstBlock a
 pureInstBlock a = InstBlock a a a a
 
+instance Default a => Default (InstBlock a) where
+  def = pureInstBlock def
+
 data InstFilterType =
     InstFilterTypeLowpass
   | InstFilterTypeHighpass
@@ -105,12 +125,12 @@ data InstConfig = InstConfig
   { icPanning :: !Rational
   , icTune :: !Rational
   , icFilter :: !(Maybe InstFilter)
-  , icAuto :: !(InstBlock (Maybe InstAuto))
+  , icAuto :: !(InstBlock InstAuto)
   } deriving stock (Eq, Show, Generic)
     deriving (ToJSON, FromJSON) via (AesonRecord InstConfig)
 
 instance Default InstConfig where
-  def = InstConfig 0 0 Nothing (pureInstBlock Nothing)
+  def = InstConfig 0 0 Nothing def
 
 data InstKeyRange = InstKeyRange
   { ikrLowkey :: !Integer
