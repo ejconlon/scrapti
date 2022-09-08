@@ -23,10 +23,10 @@ import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Traversable (for)
-import Scrapti.Patches.Inst (InstAuto (..), InstAutoTarget (..), InstBlock (..), InstConfig (..), InstControl (..),
-                             InstCrop (..), InstDef (..), InstEnv (..), InstFilter (..), InstFilterType (..),
-                             InstKeyRange (..), InstLfo (..), InstLfoWave (..), InstLoop (..), InstLoopType (..),
-                             InstRegion (..), InstSpec (..), Tempo (..), traverseBlock_, InstAutoType (..))
+import Scrapti.Patches.Inst (InstAuto (..), InstAutoTarget (..), InstAutoType (..), InstBlock (..), InstConfig (..),
+                             InstControl (..), InstCrop (..), InstDef (..), InstEnv (..), InstFilter (..),
+                             InstFilterType (..), InstKeyRange (..), InstLfo (..), InstLfoWave (..), InstLoop (..),
+                             InstLoopType (..), InstRegion (..), InstSpec (..), Tempo (..), traverseBlock_)
 import Scrapti.Patches.Sfz (SfzAttrs, SfzFile (..), SfzSection (..), SfzVal (..), sfzValFloat, sfzValInt, sfzValText,
                             textSfzVal)
 

@@ -18,9 +18,10 @@ import qualified Data.Text.Encoding as TE
 import Data.Traversable (for)
 import Scrapti.Dsp (PcmContainer (..), PcmMeta (pmNumSamples), applyModGeneric, crop, linearCrossFade)
 import Scrapti.Midi.Notes (Interval (..), LinNote (..), NotePref (..), linSubInterval, linToOct, renderNote)
-import Scrapti.Patches.Inst (InstAuto (..), InstBlock (..), InstConfig (..), InstCrop (..), InstEnv (..),
-                             InstFilter (..), InstFilterType (..), InstKeyRange (..), InstLfo (..), InstLfoWave (..),
-                             InstLoop (..), InstLoopType (..), InstRegion (..), InstSpec (..), Tempo (..), InstAutoType (..))
+import Scrapti.Patches.Inst (InstAuto (..), InstAutoType (..), InstBlock (..), InstConfig (..), InstCrop (..),
+                             InstEnv (..), InstFilter (..), InstFilterType (..), InstKeyRange (..), InstLfo (..),
+                             InstLfoWave (..), InstLoop (..), InstLoopType (..), InstRegion (..), InstSpec (..),
+                             Tempo (..))
 import Scrapti.Tracker.Pti (Auto (..), AutoEnvelope (..), AutoType (..), Block (..), Filter (..), FilterType (..),
                             Header (..), InstParams (..), Lfo (..), LfoSteps (..), LfoType (..), Preamble (..), Pti,
                             SamplePlayback (..), mkPti)

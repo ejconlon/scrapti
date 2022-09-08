@@ -26,6 +26,7 @@ import Data.Foldable (for_, toList)
 import Data.Functor.Classes (Eq1 (..))
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import Data.Ratio (denominator, numerator)
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
 import Data.Text (Text)
@@ -66,6 +67,15 @@ loop_end=33096
 sample=DX-EPiano1-C1.wav
 -}
 
+projectRational :: Rational -> Either Integer Double
+projectRational r = if denominator r == 1 then Left (numerator r) else Right (fromRational r)
+
+showRational :: Rational -> String
+showRational = either show show . projectRational
+
+prettyRational :: Rational -> P.Doc a
+prettyRational = either pretty pretty . projectRational
+
 data SfzVal =
     SfzValText !Text
   | SfzValInt !Integer
@@ -76,7 +86,7 @@ sfzValText :: SfzVal -> Maybe Text
 sfzValText = Just . \case
   SfzValText t -> t
   SfzValInt i -> T.pack (show i)
-  SfzValFloat r -> T.pack (show r)
+  SfzValFloat r -> T.pack (showRational r)
 
 sfzValInt :: SfzVal -> Maybe Integer
 sfzValInt = \case
@@ -105,7 +115,7 @@ instance Pretty SfzVal where
   pretty = \case
     SfzValText x -> pretty x
     SfzValInt x -> pretty x
-    SfzValFloat x -> pretty (show x)
+    SfzValFloat x -> prettyRational x
 
 type SfzAttrs = Map Text SfzVal
 
