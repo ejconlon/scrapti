@@ -7,21 +7,30 @@ module Scrapti.Main
 import Control.Exception (throwIO)
 import Control.Monad (unless, when)
 import Dahdit (put, runPutFile)
+import Data.Default (Default (..))
+import Data.Foldable (for_)
 import qualified Data.Sequence as Seq
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import Data.Traversable (for)
-import Options.Applicative
-import Scrapti.Common
-import Scrapti.Convert (loadNeutral, neutralToSampleWav)
+import Options.Applicative (Parser, ParserInfo, argument, command, execParser, fullDesc, header, helper, idm, info,
+                            progDesc, str, subparser, (<**>))
+import Scrapti.Common (defaultLoopMarkNames)
+import Scrapti.Convert (Neutral (..), loadNeutral, neutralToSampleWav)
 import Scrapti.Midi.Notes (LinNote (..), octToLin)
-import Scrapti.Patches.ConvertSfz (SfzSample (..), instToSfz)
+import Scrapti.Patches.ConvertPti (PtiPatch (PtiPatch), instToPtiPatches)
+import Scrapti.Patches.ConvertSfz (SfzSample (..), instToSfz, sfzToInst)
 import Scrapti.Patches.Inst (InstControl (..), InstDef (..))
 import Scrapti.Patches.Loader (LoadedSample (..), Sample (sampleNote, samplePath), initializeInst, matchSamples)
 import Scrapti.Patches.Sfz (findSfzSection, parseSfz, renderSfz, replaceSfzSection)
 import System.Directory (canonicalizePath, createDirectoryIfMissing, doesDirectoryExist, doesFileExist, doesPathExist,
                          removeDirectoryRecursive)
 import System.FilePath (takeBaseName, takeFileName, (<.>), (</>))
+
+removeDirectoryIfExists :: FilePath -> IO ()
+removeDirectoryIfExists fp = do
+  exists <- doesPathExist fp
+  when exists (removeDirectoryRecursive fp)
 
 data PackRef = PackRef !FilePath !String
   deriving stock (Eq, Show)
@@ -40,12 +49,14 @@ canonPackRef (PackRef fp name) = do
 
 data Action =
     ActionInit !PackRef
+  | ActionFreeze !PackRef
   | ActionClean !PackRef
   deriving stock (Eq, Show)
 
 run :: Action -> IO ()
 run = \case
   ActionInit ref -> runInit ref
+  ActionFreeze ref -> runFreeze ref
   ActionClean ref -> runClean ref
 
 assertDirExists :: FilePath -> IO ()
@@ -88,7 +99,6 @@ runInit pr = do
     pure $! srcSample { samplePath = destFile }
   -- Initialize instrument
   sfzExists <- doesFileExist sfzFile
-  -- TODO instead of skipping, pull out global section and replace all else
   mayGlob <- if sfzExists
     then do
       sfzContents <- TIO.readFile sfzFile
@@ -102,16 +112,35 @@ runInit pr = do
   let sfzContents = renderSfz sfzRep'
   TIO.writeFile sfzFile sfzContents
 
-removeDirectoryIfExists :: FilePath -> IO ()
-removeDirectoryIfExists fp = do
-  exists <- doesPathExist fp
-  when exists (removeDirectoryRecursive fp)
+runFreeze :: PackRef -> IO ()
+runFreeze pr = do
+  -- constants
+  let sr = 44100
+      markNames = Just defaultLoopMarkNames
+  (packDir, name) <- canonPackRef pr
+  let sampDir = packDir </> "samples"
+      instDir = packDir </> "instruments"
+      sfzFile = packDir </> name <.> "sfz"
+  -- read sfz file
+  sfzContents <- TIO.readFile sfzFile
+  sfzRep <- either fail pure (parseSfz sfzContents)
+  -- convert to inst and load stuff
+  instRead <- either fail pure (sfzToInst sfzRep)
+  instWrite <- for (idSpec instRead) $ \case
+     SfzSampleFile fp -> fmap neCon (loadNeutral sr markNames (sampDir </> fp))
+     SfzSampleBuiltin txt -> fail ("Cannot use builtin samples (" ++ T.unpack txt ++ ")")
+  -- emit pti patches
+  patches <- either fail pure (instToPtiPatches (T.pack name) Nothing def instWrite)
+  createDirectoryIfMissing True instDir
+  for_ patches $ \(PtiPatch nm _ pti) -> do
+    runPutFile (instDir </> T.unpack nm <.> "pti") (put pti)
 
 runClean :: PackRef -> IO ()
 runClean pr = do
   (packDir, _) <- canonPackRef pr
   -- Resolve dirs
   let sampDir = packDir </> "samples"
+      instDir = packDir </> "instruments"
   -- Make sure
   putStrLn ("Are you sure you want to clean pack " ++ packDir ++ " ? [no|yes] ")
   ans <- getLine
@@ -119,12 +148,14 @@ runClean pr = do
     "yes" -> do
       putStrLn "Cleaning..."
       removeDirectoryIfExists sampDir
+      removeDirectoryIfExists instDir
       putStrLn "Done"
     _ -> putStrLn "Skipping"
 
 parser :: Parser Action
 parser = subparser
   (  command "init" (info (ActionInit <$> parsePackRef) idm)
+  <> command "freeze" (info (ActionFreeze <$> parsePackRef) idm)
   <> command "clean" (info (ActionClean <$> parsePackRef) idm)
   )
 
@@ -136,6 +167,4 @@ parserInfo = info (parser <**> helper)
   )
 
 main :: IO ()
-main = do
-  a <- execParser parserInfo
-  run a
+main =  execParser parserInfo >>= run

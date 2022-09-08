@@ -33,7 +33,6 @@ library
       Scrapti.Midi.Msg
       Scrapti.Midi.Notes
       Scrapti.Midi.Time
-      Scrapti.Patch
       Scrapti.Patches.ConvertPti
       Scrapti.Patches.ConvertSfz
       Scrapti.Patches.Inst
