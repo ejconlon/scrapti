@@ -68,3 +68,63 @@ This project is BSD-licensed. Some soundfont parser code is derived from [HCodec
 Can set `REBUILD=1` to force builds.
 
     ./scrapti.sh init ../slaw-packs/packs/SS01 Saucer
+
+## Example global section
+
+    <global>
+    // General params
+    pan=0
+    tune=0
+
+    // Filter
+    fil_type=lpf_2p
+    cutoff=22050
+    resonance=0
+
+    // Volume Env
+    eg01_volume=0
+    eg01_attack=0
+    eg01_decay=0
+    eg01_sustain=100
+    eg01_release=0
+
+    // Volume LFO
+    lfo01_volume=0
+    lfo01_wave=0
+    lfo01_freq=0
+
+    // Panning Env
+    eg02_panning=0
+    eg02_attack=0
+    eg02_decay=0
+    eg02_sustain=100
+    eg02_release=0
+
+    // Panning LFO
+    lfo02_panning=0
+    lfo02_wave=0
+    lfo02_freq=0
+
+    // Cutoff Env
+    eg03_cutoff=0
+    eg03_attack=0
+    eg03_decay=0
+    eg03_sustain=100
+    eg03_release=0
+
+    // Cutoff LFO
+    lfo03_cutoff=0
+    lfo03_wave=0
+    lfo03_freq=0
+
+    // Pitch Env
+    eg04_pitch=0
+    eg04_attack=0
+    eg04_decay=0
+    eg04_sustain=100
+    eg04_release=0
+
+    // Pitch LFO
+    lfo04_pitch=0
+    lfo04_wave=0
+    lfo04_freq=0

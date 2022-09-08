@@ -88,6 +88,7 @@ runInit pr = do
     pure $! srcSample { samplePath = destFile }
   -- Initialize instrument
   sfzExists <- doesFileExist sfzFile
+  -- TODO instead of skipping, pull out global section and replace all else
   unless sfzExists $ do
     instSpec <- initializeInst sr markNames newSamples
     let instDef = InstDef (InstControl Nothing (Just "samples/")) (fmap (SfzSampleFile . takeFileName . lsPath) instSpec)
