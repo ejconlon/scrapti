@@ -34,6 +34,7 @@ dependencies:
 - aeson-via >= 0.2 && < 0.3
 - aeson-pretty >= 0.8 && < 0.9
 - optparse-applicative >= 0.16 && < 0.17
+- aeson-casing >= 0.2 && < 0.3
 
 default-extensions:
 - BangPatterns

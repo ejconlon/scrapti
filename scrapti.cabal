@@ -37,6 +37,7 @@ library
       Scrapti.Patches.ConvertSfz
       Scrapti.Patches.Inst
       Scrapti.Patches.Loader
+      Scrapti.Patches.Meta
       Scrapti.Patches.Sfz
       Scrapti.Riff
       Scrapti.Sfont
@@ -79,6 +80,7 @@ library
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints -fno-warn-unused-top-binds -fwrite-ide-info -hiedir=.hie
   build-depends:
       aeson >=2.0 && <2.2
+    , aeson-casing ==0.2.*
     , aeson-pretty ==0.8.*
     , aeson-via ==0.2.*
     , base >=4.12 && <5
@@ -135,6 +137,7 @@ executable scrapti-exe
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints -fno-warn-unused-top-binds -fwrite-ide-info -hiedir=.hie -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       aeson >=2.0 && <2.2
+    , aeson-casing ==0.2.*
     , aeson-pretty ==0.8.*
     , aeson-via ==0.2.*
     , base >=4.12 && <5
@@ -193,6 +196,7 @@ test-suite scrapti-test
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints -fno-warn-unused-top-binds -fwrite-ide-info -hiedir=.hie -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       aeson >=2.0 && <2.2
+    , aeson-casing ==0.2.*
     , aeson-pretty ==0.8.*
     , aeson-via ==0.2.*
     , base >=4.12 && <5
