@@ -18,7 +18,7 @@ import Scrapti.Midi.Notes (LinNote (..), octToLin)
 import Scrapti.Patches.ConvertSfz (SfzSample (..), instToSfz)
 import Scrapti.Patches.Inst (InstControl (..), InstDef (..))
 import Scrapti.Patches.Loader (LoadedSample (..), Sample (sampleNote, samplePath), initializeInst, matchSamples)
-import Scrapti.Patches.Sfz (renderSfz)
+import Scrapti.Patches.Sfz (findSfzSection, parseSfz, renderSfz, replaceSfzSection)
 import System.Directory (canonicalizePath, createDirectoryIfMissing, doesDirectoryExist, doesFileExist, doesPathExist,
                          removeDirectoryRecursive)
 import System.FilePath (takeBaseName, takeFileName, (<.>), (</>))
@@ -89,12 +89,18 @@ runInit pr = do
   -- Initialize instrument
   sfzExists <- doesFileExist sfzFile
   -- TODO instead of skipping, pull out global section and replace all else
-  unless sfzExists $ do
-    instSpec <- initializeInst sr markNames newSamples
-    let instDef = InstDef (InstControl Nothing (Just "samples/")) (fmap (SfzSampleFile . takeFileName . lsPath) instSpec)
-    sfzRep <- either fail pure (instToSfz instDef)
-    let sfzContents = renderSfz sfzRep
-    TIO.writeFile sfzFile sfzContents
+  mayGlob <- if sfzExists
+    then do
+      sfzContents <- TIO.readFile sfzFile
+      sfzRep <- either fail pure (parseSfz sfzContents)
+      pure $! findSfzSection "global" sfzRep
+    else pure Nothing
+  instSpec <- initializeInst sr markNames newSamples
+  let instDef = InstDef (InstControl Nothing (Just "samples/")) (fmap (SfzSampleFile . takeFileName . lsPath) instSpec)
+  sfzRep <- either fail pure (instToSfz instDef)
+  sfzRep' <- maybe (pure sfzRep) (maybe (fail "missing global section") pure . replaceSfzSection "global" sfzRep) mayGlob
+  let sfzContents = renderSfz sfzRep'
+  TIO.writeFile sfzFile sfzContents
 
 removeDirectoryIfExists :: FilePath -> IO ()
 removeDirectoryIfExists fp = do

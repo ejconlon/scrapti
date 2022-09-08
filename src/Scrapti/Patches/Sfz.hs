@@ -16,6 +16,8 @@ module Scrapti.Patches.Sfz
   , sfzFileSimilar
   , parseSfz
   , renderSfz
+  , findSfzSection
+  , replaceSfzSection
   ) where
 
 import Control.Monad (unless)
@@ -211,3 +213,10 @@ parseSfz contents = fmap fst (runSfzParser (parseSfzM contents) emptySfzCtx)
 
 renderSfz :: SfzFile -> Text
 renderSfz sf = PT.renderStrict (P.layoutPretty P.defaultLayoutOptions (pretty sf))
+
+findSfzSection :: Text -> SfzFile -> Maybe SfzSection
+findSfzSection name (SfzFile sections) = fmap (Seq.index sections) (Seq.findIndexL (\x -> ssName x == name) sections)
+
+replaceSfzSection :: Text -> SfzFile -> SfzSection -> Maybe SfzFile
+replaceSfzSection name (SfzFile sections) val =
+  fmap (\ix -> SfzFile (Seq.update ix val sections)) (Seq.findIndexL (\x -> ssName x == name) sections)
