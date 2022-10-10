@@ -7,35 +7,27 @@ packages:
 - completed:
     hackage: aeson-via-0.2.0@sha256:10828137d9efe99cc2274fc82b908937fb87a21247dbea94925ed3231fb80dd2,1902
     pantry-tree:
-      size: 310
       sha256: f2ccbe69e2a3013a03873f06d74c18ffa6ec13cab1abe92ce57536f9971e763e
+      size: 310
   original:
     hackage: aeson-via-0.2.0
 - completed:
-    name: dahdit
-    version: 0.1.0
-    git: git@github.com:ejconlon/dahdit.git
+    hackage: dahdit-0.1.0@sha256:e7ee0ef9690e49ef11a0f702930a0febefa3661f52ba0032306f6cb9a6da1cd7,3332
     pantry-tree:
-      size: 1616
-      sha256: ddda80f5bdaac379e0fae4aabf11116ddfe6913016050633571985bd41f6a9ca
-    commit: a3939939f36a6cc2cbd4899cfedb29faebe0039d
+      sha256: 7c8cca00018a490efc048fb276ebc58caf92240ecdeabea23197c18df51b43bd
+      size: 1037
   original:
-    git: git@github.com:ejconlon/dahdit.git
-    commit: a3939939f36a6cc2cbd4899cfedb29faebe0039d
+    hackage: dahdit-0.1.0
 - completed:
-    name: data-sword
-    version: 0.3.0.0
-    git: git@github.com:ejconlon/data-sword.git
+    hackage: data-sword-0.2.0.3@sha256:953cca4b4533a388df0ef17e06ac5530652d1d73decfe8b656242ccdf4b40999,1568
     pantry-tree:
-      size: 644
-      sha256: c19c6cbd87ce6ce7d46a15b28f74f47ab1e65d1b830e4afa9eaf27b0daea2536
-    commit: 4a3efca54b337820446c7682bf3623d607f0365f
+      sha256: 60a104a3d3cbba2e099a9e7ce561322b2884f5323cf74fd876dfb59f265d803c
+      size: 439
   original:
-    git: git@github.com:ejconlon/data-sword.git
-    commit: 4a3efca54b337820446c7682bf3623d607f0365f
+    hackage: data-sword-0.2.0.3
 snapshots:
 - completed:
-    size: 619399
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/19/22.yaml
-    sha256: 5098594e71bdefe0c13e9e6236f12e3414ef91a2b89b029fd30e8fc8087f3a07
-  original: lts-19.22
+    sha256: 7f4393ad659c579944d12202cffb12d8e4b8114566b015f77bbc303a24cff934
+    size: 619405
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/19/28.yaml
+  original: lts-19.28

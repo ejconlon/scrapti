@@ -2,15 +2,16 @@
 
 module Scrapti.Patches.Meta where
 
-import Data.Text (Text)
-import Data.Sequence (Seq)
-import GHC.Generics (Generic (..))
-import Data.Aeson (genericToJSON, ToJSON (..), FromJSON (..), genericParseJSON, GToJSON', Value, Zero, GFromJSON, eitherDecodeStrict')
+import Data.Aeson (FromJSON (..), GFromJSON, GToJSON', ToJSON (..), Value, Zero, eitherDecodeStrict', genericParseJSON,
+                   genericToJSON)
 import Data.Aeson.Casing (aesonPrefix, snakeCase)
+import Data.Aeson.Encode.Pretty (encodePrettyToTextBuilder)
+import Data.Sequence (Seq)
+import Data.Text (Text)
 import qualified Data.Text.Encoding as TE
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Builder as TLB
-import Data.Aeson.Encode.Pretty (encodePrettyToTextBuilder)
+import GHC.Generics (Generic (..))
 
 newtype SnakeRecord a = SnakeRecord { unSnakeRecord :: a }
 
