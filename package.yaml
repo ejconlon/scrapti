@@ -15,7 +15,7 @@ description: Please see the README on GitHub at <https://github.com/ejconlon/scr
 
 dependencies:
 - base >= 4.12 && < 5
-- bytestring >= 0.10 && < 0.11
+- bytestring >= 0.10 && < 0.12
 - containers >= 0.6 && < 0.7
 - dahdit >= 0.1 && < 0.2
 - data-default >= 0.7 && < 0.8
@@ -33,7 +33,7 @@ dependencies:
 - aeson >= 2.0 && < 2.2
 - aeson-via >= 0.2 && < 0.3
 - aeson-pretty >= 0.8 && < 0.9
-- optparse-applicative >= 0.16 && < 0.17
+- optparse-applicative >= 0.16 && < 0.18
 - aeson-casing >= 0.2 && < 0.3
 
 default-extensions:

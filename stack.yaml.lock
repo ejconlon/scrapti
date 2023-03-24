@@ -5,19 +5,19 @@
 
 packages:
 - completed:
-    hackage: aeson-via-0.2.0@sha256:10828137d9efe99cc2274fc82b908937fb87a21247dbea94925ed3231fb80dd2,1902
+    hackage: aeson-via-0.2.1@sha256:349f5b3609ad0060949e1213d129ad5f8bbbdca8d8ef4e5e5c8db7e6b5a22180,1926
     pantry-tree:
-      sha256: f2ccbe69e2a3013a03873f06d74c18ffa6ec13cab1abe92ce57536f9971e763e
+      sha256: 4c71cf25f486f5f6428c8bf45a00ed5f98d4055bbf273ede2c42efcedf06b41b
       size: 310
   original:
-    hackage: aeson-via-0.2.0
+    hackage: aeson-via-0.2.1
 - completed:
-    hackage: dahdit-0.1.0@sha256:e7ee0ef9690e49ef11a0f702930a0febefa3661f52ba0032306f6cb9a6da1cd7,3332
+    hackage: dahdit-0.1.1@sha256:a531787da9c3bfe8d43b0016390b001a4e10c6a2475f5cf43266dbd5c2857f3e,3346
     pantry-tree:
-      sha256: 7c8cca00018a490efc048fb276ebc58caf92240ecdeabea23197c18df51b43bd
+      sha256: fd5823993ae781a9573acac3e914bc75271504a77bbf84f57e2b6d2660573705
       size: 1037
   original:
-    hackage: dahdit-0.1.0
+    hackage: dahdit-0.1.1
 - completed:
     hackage: data-sword-0.2.0.3@sha256:953cca4b4533a388df0ef17e06ac5530652d1d73decfe8b656242ccdf4b40999,1568
     pantry-tree:
@@ -27,7 +27,7 @@ packages:
     hackage: data-sword-0.2.0.3
 snapshots:
 - completed:
-    sha256: 7f4393ad659c579944d12202cffb12d8e4b8114566b015f77bbc303a24cff934
-    size: 619405
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/19/28.yaml
-  original: lts-19.28
+    sha256: 5d1df60a0aaf19ab42eb79d5ca01ab812318a96be3925559e902e1bfd8cac569
+    size: 649582
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/20/15.yaml
+  original: lts-20.15

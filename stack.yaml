@@ -1,4 +1,4 @@
-resolver: lts-19.28
+resolver: lts-20.15
 
 ghc-options:
   "$everything": -haddock
@@ -7,6 +7,6 @@ packages:
 - .
 
 extra-deps:
-- aeson-via-0.2.0
-- dahdit-0.1.0
+- aeson-via-0.2.1
+- dahdit-0.1.1
 - data-sword-0.2.0.3
