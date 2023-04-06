@@ -5,7 +5,8 @@ module Scrapti.Tracker.Checked
   , updateCheckedCode
   , verifyCheckedCode
   , failCheckedCode
-  ) where
+  )
+where
 
 import Control.Monad (unless)
 import Dahdit (Binary, ByteSized, StaticByteSized, ViaStaticGeneric (..), Word32LE (..), put, runPut)
@@ -17,8 +18,9 @@ import GHC.Generics (Generic)
 data Checked a = Checked
   { checkedVal :: !a
   , checkedCode :: !Word32LE
-  } deriving stock (Eq, Show, Generic)
-    deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric (Checked a))
+  }
+  deriving stock (Eq, Show, Generic)
+  deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric (Checked a))
 
 instance (Default a, Binary a) => Default (Checked a) where
   def = mkChecked def
@@ -38,5 +40,6 @@ verifyCheckedCode (Checked val code) = code == mkCode val
 failCheckedCode :: (MonadFail m, Binary a) => String -> Checked a -> m ()
 failCheckedCode tyName (Checked val code) =
   let actual = mkCode val
-  in unless (code == actual)
-    (fail ("Code for " ++ tyName ++ " failed to check (expected: " ++ show (unWord32LE code) ++ ", actual: " ++ show (unWord32LE actual) ++ ")"))
+  in  unless
+        (code == actual)
+        (fail ("Code for " ++ tyName ++ " failed to check (expected: " ++ show (unWord32LE code) ++ ", actual: " ++ show (unWord32LE actual) ++ ")"))

@@ -18,7 +18,8 @@ module Scrapti.Patches.Sfz
   , renderSfz
   , findSfzSection
   , replaceSfzSection
-  ) where
+  )
+where
 
 import Control.Monad (unless)
 import Control.Monad.Except (Except, MonadError (..), runExcept)
@@ -78,17 +79,18 @@ showRational = either show show . projectRational
 prettyRational :: Rational -> P.Doc a
 prettyRational = either pretty pretty . projectRational
 
-data SfzVal =
-    SfzValText !Text
+data SfzVal
+  = SfzValText !Text
   | SfzValInt !Integer
   | SfzValFloat !Rational
   deriving stock (Eq, Show)
 
 sfzValText :: SfzVal -> Maybe Text
-sfzValText = Just . \case
-  SfzValText t -> t
-  SfzValInt i -> T.pack (show i)
-  SfzValFloat r -> T.pack (showRational r)
+sfzValText =
+  Just . \case
+    SfzValText t -> t
+    SfzValInt i -> T.pack (show i)
+    SfzValFloat r -> T.pack (showRational r)
 
 sfzValInt :: SfzVal -> Maybe Integer
 sfzValInt = \case
@@ -127,17 +129,19 @@ sfzAttrsSimilar = liftEq sfzValSimilar
 data SfzSection = SfzSection
   { ssName :: !Text
   , ssAttrs :: !SfzAttrs
-  } deriving stock (Eq, Show)
+  }
+  deriving stock (Eq, Show)
 
 sfzSectionSimilar :: SfzSection -> SfzSection -> Bool
 sfzSectionSimilar (SfzSection n1 m1) (SfzSection n2 m2) = n1 == n2 && sfzAttrsSimilar m1 m2
 
 instance Pretty SfzSection where
-  pretty (SfzSection name attrs) = P.vsep (nameDoc:attrsDocs) where
+  pretty (SfzSection name attrs) = P.vsep (nameDoc : attrsDocs)
+   where
     nameDoc = P.hcat ["<", pretty name, ">"]
     attrsDocs = fmap (\(n, v) -> P.hcat [pretty n, "=", pretty v]) (Map.toList attrs)
 
-newtype SfzFile = SfzFile { unSfzFile :: Seq SfzSection }
+newtype SfzFile = SfzFile {unSfzFile :: Seq SfzSection}
   deriving stock (Eq, Show)
 
 sfzFileSimilar :: SfzFile -> SfzFile -> Bool
@@ -149,12 +153,13 @@ instance Pretty SfzFile where
 data SfzCtx = SfzCtx
   { scSections :: !(Seq SfzSection)
   , scCurrentSection :: !(Maybe SfzSection)
-  } deriving stock (Eq, Show)
+  }
+  deriving stock (Eq, Show)
 
 emptySfzCtx :: SfzCtx
 emptySfzCtx = SfzCtx Seq.empty Nothing
 
-newtype SfzParser a = SfzParser { unSfzParser :: StateT SfzCtx (Except String) a }
+newtype SfzParser a = SfzParser {unSfzParser :: StateT SfzCtx (Except String) a}
   deriving newtype (Functor, Applicative, Monad, MonadState SfzCtx)
 
 runSfzParser :: SfzParser a -> SfzCtx -> Either String (a, SfzCtx)
@@ -180,9 +185,9 @@ parseSfzLineM line =
 readM :: Read a => (a -> b) -> Text -> SfzParser b
 readM f t =
   let s = T.unpack t
-  in case readEither s of
-    Left err -> fail ("Failed to read attr val " ++ s ++ ": " ++ err)
-    Right val -> pure $! f val
+  in  case readEither s of
+        Left err -> fail ("Failed to read attr val " ++ s ++ ": " ++ err)
+        Right val -> pure $! f val
 
 parseValM :: Text -> SfzParser SfzVal
 parseValM valStr

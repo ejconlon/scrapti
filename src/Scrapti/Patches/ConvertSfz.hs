@@ -6,7 +6,8 @@ module Scrapti.Patches.ConvertSfz
   , sfzToInst
   , SfzSample (..)
   , instToSfz
-  ) where
+  )
+where
 
 import Control.Exception (Exception)
 import Control.Monad (join, unless, (>=>))
@@ -23,12 +24,38 @@ import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Traversable (for)
-import Scrapti.Patches.Inst (InstAuto (..), InstAutoTarget (..), InstAutoType (..), InstBlock (..), InstConfig (..),
-                             InstControl (..), InstCrop (..), InstDef (..), InstEnv (..), InstFilter (..),
-                             InstFilterType (..), InstKeyRange (..), InstLfo (..), InstLfoWave (..), InstLoop (..),
-                             InstLoopType (..), InstRegion (..), InstSpec (..), Tempo (..), traverseBlock_)
-import Scrapti.Patches.Sfz (SfzAttrs, SfzFile (..), SfzSection (..), SfzVal (..), sfzValFloat, sfzValInt, sfzValText,
-                            textSfzVal)
+import Scrapti.Patches.Inst
+  ( InstAuto (..)
+  , InstAutoTarget (..)
+  , InstAutoType (..)
+  , InstBlock (..)
+  , InstConfig (..)
+  , InstControl (..)
+  , InstCrop (..)
+  , InstDef (..)
+  , InstEnv (..)
+  , InstFilter (..)
+  , InstFilterType (..)
+  , InstKeyRange (..)
+  , InstLfo (..)
+  , InstLfoWave (..)
+  , InstLoop (..)
+  , InstLoopType (..)
+  , InstRegion (..)
+  , InstSpec (..)
+  , Tempo (..)
+  , traverseBlock_
+  )
+import Scrapti.Patches.Sfz
+  ( SfzAttrs
+  , SfzFile (..)
+  , SfzSection (..)
+  , SfzVal (..)
+  , sfzValFloat
+  , sfzValInt
+  , sfzValText
+  , textSfzVal
+  )
 
 renderWaveNum :: InstLfoWave -> Integer
 renderWaveNum = \case
@@ -82,8 +109,8 @@ renderFilType = \case
   InstFilterTypeHighpass -> "hpf_2p"
   InstFilterTypeBandpass -> "bpf_2p"
 
-data SfzSample =
-    SfzSampleFile !FilePath
+data SfzSample
+  = SfzSampleFile !FilePath
   | SfzSampleBuiltin !Text
   deriving stock (Eq, Show)
 
@@ -94,9 +121,9 @@ instance FromJSON SfzSample where
   parseJSON = \case
     String txt ->
       if
-        | T.null txt -> fail "Empty SfzSample"
-        | T.head txt == '*' -> pure (SfzSampleBuiltin (T.tail txt))
-        | otherwise -> pure (SfzSampleFile (T.unpack txt))
+          | T.null txt -> fail "Empty SfzSample"
+          | T.head txt == '*' -> pure (SfzSampleBuiltin (T.tail txt))
+          | otherwise -> pure (SfzSampleFile (T.unpack txt))
     _ -> fail "Non-string SfzSample"
 
 renderSfzSample :: SfzSample -> Text
@@ -116,7 +143,7 @@ data PatchErr = PatchErrWhatever
 
 instance Exception PatchErr
 
-newtype SfzReader r a = SfzReader { unSfzReader :: ReaderT r (Except String) a }
+newtype SfzReader r a = SfzReader {unSfzReader :: ReaderT r (Except String) a}
   deriving newtype (Functor, Applicative, Monad, MonadReader r)
 
 runSfzReader :: SfzReader r a -> r -> Either String a
@@ -177,10 +204,11 @@ onRegionsM act = do
 
 readControlM :: SfzReader SfzFile InstControl
 readControlM = do
-  fmap (fromMaybe def) $ askSectionM "control" $
-    InstControl
-      <$> askValM (fmap Tempo . sfzValFloat) "hint_tempo"
-      <*> askValM (fmap T.unpack . sfzValText) "default_path"
+  fmap (fromMaybe def) $
+    askSectionM "control" $
+      InstControl
+        <$> askValM (fmap Tempo . sfzValFloat) "hint_tempo"
+        <*> askValM (fmap T.unpack . sfzValText) "default_path"
 
 data AutoChoice = AutoChoiceLfo | AutoChoiceEnv
   deriving stock (Eq, Show)
@@ -224,20 +252,21 @@ readAutoM idx cat = do
     (Just _, Nothing) -> pure InstAutoTypeLfo
     (Just lfoDepth, Just envDepth) ->
       if
-        | lfoDepth == 0 && envDepth == 0 -> pure InstAutoTypeOff
-        | lfoDepth == 0 && envDepth /= 0 -> pure InstAutoTypeEnv
-        | lfoDepth /= 0 && envDepth == 0 -> pure InstAutoTypeLfo
-        | otherwise -> fail ("Forbidden lfo and env for category " ++ T.unpack cat)
+          | lfoDepth == 0 && envDepth == 0 -> pure InstAutoTypeOff
+          | lfoDepth == 0 && envDepth /= 0 -> pure InstAutoTypeEnv
+          | lfoDepth /= 0 && envDepth == 0 -> pure InstAutoTypeLfo
+          | otherwise -> fail ("Forbidden lfo and env for category " ++ T.unpack cat)
   mayEnv <- maybe (readMayEnvM (mkKey "env") mayEnvDepth) (fmap Just . readEnvM (mkKey "env")) mayEnvDepth
   mayLfo <- maybe (readMayLfoM (mkKey "lfo") mayLfoDepth) (fmap Just . readLfoM (mkKey "lfo")) mayLfoDepth
   pure $! InstAuto ty mayEnv mayLfo
 
 readAutoBlockM :: SfzReader SfzSection (InstBlock InstAuto)
-readAutoBlockM = InstBlock
-  <$> readAutoM "01" "volume"
-  <*> readAutoM "02" "panning"
-  <*> readAutoM "03" "cutoff"
-  <*> readAutoM "04" "pitch"
+readAutoBlockM =
+  InstBlock
+    <$> readAutoM "01" "volume"
+    <*> readAutoM "02" "panning"
+    <*> readAutoM "03" "cutoff"
+    <*> readAutoM "04" "pitch"
 
 readFiltM :: SfzReader SfzSection (Maybe InstFilter)
 readFiltM = do
@@ -245,9 +274,11 @@ readFiltM = do
   case mayFilTypeStr of
     Nothing -> Nothing <$ for_ ["cutoff", "resonance"] forbidValM
     Just filTypeStr -> case parseFilType filTypeStr of
-      Just filType -> fmap Just $ InstFilter filType
-        <$> requireValM sfzValFloat "cutoff"
-        <*> defaultValM sfzValFloat "resonance" 0
+      Just filType ->
+        fmap Just $
+          InstFilter filType
+            <$> requireValM sfzValFloat "cutoff"
+            <*> defaultValM sfzValFloat "resonance" 0
       Nothing -> fail ("Invalid filter type: " ++ T.unpack filTypeStr)
 
 readParamsM :: SfzReader SfzFile InstConfig
@@ -267,20 +298,24 @@ forbidValM k = do
 readRegionM :: SfzReader SfzSection (InstRegion SfzSample)
 readRegionM = do
   sampleStr <- requireValM sfzValText "sample"
-  sample <- if
-    | T.null sampleStr -> fail "empty sample string"
-    | T.head sampleStr == '*' -> pure $! SfzSampleBuiltin (T.tail sampleStr)
-    | otherwise -> pure $! SfzSampleFile (T.unpack sampleStr)
-  keyRange <- InstKeyRange
-    <$> requireValM sfzValInt "lokey"
-    <*> requireValM sfzValInt "pitch_keycenter"
-    <*> requireValM sfzValInt "hikey"
+  sample <-
+    if
+        | T.null sampleStr -> fail "empty sample string"
+        | T.head sampleStr == '*' -> pure $! SfzSampleBuiltin (T.tail sampleStr)
+        | otherwise -> pure $! SfzSampleFile (T.unpack sampleStr)
+  keyRange <-
+    InstKeyRange
+      <$> requireValM sfzValInt "lokey"
+      <*> requireValM sfzValInt "pitch_keycenter"
+      <*> requireValM sfzValInt "hikey"
   loopModeStr <- defaultValM sfzValText "loop_mode" "no_loop"
   mayLoop <- case parseLoopMode loopModeStr of
-    Just LoopModeOn -> fmap Just $ InstLoop
-      <$> defaultValM (sfzValText >=> parseLoopType) "loop_type" InstLoopTypeForward
-      <*> defaultValM sfzValInt "loop_start" 0
-      <*> requireValM sfzValInt "loop_end"
+    Just LoopModeOn ->
+      fmap Just $
+        InstLoop
+          <$> defaultValM (sfzValText >=> parseLoopType) "loop_type" InstLoopTypeForward
+          <*> defaultValM sfzValInt "loop_start" 0
+          <*> requireValM sfzValInt "loop_end"
     Just LoopModeOff -> Nothing <$ for_ ["loop_type", "loop_start", "loop_end"] forbidValM
     Nothing -> fail ("invalid loop_mode: " ++ T.unpack loopModeStr)
   mayCrop <- fmap (fmap (InstCrop 0)) (askValM sfzValInt "end")
@@ -297,7 +332,7 @@ sfzToInst = runSfzReader $ do
   let inst = InstSpec params regions
   pure $! InstDef control inst
 
-newtype SfzWriter w a = SfzWriter { unSfzWriter :: WriterT w (Except String) a }
+newtype SfzWriter w a = SfzWriter {unSfzWriter :: WriterT w (Except String) a}
   deriving newtype (Functor, Applicative, Monad, MonadWriter w)
 
 instance Monoid w => MonadFail (SfzWriter w) where
@@ -308,29 +343,32 @@ execSfzWriter = runExcept . execWriterT . unSfzWriter
 
 writeFiltM :: InstFilter -> SfzWriter SfzAttrs ()
 writeFiltM (InstFilter {..}) =
-  tell $ Map.fromList
-    [ ("fil_type", SfzValText (renderFilType ifType))
-    , ("cutoff", SfzValFloat ifCutoff)
-    , ("resonance", SfzValFloat ifResonance)
-    ]
+  tell $
+    Map.fromList
+      [ ("fil_type", SfzValText (renderFilType ifType))
+      , ("cutoff", SfzValFloat ifCutoff)
+      , ("resonance", SfzValFloat ifResonance)
+      ]
 
 writeAutoEnvM :: (Text -> Text) -> Text -> InstEnv -> SfzWriter SfzAttrs ()
 writeAutoEnvM mkKey cat (InstEnv {..}) =
-  tell $ Map.fromList
-    [ (mkKey cat, SfzValFloat ieDepth)
-    , (mkKey "attack", SfzValFloat ieAttack)
-    , (mkKey "decay", SfzValFloat ieDecay)
-    , (mkKey "sustain", SfzValFloat ieSustain)
-    , (mkKey "release", SfzValFloat ieRelease)
-    ]
+  tell $
+    Map.fromList
+      [ (mkKey cat, SfzValFloat ieDepth)
+      , (mkKey "attack", SfzValFloat ieAttack)
+      , (mkKey "decay", SfzValFloat ieDecay)
+      , (mkKey "sustain", SfzValFloat ieSustain)
+      , (mkKey "release", SfzValFloat ieRelease)
+      ]
 
 writeAutoLfoM :: (Text -> Text) -> Text -> InstLfo -> SfzWriter SfzAttrs ()
 writeAutoLfoM mkKey cat (InstLfo {..}) =
-  tell $ Map.fromList
-    [ (mkKey cat, SfzValFloat ilDepth)
-    , (mkKey "wave", SfzValInt (renderWaveNum ilWave))
-    , (mkKey "freq", SfzValFloat ilFreq)
-    ]
+  tell $
+    Map.fromList
+      [ (mkKey cat, SfzValFloat ilDepth)
+      , (mkKey "wave", SfzValInt (renderWaveNum ilWave))
+      , (mkKey "freq", SfzValFloat ilFreq)
+      ]
 
 writeAutoM :: InstAutoTarget -> InstAuto -> SfzWriter SfzAttrs ()
 writeAutoM target (InstAuto _ env lfo) = do
@@ -341,29 +379,32 @@ writeAutoM target (InstAuto _ env lfo) = do
 
 instConfigM :: InstConfig -> SfzWriter SfzAttrs ()
 instConfigM (InstConfig {..}) = do
-  tell $ Map.fromList
-    [ ("pan", SfzValFloat icPanning)
-    , ("tune", SfzValFloat icTune)
-    ]
+  tell $
+    Map.fromList
+      [ ("pan", SfzValFloat icPanning)
+      , ("tune", SfzValFloat icTune)
+      ]
   for_ icFilter writeFiltM
   traverseBlock_ writeAutoM icAuto
 
 instRegionM :: InstRegion SfzSample -> SfzWriter SfzAttrs ()
 instRegionM (InstRegion {..}) = do
   let InstKeyRange {..} = irKeyRange
-  tell $ Map.fromList
-    [ ("sample", SfzValText (renderSfzSample irSample))
-    , ("lokey", SfzValInt ikrLowkey)
-    , ("pitch_keycenter", SfzValInt ikrSampKey)
-    , ("hikey", SfzValInt ikrHighkey)
-    ]
-  for_ irLoop $ \(InstLoop {..}) ->
-    tell $ Map.fromList
-      [ ("loop_mode", SfzValText "loop_continuous")
-      , ("loop_type", SfzValText (renderLoopType ilType))
-      , ("loop_start", SfzValInt ilLoopStart)
-      , ("loop_end", SfzValInt ilLoopEnd)
+  tell $
+    Map.fromList
+      [ ("sample", SfzValText (renderSfzSample irSample))
+      , ("lokey", SfzValInt ikrLowkey)
+      , ("pitch_keycenter", SfzValInt ikrSampKey)
+      , ("hikey", SfzValInt ikrHighkey)
       ]
+  for_ irLoop $ \(InstLoop {..}) ->
+    tell $
+      Map.fromList
+        [ ("loop_mode", SfzValText "loop_continuous")
+        , ("loop_type", SfzValText (renderLoopType ilType))
+        , ("loop_start", SfzValInt ilLoopStart)
+        , ("loop_end", SfzValInt ilLoopEnd)
+        ]
   -- No way to specify crop points...
   for_ irCrop $ \(InstCrop {..}) -> do
     unless (icStart == 0) (fail "Can only crop end (start not supported)")
@@ -371,10 +412,13 @@ instRegionM (InstRegion {..}) = do
 
 instToSfz :: InstDef SfzSample -> Either String SfzFile
 instToSfz (InstDef (InstControl mayTempo mayDefPath) (InstSpec {..})) = do
-  let controlS = SfzSection "control" $ Map.fromList $ join
-        [ fmap (("default_path",) . textSfzVal) (maybeToList mayDefPath)
-        , fmap (("hint_tempo",) . SfzValFloat . unTempo) (maybeToList mayTempo)
-        ]
+  let controlS =
+        SfzSection "control" $
+          Map.fromList $
+            join
+              [ fmap (("default_path",) . textSfzVal) (maybeToList mayDefPath)
+              , fmap (("hint_tempo",) . SfzValFloat . unTempo) (maybeToList mayTempo)
+              ]
   globalS <- fmap (SfzSection "global") (execSfzWriter (instConfigM isConfig))
   regionSS <- traverse (fmap (SfzSection "region") . execSfzWriter . instRegionM) isRegions
   pure $! SfzFile (controlS :<| globalS :<| regionSS)

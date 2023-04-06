@@ -22,13 +22,36 @@ module Scrapti.Sfont
   , Shdr (..)
   , buildPdta
   , labelSfbk
-  ) where
+  )
+where
 
 import Control.Monad (unless)
-import Dahdit (Binary (..), ByteSized (..), Get, Int16LE (..), LiftedPrimArray, Put, ShortByteString,
-               StaticByteSized (..), StaticBytes, TermBytes, ViaStaticByteSized (..), ViaStaticGeneric (..), Word16LE,
-               Word32LE, getExact, getLiftedPrimArray, getRemainingSeq, getRemainingSize, getRemainingStaticSeq,
-               getRemainingString, getSkip, putByteString, putLiftedPrimArray, putSeq)
+import Dahdit
+  ( Binary (..)
+  , ByteSized (..)
+  , Get
+  , Int16LE (..)
+  , LiftedPrimArray
+  , Put
+  , ShortByteString
+  , StaticByteSized (..)
+  , StaticBytes
+  , TermBytes
+  , ViaStaticByteSized (..)
+  , ViaStaticGeneric (..)
+  , Word16LE
+  , Word32LE
+  , getExact
+  , getLiftedPrimArray
+  , getRemainingSeq
+  , getRemainingSize
+  , getRemainingStaticSeq
+  , getRemainingString
+  , getSkip
+  , putByteString
+  , putLiftedPrimArray
+  , putSeq
+  )
 import Data.Foldable (foldl')
 import Data.Int (Int8)
 import Data.Proxy (Proxy (..))
@@ -37,14 +60,45 @@ import qualified Data.Sequence as Seq
 import Data.Type.Equality (testEquality)
 import Data.Word (Word8)
 import GHC.Generics (Generic)
-import Scrapti.Common (KnownLabel (..), Label, chunkHeaderSize, getChunkSizeLE, getExpectLabel, labelSize,
-                       putChunkSizeLE)
+import Scrapti.Common
+  ( KnownLabel (..)
+  , Label
+  , chunkHeaderSize
+  , getChunkSizeLE
+  , getExpectLabel
+  , labelSize
+  , putChunkSizeLE
+  )
 import Scrapti.Riff (KnownListChunk, KnownOptChunk, labelRiff)
-import Type.Reflection ((:~:) (..), TypeRep, Typeable, typeRep)
+import Type.Reflection (TypeRep, Typeable, typeRep, (:~:) (..))
 
-labelSfbk, labelInfo, labelIfil, labelIver, labelIsng, labelInam, labelIrom, labelIcrd,
-  labelIeng, labelIprd, labelIcop, labelIcmt, labelIsft, labelSdta, labelSmpl, labelSm24,
-  labelPdta, labelPhdr, labelPbag, labelPmod, labelPgen, labelInst, labelIbag, labelImod, labelIgen, labelShdr :: Label
+labelSfbk
+  , labelInfo
+  , labelIfil
+  , labelIver
+  , labelIsng
+  , labelInam
+  , labelIrom
+  , labelIcrd
+  , labelIeng
+  , labelIprd
+  , labelIcop
+  , labelIcmt
+  , labelIsft
+  , labelSdta
+  , labelSmpl
+  , labelSm24
+  , labelPdta
+  , labelPhdr
+  , labelPbag
+  , labelPmod
+  , labelPgen
+  , labelInst
+  , labelIbag
+  , labelImod
+  , labelIgen
+  , labelShdr
+    :: Label
 labelSfbk = "sfbk"
 labelInfo = "INFO"
 labelIfil = "ifil"
@@ -72,7 +126,7 @@ labelImod = "imod"
 labelIgen = "igen"
 labelShdr = "shdr"
 
-newtype SampleCount = SampleCount { unSampleCount :: Word32LE }
+newtype SampleCount = SampleCount {unSampleCount :: Word32LE}
   deriving stock (Show)
   deriving newtype (Eq, Ord, Num, Enum, Real, Integral, ByteSized, StaticByteSized, Binary)
 
@@ -82,7 +136,8 @@ data Sfont = Sfont
   { sfontInfo :: !InfoChunk
   , sfontSdta :: !SdtaChunk
   , sfontPdta :: !PdtaChunk
-  } deriving stock (Eq, Show)
+  }
+  deriving stock (Eq, Show)
 
 instance ByteSized Sfont where
   byteSize (Sfont info sdta pdta) = chunkHeaderSize + labelSize + byteSize info + byteSize sdta + byteSize pdta
@@ -106,16 +161,16 @@ instance Binary Sfont where
     put sdta
     put pdta
 
-newtype InfoChunk = InfoChunk { unInfoChunk :: KnownListChunk Info }
+newtype InfoChunk = InfoChunk {unInfoChunk :: KnownListChunk Info}
   deriving stock (Show)
   deriving newtype (Eq, ByteSized, Binary)
 
-newtype PdtaChunk = PdtaChunk { unPdtaChunk :: KnownListChunk PdtaBlock }
+newtype PdtaChunk = PdtaChunk {unPdtaChunk :: KnownListChunk PdtaBlock}
   deriving stock (Show)
   deriving newtype (Eq, ByteSized, Binary)
 
-data Info =
-    InfoVersion !Word16LE !Word16LE
+data Info
+  = InfoVersion !Word16LE !Word16LE
   | InfoTargetSoundEngine !TermBytes
   | InfoBankName !TermBytes
   | InfoRomName !TermBytes
@@ -133,19 +188,20 @@ instance KnownLabel Info where
   knownLabel _ = labelInfo
 
 instance ByteSized Info where
-  byteSize info = chunkHeaderSize + case info of
-    InfoVersion _ _ -> 4
-    InfoTargetSoundEngine z -> byteSize z
-    InfoBankName z -> byteSize z
-    InfoRomName z -> byteSize z
-    InfoRomVersion _ _ -> 4
-    InfoCreationDate z -> byteSize z
-    InfoAuthors z -> byteSize z
-    InfoIntendedProduct z -> byteSize z
-    InfoCopyrightMessage z -> byteSize z
-    InfoComments z -> byteSize z
-    InfoUsedTools z -> byteSize z
-    InfoReserved _ bs -> byteSize bs
+  byteSize info =
+    chunkHeaderSize + case info of
+      InfoVersion _ _ -> 4
+      InfoTargetSoundEngine z -> byteSize z
+      InfoBankName z -> byteSize z
+      InfoRomName z -> byteSize z
+      InfoRomVersion _ _ -> 4
+      InfoCreationDate z -> byteSize z
+      InfoAuthors z -> byteSize z
+      InfoIntendedProduct z -> byteSize z
+      InfoCopyrightMessage z -> byteSize z
+      InfoComments z -> byteSize z
+      InfoUsedTools z -> byteSize z
+      InfoReserved _ bs -> byteSize bs
 
 whichLabelInfo :: Info -> Label
 whichLabelInfo = \case
@@ -168,28 +224,28 @@ instance Binary Info where
     chunkSize <- getChunkSizeLE
     getExact chunkSize $
       if
-        | label == labelIfil -> do
-          unless (chunkSize == 4) (fail "Bad ifil chunk size")
-          w1 <- get
-          w2 <- get
-          pure $! InfoVersion w1 w2
-        | label == labelIver -> do
-          unless (chunkSize == 4) (fail "Bad iver chunk size")
-          w1 <- get
-          w2 <- get
-          pure $! InfoRomVersion w1 w2
-        | label == labelIsng -> fmap InfoTargetSoundEngine get
-        | label == labelInam -> fmap InfoBankName get
-        | label == labelIrom -> fmap InfoRomName get
-        | label == labelIcrd -> fmap InfoCreationDate get
-        | label == labelIeng -> fmap InfoAuthors get
-        | label == labelIprd -> fmap InfoIntendedProduct get
-        | label == labelIcop -> fmap InfoCopyrightMessage get
-        | label == labelIcmt -> fmap InfoComments get
-        | label == labelIsft -> fmap InfoUsedTools get
-        | otherwise -> do
-          bs <- getRemainingString
-          pure $! InfoReserved label bs
+          | label == labelIfil -> do
+              unless (chunkSize == 4) (fail "Bad ifil chunk size")
+              w1 <- get
+              w2 <- get
+              pure $! InfoVersion w1 w2
+          | label == labelIver -> do
+              unless (chunkSize == 4) (fail "Bad iver chunk size")
+              w1 <- get
+              w2 <- get
+              pure $! InfoRomVersion w1 w2
+          | label == labelIsng -> fmap InfoTargetSoundEngine get
+          | label == labelInam -> fmap InfoBankName get
+          | label == labelIrom -> fmap InfoRomName get
+          | label == labelIcrd -> fmap InfoCreationDate get
+          | label == labelIeng -> fmap InfoAuthors get
+          | label == labelIprd -> fmap InfoIntendedProduct get
+          | label == labelIcop -> fmap InfoCopyrightMessage get
+          | label == labelIcmt -> fmap InfoComments get
+          | label == labelIsft -> fmap InfoUsedTools get
+          | otherwise -> do
+              bs <- getRemainingString
+              pure $! InfoReserved label bs
   put info = do
     let !label = whichLabelInfo info
     put label
@@ -212,10 +268,12 @@ instance Binary Info where
 data Sdta = Sdta
   { sdtaHighBits :: !(LiftedPrimArray Int16LE)
   , sdtaLowBits :: !(Maybe (LiftedPrimArray Word8))
-  } deriving stock (Eq, Show)
+  }
+  deriving stock (Eq, Show)
 
 instance ByteSized Sdta where
-  byteSize (Sdta high mlow) = sizeHigh + sizeLow where
+  byteSize (Sdta high mlow) = sizeHigh + sizeLow
+   where
     sizeHigh = chunkHeaderSize + byteSize high
     sizeLow = maybe 0 (\low -> chunkHeaderSize + byteSize low) mlow
 
@@ -237,16 +295,16 @@ instance Binary Sdta where
     highBits <- getHighBits numSamples
     let !numExtra = chunkSize - highSize - chunkHeaderSize
     if
-      | numExtra > 0 -> do
-        getExpectLabel labelSm24
-        lowSize <- getChunkSizeLE
-        let !expectedSize = if even numSamples then numSamples else numSamples + 1
-        unless (fromIntegral lowSize == expectedSize) (fail "invalid low sample size")
-        lowBits <- getLowBits numSamples
-        unless (even numSamples) (getSkip 1)
-        pure $! Sdta highBits (Just lowBits)
-      | numExtra == 0 -> pure $! Sdta highBits Nothing
-      | otherwise -> fail "invalid sdata chunk/sample sizes"
+        | numExtra > 0 -> do
+            getExpectLabel labelSm24
+            lowSize <- getChunkSizeLE
+            let !expectedSize = if even numSamples then numSamples else numSamples + 1
+            unless (fromIntegral lowSize == expectedSize) (fail "invalid low sample size")
+            lowBits <- getLowBits numSamples
+            unless (even numSamples) (getSkip 1)
+            pure $! Sdta highBits (Just lowBits)
+        | numExtra == 0 -> pure $! Sdta highBits Nothing
+        | otherwise -> fail "invalid sdata chunk/sample sizes"
   put (Sdta highBits mayLowBits) = do
     put labelSmpl
     putChunkSizeLE (byteSize highBits)
@@ -258,17 +316,17 @@ instance Binary Sdta where
         putChunkSizeLE (byteSize lowBits)
         putLiftedPrimArray lowBits
 
-newtype SdtaChunk = SdtaChunk { unSdtaChunk :: KnownOptChunk Sdta }
+newtype SdtaChunk = SdtaChunk {unSdtaChunk :: KnownOptChunk Sdta}
   deriving stock (Show)
   deriving newtype (Eq, ByteSized, Binary)
 
-data PdtaCat =
-    PdtaCatPreset
+data PdtaCat
+  = PdtaCatPreset
   | PdtaCatInst
   deriving stock (Eq, Show)
 
-data PdtaBlock =
-    PdtaBlockPhdr !(Seq Phdr)
+data PdtaBlock
+  = PdtaBlockPhdr !(Seq Phdr)
   | PdtaBlockBag !PdtaCat !(Seq Bag)
   | PdtaBlockMod !PdtaCat !(Seq Mod)
   | PdtaBlockGen !PdtaCat !(Seq Gen)
@@ -280,14 +338,16 @@ instance KnownLabel PdtaBlock where
   knownLabel _ = labelPdta
 
 instance ByteSized PdtaBlock where
-  byteSize block = res where
-    res = chunkHeaderSize + case block of
-      PdtaBlockPhdr phdrs -> fromIntegral (Seq.length phdrs) * sizePhdr
-      PdtaBlockBag _ bags -> fromIntegral (Seq.length bags) * sizeBag
-      PdtaBlockMod _ mods -> fromIntegral (Seq.length mods) * sizeMod
-      PdtaBlockGen _ gens -> fromIntegral (Seq.length gens) * sizeGen
-      PdtaBlockInst insts -> fromIntegral (Seq.length insts) * sizeInst
-      PdtaBlockShdr shdrs -> fromIntegral (Seq.length shdrs) * sizeShdr
+  byteSize block = res
+   where
+    res =
+      chunkHeaderSize + case block of
+        PdtaBlockPhdr phdrs -> fromIntegral (Seq.length phdrs) * sizePhdr
+        PdtaBlockBag _ bags -> fromIntegral (Seq.length bags) * sizeBag
+        PdtaBlockMod _ mods -> fromIntegral (Seq.length mods) * sizeMod
+        PdtaBlockGen _ gens -> fromIntegral (Seq.length gens) * sizeGen
+        PdtaBlockInst insts -> fromIntegral (Seq.length insts) * sizeInst
+        PdtaBlockShdr shdrs -> fromIntegral (Seq.length shdrs) * sizeShdr
     sizePhdr = staticByteSize (Proxy :: Proxy Phdr)
     sizeBag = staticByteSize (Proxy :: Proxy Bag)
     sizeMod = staticByteSize (Proxy :: Proxy Mod)
@@ -316,26 +376,26 @@ instance Binary PdtaBlock where
     chunkSize <- getChunkSizeLE
     getExact chunkSize $
       if
-        | label == labelPhdr ->
-          fmap PdtaBlockPhdr (getRemainingStaticSeq get)
-        | label == labelPbag ->
-          fmap (PdtaBlockBag PdtaCatPreset) (getRemainingStaticSeq get)
-        | label == labelPmod ->
-          fmap (PdtaBlockMod PdtaCatPreset) (getRemainingStaticSeq get)
-        | label == labelPgen ->
-          fmap (PdtaBlockGen PdtaCatPreset) (getRemainingStaticSeq get)
-        | label == labelInst ->
-          fmap PdtaBlockInst (getRemainingSeq get)
-        | label == labelIbag ->
-          fmap (PdtaBlockBag PdtaCatInst) (getRemainingStaticSeq get)
-        | label == labelImod ->
-          fmap (PdtaBlockMod PdtaCatInst) (getRemainingStaticSeq get)
-        | label == labelIgen ->
-          fmap (PdtaBlockGen PdtaCatInst) (getRemainingStaticSeq get)
-        | label == labelShdr ->
-          fmap PdtaBlockShdr (getRemainingStaticSeq get)
-        | otherwise ->
-          fail ("unrecognized pdta elem: " ++ show label)
+          | label == labelPhdr ->
+              fmap PdtaBlockPhdr (getRemainingStaticSeq get)
+          | label == labelPbag ->
+              fmap (PdtaBlockBag PdtaCatPreset) (getRemainingStaticSeq get)
+          | label == labelPmod ->
+              fmap (PdtaBlockMod PdtaCatPreset) (getRemainingStaticSeq get)
+          | label == labelPgen ->
+              fmap (PdtaBlockGen PdtaCatPreset) (getRemainingStaticSeq get)
+          | label == labelInst ->
+              fmap PdtaBlockInst (getRemainingSeq get)
+          | label == labelIbag ->
+              fmap (PdtaBlockBag PdtaCatInst) (getRemainingStaticSeq get)
+          | label == labelImod ->
+              fmap (PdtaBlockMod PdtaCatInst) (getRemainingStaticSeq get)
+          | label == labelIgen ->
+              fmap (PdtaBlockGen PdtaCatInst) (getRemainingStaticSeq get)
+          | label == labelShdr ->
+              fmap PdtaBlockShdr (getRemainingStaticSeq get)
+          | otherwise ->
+              fail ("unrecognized pdta elem: " ++ show label)
   put block = do
     let !label = whichLabelPdtaBlock block
     put label
@@ -358,14 +418,16 @@ data Phdr = Phdr
   , phdrLibrary :: !Word32LE
   , phdrGenre :: !Word32LE
   , phdrMorphology :: !Word32LE
-  } deriving stock (Eq, Show, Generic)
-    deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Phdr)
+  }
+  deriving stock (Eq, Show, Generic)
+  deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Phdr)
 
 data Bag = Bag
   { bagGenIndex :: !Word16LE
   , bagModIndex :: !Word16LE
-  } deriving stock (Eq, Show, Generic)
-    deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Bag)
+  }
+  deriving stock (Eq, Show, Generic)
+  deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Bag)
 
 -- | Modulator
 data Mod = Mod
@@ -374,11 +436,12 @@ data Mod = Mod
   , modAmount :: !Int16LE
   , modAmtSrcOper :: !Word16LE
   , modTransOper :: !Word16LE
-  } deriving stock (Eq, Show, Generic)
-    deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Mod)
+  }
+  deriving stock (Eq, Show, Generic)
+  deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Mod)
 
-data SampleMode =
-    SampleModeNoLoop !Int16LE
+data SampleMode
+  = SampleModeNoLoop !Int16LE
   | SampleModeContLoop
   | SampleModePressLoop
   deriving stock (Eq, Ord, Show)
@@ -403,21 +466,24 @@ instance Binary SampleMode where
 data Range = Range
   { rangeLo :: !Word8
   , rangeHi :: !Word8
-  } deriving stock (Eq, Ord, Show, Generic)
-    deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Range)
+  }
+  deriving stock (Eq, Ord, Show, Generic)
+  deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Range)
 
 data ReservedGen = ReservedGen
   { reservedGenTag :: !Word16LE
   , reservedGetVal :: !Int16LE
-  } deriving stock (Eq, Ord, Show, Generic)
-    deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric ReservedGen)
+  }
+  deriving stock (Eq, Ord, Show, Generic)
+  deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric ReservedGen)
 
 -- | Instrument
 data Inst = Inst
   { instName :: !ShortText
   , instBagIndex :: !Word16LE
-  } deriving stock (Eq, Show, Generic)
-    deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Inst)
+  }
+  deriving stock (Eq, Show, Generic)
+  deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Inst)
 
 -- | Sample header
 data Shdr = Shdr
@@ -431,8 +497,9 @@ data Shdr = Shdr
   , shdrPitchCorrection :: !Int8
   , shdrSampleLink :: !Word16LE
   , shdrSampleType :: !Word16LE
-  } deriving stock (Eq, Show, Generic)
-    deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Shdr)
+  }
+  deriving stock (Eq, Show, Generic)
+  deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Shdr)
 
 data Pdta = Pdta
   { pdtaPhdrs :: !(Seq Phdr)
@@ -453,26 +520,28 @@ data Pdta = Pdta
   -- ^ Instrument generators
   , pdtaShdrs :: !(Seq Shdr)
   -- ^ Sample headers
-  } deriving stock (Eq, Show)
+  }
+  deriving stock (Eq, Show)
 
 emptyPdta :: Pdta
 emptyPdta = Pdta Empty Empty Empty Empty Empty Empty Empty Empty Empty
 
 buildPdta :: Seq PdtaBlock -> Pdta
-buildPdta = foldl' go emptyPdta where
+buildPdta = foldl' go emptyPdta
+ where
   go p = \case
-    PdtaBlockPhdr phdrs -> p { pdtaPhdrs = pdtaPhdrs p <> phdrs }
+    PdtaBlockPhdr phdrs -> p {pdtaPhdrs = pdtaPhdrs p <> phdrs}
     PdtaBlockBag cat bags -> case cat of
-      PdtaCatPreset -> p { pdtaPbags = pdtaPbags p <> bags }
-      PdtaCatInst -> p { pdtaIbags = pdtaIbags p <> bags }
+      PdtaCatPreset -> p {pdtaPbags = pdtaPbags p <> bags}
+      PdtaCatInst -> p {pdtaIbags = pdtaIbags p <> bags}
     PdtaBlockMod cat mods -> case cat of
-      PdtaCatPreset -> p { pdtaPmods = pdtaPmods p <> mods }
-      PdtaCatInst -> p { pdtaImods = pdtaImods p <> mods }
+      PdtaCatPreset -> p {pdtaPmods = pdtaPmods p <> mods}
+      PdtaCatInst -> p {pdtaImods = pdtaImods p <> mods}
     PdtaBlockGen cat gens -> case cat of
-      PdtaCatPreset -> p { pdtaPgens = pdtaPgens p <> gens }
-      PdtaCatInst -> p { pdtaIgens = pdtaIgens p <> gens }
-    PdtaBlockInst insts -> p { pdtaInsts = pdtaInsts p <> insts }
-    PdtaBlockShdr shdrs -> p { pdtaShdrs = pdtaShdrs p <> shdrs }
+      PdtaCatPreset -> p {pdtaPgens = pdtaPgens p <> gens}
+      PdtaCatInst -> p {pdtaIgens = pdtaIgens p <> gens}
+    PdtaBlockInst insts -> p {pdtaInsts = pdtaInsts p <> insts}
+    PdtaBlockShdr shdrs -> p {pdtaShdrs = pdtaShdrs p <> shdrs}
 
 -- | Tags for generators
 data GenTag a where
@@ -531,75 +600,78 @@ data GenTag a where
   GenTagReserved :: Word16LE -> GenTag Int16LE
 
 deriving instance Eq (GenTag a)
+
 deriving instance Ord (GenTag a)
+
 deriving instance Show (GenTag a)
 
 genTagRep :: GenTag a -> Word16LE
 genTagRep = \case
-   GenTagStartAddressOffset -> 0
-   GenTagEndAddressOffset -> 1
-   GenTagLoopStartAddressOffset -> 2
-   GenTagLoopEndAddressOffset -> 3
-   GenTagStartAddressCoarseOffset -> 4
-   GenTagModLfoToPitch -> 5
-   GenTagVibLfoToPitch -> 6
-   GenTagModEnvToPitch -> 7
-   GenTagInitFc -> 8
-   GenTagInitQ -> 9
-   GenTagModLfoToFc -> 10
-   GenTagModEnvToFc -> 11
-   GenTagEndAddressCoarseOffset -> 12
-   GenTagModLfoToVol -> 13
-   GenTagChorus -> 15
-   GenTagReverb -> 16
-   GenTagPan -> 17
-   GenTagDelayModLfo -> 21
-   GenTagFreqModLfo -> 22
-   GenTagDelayVibLfo -> 23
-   GenTagFreqVibLfo -> 24
-   GenTagDelayModEnv -> 25
-   GenTagAttackModEnv -> 26
-   GenTagHoldModEnv -> 27
-   GenTagDecayModEnv -> 28
-   GenTagSustainModEnv -> 29
-   GenTagReleaseModEnv -> 30
-   GenTagKeyToModEnvHold -> 31
-   GenTagKeyToModEnvDecay -> 32
-   GenTagDelayVolEnv -> 33
-   GenTagAttackVolEnv -> 34
-   GenTagHoldVolEnv -> 35
-   GenTagDecayVolEnv -> 36
-   GenTagSustainVolEnv -> 37
-   GenTagReleaseVolEnv -> 38
-   GenTagKeyToVolEnvHold -> 39
-   GenTagKeyToVolEnvDecay -> 40
-   GenTagInstIndex -> 41
-   GenTagKeyRange -> 43
-   GenTagVelRange -> 44
-   GenTagLoopStartAddressCoarseOffset -> 45
-   GenTagKey -> 46
-   GenTagVel -> 47
-   GenTagInitAtten -> 48
-   GenTagLoopEndAddressCoarseOffset -> 50
-   GenTagCoarseTune -> 51
-   GenTagFineTune -> 52
-   GenTagSampleIndex -> 53
-   GenTagSampleMode -> 54
-   GenTagScaleTuning -> 56
-   GenTagExclusiveClass -> 57
-   GenTagRootKey -> 58
-   GenTagReserved t -> t
+  GenTagStartAddressOffset -> 0
+  GenTagEndAddressOffset -> 1
+  GenTagLoopStartAddressOffset -> 2
+  GenTagLoopEndAddressOffset -> 3
+  GenTagStartAddressCoarseOffset -> 4
+  GenTagModLfoToPitch -> 5
+  GenTagVibLfoToPitch -> 6
+  GenTagModEnvToPitch -> 7
+  GenTagInitFc -> 8
+  GenTagInitQ -> 9
+  GenTagModLfoToFc -> 10
+  GenTagModEnvToFc -> 11
+  GenTagEndAddressCoarseOffset -> 12
+  GenTagModLfoToVol -> 13
+  GenTagChorus -> 15
+  GenTagReverb -> 16
+  GenTagPan -> 17
+  GenTagDelayModLfo -> 21
+  GenTagFreqModLfo -> 22
+  GenTagDelayVibLfo -> 23
+  GenTagFreqVibLfo -> 24
+  GenTagDelayModEnv -> 25
+  GenTagAttackModEnv -> 26
+  GenTagHoldModEnv -> 27
+  GenTagDecayModEnv -> 28
+  GenTagSustainModEnv -> 29
+  GenTagReleaseModEnv -> 30
+  GenTagKeyToModEnvHold -> 31
+  GenTagKeyToModEnvDecay -> 32
+  GenTagDelayVolEnv -> 33
+  GenTagAttackVolEnv -> 34
+  GenTagHoldVolEnv -> 35
+  GenTagDecayVolEnv -> 36
+  GenTagSustainVolEnv -> 37
+  GenTagReleaseVolEnv -> 38
+  GenTagKeyToVolEnvHold -> 39
+  GenTagKeyToVolEnvDecay -> 40
+  GenTagInstIndex -> 41
+  GenTagKeyRange -> 43
+  GenTagVelRange -> 44
+  GenTagLoopStartAddressCoarseOffset -> 45
+  GenTagKey -> 46
+  GenTagVel -> 47
+  GenTagInitAtten -> 48
+  GenTagLoopEndAddressCoarseOffset -> 50
+  GenTagCoarseTune -> 51
+  GenTagFineTune -> 52
+  GenTagSampleIndex -> 53
+  GenTagSampleMode -> 54
+  GenTagScaleTuning -> 56
+  GenTagExclusiveClass -> 57
+  GenTagRootKey -> 58
+  GenTagReserved t -> t
 
 data GenPair a = GenPair
   { genPairTag :: !(GenTag a)
   , genPairVal :: !a
-  } deriving stock (Eq, Ord, Show)
+  }
+  deriving stock (Eq, Ord, Show)
 
 putGenPair :: Binary a => GenPair a -> Put
 putGenPair (GenPair tag val) = put (genTagRep tag) *> put val
 
-data Gen =
-    GenInt !(GenPair Int16LE)
+data Gen
+  = GenInt !(GenPair Int16LE)
   | GenWord !(GenPair Word16LE)
   | GenRange !(GenPair Range)
   | GenSampleMode !(GenPair SampleMode)
@@ -749,7 +821,8 @@ genTagTest t s = case testEquality (genTagTyRep t) (genTagTyRep s) of
   Just Refl -> if t == s then Just Refl else Nothing
 
 lookupGenVal :: Typeable a => GenTag a -> Seq Gen -> Maybe a
-lookupGenVal t = go where
+lookupGenVal t = go
+ where
   go = \case
     Empty -> Nothing
     gp :<| rest ->

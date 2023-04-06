@@ -2,7 +2,8 @@
 
 module Scrapti.Main
   ( main
-  ) where
+  )
+where
 
 import Control.Exception (throwIO)
 import Control.Monad (unless, when)
@@ -13,8 +14,22 @@ import qualified Data.Sequence as Seq
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import Data.Traversable (for)
-import Options.Applicative (Parser, ParserInfo, argument, command, execParser, fullDesc, header, helper, idm, info,
-                            progDesc, str, subparser, (<**>))
+import Options.Applicative
+  ( Parser
+  , ParserInfo
+  , argument
+  , command
+  , execParser
+  , fullDesc
+  , header
+  , helper
+  , idm
+  , info
+  , progDesc
+  , str
+  , subparser
+  , (<**>)
+  )
 import Scrapti.Common (defaultLoopMarkNames)
 import Scrapti.Convert (Neutral (..), loadNeutral, neutralToSampleWav)
 import Scrapti.Midi.Notes (LinNote (..), octToLin)
@@ -23,8 +38,14 @@ import Scrapti.Patches.ConvertSfz (SfzSample (..), instToSfz, sfzToInst)
 import Scrapti.Patches.Inst (InstControl (..), InstDef (..))
 import Scrapti.Patches.Loader (LoadedSample (..), Sample (sampleNote, samplePath), initializeInst, matchSamples)
 import Scrapti.Patches.Sfz (findSfzSection, parseSfz, renderSfz, replaceSfzSection)
-import System.Directory (canonicalizePath, createDirectoryIfMissing, doesDirectoryExist, doesFileExist, doesPathExist,
-                         removeDirectoryRecursive)
+import System.Directory
+  ( canonicalizePath
+  , createDirectoryIfMissing
+  , doesDirectoryExist
+  , doesFileExist
+  , doesPathExist
+  , removeDirectoryRecursive
+  )
 import System.FilePath (takeBaseName, takeFileName, (<.>), (</>))
 
 removeDirectoryIfExists :: FilePath -> IO ()
@@ -47,8 +68,8 @@ canonPackRef (PackRef fp name) = do
   assertDirExists fp'
   pure (fp' </> name, name)
 
-data Action =
-    ActionInit !PackRef
+data Action
+  = ActionInit !PackRef
   | ActionFreeze !PackRef
   | ActionClean !PackRef
   deriving stock (Eq, Show)
@@ -96,15 +117,16 @@ runInit pr = do
     let noteNum = unLinNote (octToLin (sampleNote srcSample))
     convertedWav <- either throwIO pure (neutralToSampleWav noteNum xfadeWidth sourceNe)
     runPutFile destFile (put convertedWav)
-    pure $! srcSample { samplePath = destFile }
+    pure $! srcSample {samplePath = destFile}
   -- Initialize instrument
   sfzExists <- doesFileExist sfzFile
-  mayGlob <- if sfzExists
-    then do
-      sfzContents <- TIO.readFile sfzFile
-      sfzRep <- either fail pure (parseSfz sfzContents)
-      pure $! findSfzSection "global" sfzRep
-    else pure Nothing
+  mayGlob <-
+    if sfzExists
+      then do
+        sfzContents <- TIO.readFile sfzFile
+        sfzRep <- either fail pure (parseSfz sfzContents)
+        pure $! findSfzSection "global" sfzRep
+      else pure Nothing
   instSpec <- initializeInst sr markNames newSamples
   let instDef = InstDef (InstControl Nothing (Just "samples/")) (fmap (SfzSampleFile . takeFileName . lsPath) instSpec)
   sfzRep <- either fail pure (instToSfz instDef)
@@ -127,8 +149,8 @@ runFreeze pr = do
   -- convert to inst and load stuff
   instRead <- either fail pure (sfzToInst sfzRep)
   instWrite <- for (idSpec instRead) $ \case
-     SfzSampleFile fp -> fmap neCon (loadNeutral sr markNames (sampDir </> fp))
-     SfzSampleBuiltin txt -> fail ("Cannot use builtin samples (" ++ T.unpack txt ++ ")")
+    SfzSampleFile fp -> fmap neCon (loadNeutral sr markNames (sampDir </> fp))
+    SfzSampleBuiltin txt -> fail ("Cannot use builtin samples (" ++ T.unpack txt ++ ")")
   -- emit pti patches
   patches <- either fail pure (instToPtiPatches (T.pack name) Nothing def instWrite)
   createDirectoryIfMissing True instDir
@@ -153,18 +175,21 @@ runClean pr = do
     _ -> putStrLn "Skipping"
 
 parser :: Parser Action
-parser = subparser
-  (  command "init" (info (ActionInit <$> parsePackRef) idm)
-  <> command "freeze" (info (ActionFreeze <$> parsePackRef) idm)
-  <> command "clean" (info (ActionClean <$> parsePackRef) idm)
-  )
+parser =
+  subparser
+    ( command "init" (info (ActionInit <$> parsePackRef) idm)
+        <> command "freeze" (info (ActionFreeze <$> parsePackRef) idm)
+        <> command "clean" (info (ActionClean <$> parsePackRef) idm)
+    )
 
 parserInfo :: ParserInfo Action
-parserInfo = info (parser <**> helper)
-  (  fullDesc
-  <> progDesc "scrapti"
-  <> header "magic for audio"
-  )
+parserInfo =
+  info
+    (parser <**> helper)
+    ( fullDesc
+        <> progDesc "scrapti"
+        <> header "magic for audio"
+    )
 
 main :: IO ()
-main =  execParser parserInfo >>= run
+main = execParser parserInfo >>= run

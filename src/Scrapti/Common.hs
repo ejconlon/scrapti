@@ -34,12 +34,25 @@ module Scrapti.Common
   , defaultNoteNumber
   , adjustMarker
   , adjustLoopPoints
-  ) where
+  )
+where
 
 import Control.Exception (Exception, throwIO)
 import Control.Monad (unless)
-import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, Put, StaticBytes, Word32BE, Word32LE, Word8, getExpect,
-               getRemainingString, putByteString)
+import Dahdit
+  ( Binary (..)
+  , ByteCount
+  , ByteSized (..)
+  , Get
+  , Put
+  , StaticBytes
+  , Word32BE
+  , Word32LE
+  , Word8
+  , getExpect
+  , getRemainingString
+  , putByteString
+  )
 import Data.ByteString.Short (ShortByteString)
 import qualified Data.ByteString.Short as BSS
 import Data.Proxy (Proxy (..))
@@ -87,8 +100,9 @@ class KnownLabel a where
 
 newtype UnparsedBody = UnparsedBody
   { ubContents :: ShortByteString
-  } deriving stock (Show)
-    deriving newtype (Eq)
+  }
+  deriving stock (Show)
+  deriving newtype (Eq)
 
 instance ByteSized UnparsedBody where
   byteSize (UnparsedBody bs) = byteSize bs
@@ -115,24 +129,26 @@ data SimpleMarker = SimpleMarker
   -- ^ name of the cue point
   , smPosition :: !Word32
   -- ^ position in SAMPLES not bytes or elements
-  } deriving stock (Eq, Show)
+  }
+  deriving stock (Eq, Show)
 
 ordNubBy :: Ord b => (a -> b) -> Seq a -> Seq a
-ordNubBy f = go Set.empty Seq.empty where
+ordNubBy f = go Set.empty Seq.empty
+ where
   go !accSet !accSeq = \case
     Empty -> accSeq
     x :<| xs ->
       let !y = f x
-      in if Set.member y accSet
-        then go accSet accSeq xs
-        else go (Set.insert y accSet) (accSeq :|> x) xs
+      in  if Set.member y accSet
+            then go accSet accSeq xs
+            else go (Set.insert y accSet) (accSeq :|> x) xs
 
 -- | Sort, keeping the first of any given name
 dedupeSimpleMarkers :: Seq SimpleMarker -> Seq SimpleMarker
 dedupeSimpleMarkers = ordNubBy smName . Seq.sortOn smPosition
 
-data ConvertErr =
-    ConvertErrMissingChunk !String
+data ConvertErr
+  = ConvertErrMissingChunk !String
   | ConvertErrDsp !DspErr
   | ConvertErrBadBps !Int
   | ConvertErrMissingMark !ShortByteString
@@ -152,21 +168,25 @@ data LoopMarks a = LoopMarks
   , lmLoopStart :: !a
   , lmLoopEnd :: !a
   , lmEnd :: !a
-  } deriving stock (Eq, Show, Functor, Foldable, Traversable)
+  }
+  deriving stock (Eq, Show, Functor, Foldable, Traversable)
 
 type LoopMarkNames = LoopMarks ShortByteString
+
 type LoopMarkPoints = LoopMarks (Int, SimpleMarker)
+
 type LoopMarkOffsets = LoopMarks Int
 
 defaultLoopMarkNames :: LoopMarkNames
 defaultLoopMarkNames = LoopMarks "Start" "LoopStart" "LoopEnd" "End"
 
 defineLoopMarks :: Integral a => LoopMarkNames -> LoopMarks a -> LoopMarkPoints
-defineLoopMarks (LoopMarks nw nx ny nz) (LoopMarks pw px py pz) = LoopMarks
-  (0, SimpleMarker nw (fromIntegral pw))
-  (1, SimpleMarker nx (fromIntegral px))
-  (2, SimpleMarker ny (fromIntegral py))
-  (3, SimpleMarker nz (fromIntegral pz))
+defineLoopMarks (LoopMarks nw nx ny nz) (LoopMarks pw px py pz) =
+  LoopMarks
+    (0, SimpleMarker nw (fromIntegral pw))
+    (1, SimpleMarker nx (fromIntegral px))
+    (2, SimpleMarker ny (fromIntegral py))
+    (3, SimpleMarker nz (fromIntegral pz))
 
 findMark :: ShortByteString -> Seq SimpleMarker -> Either ConvertErr (Int, SimpleMarker)
 findMark name marks =

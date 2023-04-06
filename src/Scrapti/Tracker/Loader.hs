@@ -22,16 +22,17 @@ data Project s i p = Project
   { projectSong :: !s
   , projectInsts :: !(Map Int i)
   , projectPats :: !(Map Int p)
-  } deriving stock (Eq, Show)
+  }
+  deriving stock (Eq, Show)
 
-data Res =
-    ResSong
+data Res
+  = ResSong
   | ResInst !Int
   | ResPat !Int
   deriving stock (Eq, Show)
 
-data LoadError =
-    LoadErrorMissingProject !FilePath
+data LoadError
+  = LoadErrorMissingProject !FilePath
   | LoadErrorMissingRes !FilePath !Res !FilePath
   | LoadErrorMalformedResPath !FilePath !FilePath !String
   | LoadErrorBadResGet !FilePath !Res !FilePath !GetError
@@ -40,9 +41,10 @@ data LoadError =
 instance Exception LoadError
 
 type BareProject = Project FilePath (String, FilePath) FilePath
+
 type RichProject = Project Mt (String, Pti) Mtp
 
-newtype M a = M { unM :: Either String a }
+newtype M a = M {unM :: Either String a}
   deriving newtype (Functor, Applicative, Monad)
 
 instance MonadFail M where
@@ -105,7 +107,7 @@ loadSong :: FilePath -> Project FilePath i p -> IO (Project Mt i p)
 loadSong projDir proj = do
   s <- runGetRes projDir ResSong (projectSong proj)
   failCheckedCode "loaded song" (unMt s)
-  pure $! proj { projectSong = s }
+  pure $! proj {projectSong = s}
 
 loadInstruments :: FilePath -> Project s (String, FilePath) p -> IO (Project s (String, Pti) p)
 loadInstruments projDir proj = do
@@ -113,7 +115,7 @@ loadInstruments projDir proj = do
     y <- runGetRes projDir (ResInst i) x
     failCheckedCode "loaded instrument" (ptiHeader y)
     pure (n, y)
-  pure $! proj { projectInsts = m }
+  pure $! proj {projectInsts = m}
 
 loadPatterns :: FilePath -> Project s i FilePath -> IO (Project s i Mtp)
 loadPatterns projDir proj = do
@@ -121,7 +123,7 @@ loadPatterns projDir proj = do
     y <- runGetRes projDir (ResPat i) x
     failCheckedCode "loaded pattern" (unMtp y)
     pure y
-  pure $! proj { projectPats = m }
+  pure $! proj {projectPats = m}
 
 enrichProject :: FilePath -> BareProject -> IO RichProject
 enrichProject projPath =
@@ -134,7 +136,7 @@ runPutRes :: Binary a => FilePath -> a -> FilePath -> IO ()
 runPutRes projDir val resPath =
   let resFile = projDir </> resPath
       bs = BSS.fromShort (runPut (put val))
-  in BS.writeFile resFile bs
+  in  BS.writeFile resFile bs
 
 saveSong :: FilePath -> Project Mt i p -> IO ()
 saveSong projDir proj = do
@@ -152,8 +154,8 @@ savePatterns projDir proj = for_ (Map.toList (projectPats proj)) $ \(i, x) -> do
   failCheckedCode "saved pattern" (unMtp x)
   runPutRes projDir x (renderPatPart i)
 
-data Overwrite =
-    OverwriteNo
+data Overwrite
+  = OverwriteNo
   | OverwriteYesReally
   deriving stock (Eq, Show)
 

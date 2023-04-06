@@ -7,8 +7,8 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Text.Read (readMaybe)
 
-data NoteName =
-    NoteNameC
+data NoteName
+  = NoteNameC
   | NoteNameCS
   | NoteNameD
   | NoteNameDS
@@ -27,22 +27,22 @@ data NotePref = NotePrefSharp | NotePrefFlat
 
 renderNoteName :: NotePref -> NoteName -> Text
 renderNoteName pref nn =
-  let sharp = case pref of { NotePrefSharp -> True; _ -> False }
-  in case nn of
-    NoteNameC -> "C"
-    NoteNameCS -> if sharp then "C#" else "Db"
-    NoteNameD -> "D"
-    NoteNameDS -> if sharp then "D#" else "Eb"
-    NoteNameE -> "E"
-    NoteNameF -> "F"
-    NoteNameFS -> if sharp then "F#" else "Gb"
-    NoteNameG -> "G"
-    NoteNameGS -> if sharp then "G#" else "Ab"
-    NoteNameA -> "A"
-    NoteNameAS -> if sharp then "A#" else "Bb"
-    NoteNameB -> "B"
+  let sharp = case pref of NotePrefSharp -> True; _ -> False
+  in  case nn of
+        NoteNameC -> "C"
+        NoteNameCS -> if sharp then "C#" else "Db"
+        NoteNameD -> "D"
+        NoteNameDS -> if sharp then "D#" else "Eb"
+        NoteNameE -> "E"
+        NoteNameF -> "F"
+        NoteNameFS -> if sharp then "F#" else "Gb"
+        NoteNameG -> "G"
+        NoteNameGS -> if sharp then "G#" else "Ab"
+        NoteNameA -> "A"
+        NoteNameAS -> if sharp then "A#" else "Bb"
+        NoteNameB -> "B"
 
-newtype Octave = Octave { unOctave :: Int }
+newtype Octave = Octave {unOctave :: Int}
   deriving stock (Show)
   deriving newtype (Eq, Ord, Enum)
 
@@ -50,17 +50,18 @@ newtype Octave = Octave { unOctave :: Int }
 data OctNote = OctNote
   { onOctave :: !Octave
   , onName :: !NoteName
-  } deriving stock (Eq, Ord, Show)
+  }
+  deriving stock (Eq, Ord, Show)
 
 octNoteIsMidi :: OctNote -> Bool
 octNoteIsMidi (OctNote (Octave oct) name) =
   if
-    | oct == -1 -> name == NoteNameC
-    | oct == 9 -> name <= NoteNameG
-    | otherwise -> oct >= 0 && oct <= 8
+      | oct == -1 -> name == NoteNameC
+      | oct == 9 -> name <= NoteNameG
+      | otherwise -> oct >= 0 && oct <= 8
 
 -- | An integral note type that can represent notes outside the MIDI scale.
-newtype LinNote = LinNote { unLinNote :: Int }
+newtype LinNote = LinNote {unLinNote :: Int}
   deriving stock (Show)
   deriving newtype (Eq, Ord)
 
@@ -72,14 +73,15 @@ linIsMidiNote (LinNote n) = n >= 0 && n < 127
 linFreq :: LinNote -> Double
 linFreq (LinNote n) = 440 * (2 ** ((fromIntegral n - 69) / 12))
 
-newtype Interval = Interval { unInterval :: Int }
+newtype Interval = Interval {unInterval :: Int}
   deriving stock (Show)
   deriving newtype (Eq, Ord, Num)
 
 data NoteAssoc = NoteAssoc
   { naParsed :: !OctNote
   , naRaw :: !LinNote
-  } deriving stock (Eq, Show)
+  }
+  deriving stock (Eq, Show)
 
 linAddInterval :: Interval -> LinNote -> LinNote
 linAddInterval (Interval i) (LinNote n) = LinNote (i + n)

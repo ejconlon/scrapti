@@ -13,16 +13,38 @@ module Scrapti.Riff
   , KnownOptChunk (..)
   , ChunkLabel (..)
   , peekChunkLabel
-  ) where
+  )
+where
 
 import Control.Monad (unless)
-import Dahdit (Binary (..), ByteCount, ByteSized (..), Get, StaticByteSized (..), byteSizeFoldable, getExact,
-               getLookAhead, getRemainingSeq, getSkip, putSeq, putWord8)
+import Dahdit
+  ( Binary (..)
+  , ByteCount
+  , ByteSized (..)
+  , Get
+  , StaticByteSized (..)
+  , byteSizeFoldable
+  , getExact
+  , getLookAhead
+  , getRemainingSeq
+  , getSkip
+  , putSeq
+  , putWord8
+  )
 import Data.Default (Default)
 import Data.Proxy (Proxy (..))
 import Data.Sequence (Seq)
-import Scrapti.Common (KnownLabel (..), Label, chunkHeaderSize, countSize, getChunkSizeLE, getExpectLabel, labelSize,
-                       padCount, putChunkSizeLE)
+import Scrapti.Common
+  ( KnownLabel (..)
+  , Label
+  , chunkHeaderSize
+  , countSize
+  , getChunkSizeLE
+  , getExpectLabel
+  , labelSize
+  , padCount
+  , putChunkSizeLE
+  )
 
 labelRiff, labelList :: Label
 labelRiff = "RIFF"
@@ -34,7 +56,8 @@ listChunkHeaderSize = chunkHeaderSize + labelSize
 data Chunk a = Chunk
   { chunkLabel :: !Label
   , chunkBody :: !a
-  } deriving stock (Eq, Show)
+  }
+  deriving stock (Eq, Show)
 
 chunkUnpaddedByteSize :: ByteSized a => Chunk a -> ByteCount
 chunkUnpaddedByteSize (Chunk _ body) = byteSize body
@@ -61,8 +84,9 @@ instance Binary a => Binary (Chunk a) where
 
 newtype KnownChunk a = KnownChunk
   { knownChunkBody :: a
-  } deriving stock (Show)
-    deriving newtype (Eq, Default)
+  }
+  deriving stock (Show)
+  deriving newtype (Eq, Default)
 
 knownChunkUnpaddedByteSize :: ByteSized a => KnownChunk a -> ByteCount
 knownChunkUnpaddedByteSize (KnownChunk body) = byteSize body
@@ -90,7 +114,8 @@ instance (Binary a, KnownLabel a) => Binary (KnownChunk a) where
 data ListChunkBody a = ListChunkBody
   { lcbLabel :: !Label
   , lcbItems :: !(Seq a)
-  } deriving stock (Eq, Show)
+  }
+  deriving stock (Eq, Show)
 
 instance ByteSized a => ByteSized (ListChunkBody a) where
   byteSize (ListChunkBody _ items) = labelSize + byteSizeFoldable items
@@ -107,14 +132,15 @@ instance Binary a => Binary (ListChunkBody a) where
 instance KnownLabel (ListChunkBody a) where
   knownLabel _ = labelList
 
-newtype ListChunk a = ListChunk { unListChunk :: KnownChunk (ListChunkBody a) }
+newtype ListChunk a = ListChunk {unListChunk :: KnownChunk (ListChunkBody a)}
   deriving stock (Show)
   deriving newtype (Eq, ByteSized, Binary)
 
 newtype KnownListChunk a = KnownListChunk
   { klcItems :: Seq a
-  } deriving stock (Show)
-    deriving newtype (Eq, Default)
+  }
+  deriving stock (Show)
+  deriving newtype (Eq, Default)
 
 instance ByteSized a => ByteSized (KnownListChunk a) where
   byteSize (KnownListChunk body) = padCount (listChunkHeaderSize + byteSizeFoldable body)
@@ -138,8 +164,9 @@ instance (Binary a, KnownLabel a) => Binary (KnownListChunk a) where
 
 newtype KnownOptChunk a = KnownOptChunk
   { kocItem :: Maybe a
-  } deriving stock (Show)
-    deriving newtype (Eq, Default)
+  }
+  deriving stock (Show)
+  deriving newtype (Eq, Default)
 
 instance ByteSized a => ByteSized (KnownOptChunk a) where
   byteSize (KnownOptChunk item) = padCount (listChunkHeaderSize + byteSizeFoldable item)
@@ -164,8 +191,8 @@ instance (Binary a, KnownLabel a) => Binary (KnownOptChunk a) where
     maybe (pure ()) put item
     unless (even usz) (putWord8 0)
 
-data ChunkLabel =
-    ChunkLabelSingle !Label
+data ChunkLabel
+  = ChunkLabelSingle !Label
   | ChunkLabelList !Label
   deriving stock (Eq, Show)
 

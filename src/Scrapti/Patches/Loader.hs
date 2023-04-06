@@ -6,7 +6,8 @@ module Scrapti.Patches.Loader
   , LoadedSample (..)
   , initializeInst
   , defaultInst
-  ) where
+  )
+where
 
 import Data.Default (Default (..))
 import Data.Maybe (maybeToList)
@@ -18,8 +19,14 @@ import Scrapti.Common (LoopMarkNames, LoopMarks (..), SimpleMarker (..), default
 import Scrapti.Convert (Neutral (..), loadNeutral)
 import Scrapti.Midi.Msg (Velocity (..))
 import Scrapti.Midi.Notes (LinNote (..), OctNote, octToLin, parseNote)
-import Scrapti.Patches.Inst (InstCrop (..), InstKeyRange (InstKeyRange), InstLoop (..),
-                             InstLoopType (InstLoopTypeForward), InstRegion (..), InstSpec (..))
+import Scrapti.Patches.Inst
+  ( InstCrop (..)
+  , InstKeyRange (InstKeyRange)
+  , InstLoop (..)
+  , InstLoopType (InstLoopTypeForward)
+  , InstRegion (..)
+  , InstSpec (..)
+  )
 import System.Directory (listDirectory)
 import System.FilePath ((</>))
 import Text.Read (readMaybe)
@@ -30,9 +37,10 @@ data Sample = Sample
   , sampleNote :: !OctNote
   , sampleVel :: !(Maybe Velocity)
   , sampleUniq :: !(Maybe Text)
-  } deriving stock (Eq, Show)
+  }
+  deriving stock (Eq, Show)
 
-newtype F a = F { unF :: Either String a }
+newtype F a = F {unF :: Either String a}
   deriving newtype (Functor, Applicative, Monad)
 
 instance MonadFail F where
@@ -48,7 +56,7 @@ matchFiles prefix fileExt dir = do
     case unF ex of
       Right (_, _, _, [dashed]) ->
         let parts = T.splitOn "-" (T.pack dashed)
-        in [(dir </> fp, parts)]
+        in  [(dir </> fp, parts)]
       _ -> []
 
 parseVel :: Text -> Maybe Velocity
@@ -75,7 +83,8 @@ matchSamples prefix fileExt dir = do
 data LoadedSample = LoadedSample
   { lsPath :: !FilePath
   , lsContents :: !Neutral
-  } deriving stock (Eq, Show)
+  }
+  deriving stock (Eq, Show)
 
 loadSample :: Int -> Maybe LoopMarkNames -> Sample -> IO LoadedSample
 loadSample sr mayNames s = do
@@ -88,26 +97,35 @@ toRegion sr mayNames samp range = do
   ls <- loadSample sr mayNames samp
   -- Sforzando wants these end ranges INCLUSIVE not EXCLUSIVE
   let mayLoopMarks = neLoopMarks (lsContents ls)
-      mayLoop = fmap (\(LoopMarks _ (_, start) (_, end) _) ->
-        let adjEnd = toInteger (smPosition end) - 1
-        in InstLoop InstLoopTypeForward (toInteger (smPosition start)) adjEnd) mayLoopMarks
-      mayCrop = fmap (\(LoopMarks (_, start) _ _ (_, end)) ->
-        let adjEnd = toInteger (smPosition end) - 1
-        in InstCrop (toInteger (smPosition start)) adjEnd) mayLoopMarks
+      mayLoop =
+        fmap
+          ( \(LoopMarks _ (_, start) (_, end) _) ->
+              let adjEnd = toInteger (smPosition end) - 1
+              in  InstLoop InstLoopTypeForward (toInteger (smPosition start)) adjEnd
+          )
+          mayLoopMarks
+      mayCrop =
+        fmap
+          ( \(LoopMarks (_, start) _ _ (_, end)) ->
+              let adjEnd = toInteger (smPosition end) - 1
+              in  InstCrop (toInteger (smPosition start)) adjEnd
+          )
+          mayLoopMarks
   pure $! InstRegion ls range mayLoop mayCrop
 
 calcRangedSamps :: Seq Sample -> Seq (Sample, InstKeyRange)
-calcRangedSamps = go 0 Empty where
+calcRangedSamps = go 0 Empty
+ where
   go !i !acc = \case
     Empty -> error "need more than one sample"
     s :<| Empty ->
       let n = toInteger (unLinNote (octToLin (sampleNote s)))
-      in acc :|> (s, InstKeyRange i n 127)
+      in  acc :|> (s, InstKeyRange i n 127)
     s :<| ss ->
       let n = toInteger (unLinNote (octToLin (sampleNote s)))
           i' = n + 1
           acc' = acc :|> (s, InstKeyRange i n n)
-      in go i' acc' ss
+      in  go i' acc' ss
 
 -- TODO account for multi-samples of notes? Need to group by note
 initializeInst :: Int -> Maybe LoopMarkNames -> Seq Sample -> IO (InstSpec LoadedSample)

@@ -2,9 +2,27 @@
 
 module Main (main) where
 
-import Dahdit (Binary (..), ByteCount, ElementCount, Get, Int16LE (..), ShortByteString, StaticByteSized (..),
-               StaticBytes, Word16LE, Word8, byteSize, getExact, getSkip, getWord32LE, liftedPrimArrayFromList,
-               runGetFile, runGetIO, runPut, sizeofLiftedPrimArray)
+import Dahdit
+  ( Binary (..)
+  , ByteCount
+  , ElementCount
+  , Get
+  , Int16LE (..)
+  , ShortByteString
+  , StaticByteSized (..)
+  , StaticBytes
+  , Word16LE
+  , Word8
+  , byteSize
+  , getExact
+  , getSkip
+  , getWord32LE
+  , liftedPrimArrayFromList
+  , runGetFile
+  , runGetIO
+  , runPut
+  , sizeofLiftedPrimArray
+  )
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Short as BSS
@@ -19,10 +37,27 @@ import qualified Data.Text.IO as TIO
 import Scrapti.Aiff (Aiff (..), AiffDataBody (..), lookupAiffDataChunk)
 import qualified Scrapti.Aiff as Aiff
 import Scrapti.Binary (QuietArray (..), QuietLiftedArray (..))
-import Scrapti.Common (LoopMarks (..), UnparsedBody (..), chunkHeaderSize, defaultLoopMarkNames, defaultNoteNumber,
-                       defineLoopMarks, getChunkSizeLE, getExpectLabel, guardChunk, rethrow)
-import Scrapti.Convert (Neutral (..), aiffToNeutral, loadNeutral, neutralMono, neutralToSampleWav, neutralToWav,
-                        wavToNeutral)
+import Scrapti.Common
+  ( LoopMarks (..)
+  , UnparsedBody (..)
+  , chunkHeaderSize
+  , defaultLoopMarkNames
+  , defaultNoteNumber
+  , defineLoopMarks
+  , getChunkSizeLE
+  , getExpectLabel
+  , guardChunk
+  , rethrow
+  )
+import Scrapti.Convert
+  ( Neutral (..)
+  , aiffToNeutral
+  , loadNeutral
+  , neutralMono
+  , neutralToSampleWav
+  , neutralToWav
+  , wavToNeutral
+  )
 import Scrapti.Dsp (ModMeta (..), PcmContainer (..), linearCrossFade, monoFromLeft, runMod)
 import Scrapti.Midi.Notes (NoteName (..), OctNote (..), Octave (..))
 import Scrapti.Patches.ConvertPti (PtiPatch (..), instToPtiPatches)
@@ -31,23 +66,67 @@ import Scrapti.Patches.Inst (InstDef (..), InstKeyRange (..), InstSpec (..), jso
 import Scrapti.Patches.Loader (Sample (..), defaultInst, matchSamples)
 import Scrapti.Patches.Sfz (parseSfz, renderSfz, sfzFileSimilar)
 import Scrapti.Riff (Chunk (..), KnownChunk (..), KnownListChunk (..), KnownOptChunk (..), labelRiff)
-import Scrapti.Sfont (Bag, Gen, InfoChunk (..), Inst, Mod, PdtaChunk (..), Phdr, Sdta (..), SdtaChunk (..), Sfont (..),
-                      Shdr, labelSfbk)
+import Scrapti.Sfont
+  ( Bag
+  , Gen
+  , InfoChunk (..)
+  , Inst
+  , Mod
+  , PdtaChunk (..)
+  , Phdr
+  , Sdta (..)
+  , SdtaChunk (..)
+  , Sfont (..)
+  , Shdr
+  , labelSfbk
+  )
 import Scrapti.Tracker.Checked (Checked (..), mkCode)
 import Scrapti.Tracker.Loader (Overwrite (..), loadRichProject, saveRichProject)
 import Scrapti.Tracker.Mt (Mt)
 import Scrapti.Tracker.Mtp (Mtp)
-import Scrapti.Tracker.Pti (Auto (..), AutoEnvelope (..), AutoType, Block, Effects (..), Filter, FilterType, Granular,
-                            GranularLoopMode, GranularShape, Header (..), InstParams (..), Lfo (..), LfoSteps, LfoType,
-                            Preamble (..), Pti (..), SamplePlayback, Slices, WavetableWindowSize)
-import Scrapti.Wav (Wav (..), WavAdtlChunk, WavAdtlData (..), WavAdtlElem (..), WavChunk (..), WavDataBody (..),
-                    WavFormatBody (..), WavFormatChunk, WavHeader (..), WavInfoElem (..), lookupWavDataChunk,
-                    lookupWavFormatChunk, wavToPcmContainer)
+import Scrapti.Tracker.Pti
+  ( Auto (..)
+  , AutoEnvelope (..)
+  , AutoType
+  , Block
+  , Effects (..)
+  , Filter
+  , FilterType
+  , Granular
+  , GranularLoopMode
+  , GranularShape
+  , Header (..)
+  , InstParams (..)
+  , Lfo (..)
+  , LfoSteps
+  , LfoType
+  , Preamble (..)
+  , Pti (..)
+  , SamplePlayback
+  , Slices
+  , WavetableWindowSize
+  )
+import Scrapti.Wav
+  ( Wav (..)
+  , WavAdtlChunk
+  , WavAdtlData (..)
+  , WavAdtlElem (..)
+  , WavChunk (..)
+  , WavDataBody (..)
+  , WavFormatBody (..)
+  , WavFormatChunk
+  , WavHeader (..)
+  , WavInfoElem (..)
+  , lookupWavDataChunk
+  , lookupWavFormatChunk
+  , wavToPcmContainer
+  )
 import System.Directory (doesFileExist)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 import Test.Tasty (TestTree, defaultMain, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, testCase, (@?=))
+
 -- import Text.Pretty.Simple (pPrint)
 
 drumFmtOffset :: ByteCount
@@ -121,7 +200,7 @@ testWavData = testCase "data" $ do
     case chunk of
       WavChunkData (KnownChunk (WavDataBody (QuietArray arr))) -> pure arr
       _ -> fail "expected data"
-  fromIntegral (sizeofByteArray arr) @?= drumDataLen * 2  -- x2 for 2-byte samples
+  fromIntegral (sizeofByteArray arr) @?= drumDataLen * 2 -- x2 for 2-byte samples
 
 testWavInfo :: TestTree
 testWavInfo = testCase "info" $ do
@@ -252,7 +331,8 @@ testPtiSizes = testCase "sizes" $ do
   staticByteSize (Proxy :: Proxy Granular) @?= 6
   staticByteSize (Proxy :: Proxy Effects) @?= 4
   staticByteSize (Proxy :: Proxy Header) @?= 388
-  -- NOTE: total "header size" is 392 with crc32
+
+-- NOTE: total "header size" is 392 with crc32
 
 testPtiWrite :: TestTree
 testPtiWrite = testCase "write" $ do
@@ -334,8 +414,8 @@ testPtiMinimal = testCase "minimal" $ do
   let defHdr = def @Header
       actPre = hdrPreamble actHdr
       defPre = hdrPreamble defHdr
-      modDefPre = defPre { preName = preName actPre }
-      modDefHdr = defHdr { hdrPreamble = modDefPre }
+      modDefPre = defPre {preName = preName actPre}
+      modDefHdr = defHdr {hdrPreamble = modDefPre}
   -- Check individually
   -- For preamble, need to set name
   actPre @?= modDefPre
@@ -368,7 +448,8 @@ testPtiWav = testCase "wav" $ do
   -- We expect there are half as many samples because it's converted to mono
   -- divide by four to compare number of elements (2-byte samples and 2 channels)
   sizeofLiftedPrimArray (unQuietLiftedArray (ptiPcmData pti)) @?= div (sizeofByteArray wavData) 4
-  -- As far as the content, I have no idea what it's doing to the signal...
+
+-- As far as the content, I have no idea what it's doing to the signal...
 
 testPti :: TestTree
 testPti = testGroup "pti" [testPtiSizes, testPtiWrite, testPtiAux, testPtiMinimal, testPtiDigest, testPtiWav]
@@ -416,33 +497,34 @@ aifSamples :: Aiff -> [Word8]
 aifSamples aif =
   let Aiff.KnownChunk (AiffDataBody _ _ (QuietArray wavData)) = fromMaybe (error "no data") (lookupAiffDataChunk aif)
       !sz = sizeofByteArray wavData
-  in fmap (indexByteArray wavData) [0 .. sz - 1]
+  in  fmap (indexByteArray wavData) [0 .. sz - 1]
 
 wavSamples :: Wav -> [Word8]
 wavSamples wav =
   let KnownChunk (WavDataBody (QuietArray wavData)) = fromMaybe (error "no data") (lookupWavDataChunk wav)
       !sz = sizeofByteArray wavData
-  in fmap (indexByteArray wavData) [0 .. sz - 1]
+  in  fmap (indexByteArray wavData) [0 .. sz - 1]
 
 neutralSamples :: Neutral -> [Word8]
 neutralSamples ne =
   let !wavData = pcData (neCon ne)
       !sz = sizeofByteArray wavData
-  in fmap (indexByteArray wavData) [0 .. sz - 1]
+  in  fmap (indexByteArray wavData) [0 .. sz - 1]
 
 wavFmt :: Wav -> WavFormatBody
-wavFmt wav = fmtBody where
+wavFmt wav = fmtBody
+ where
   KnownChunk fmtBody = fromMaybe (error "no format") (lookupWavFormatChunk wav)
 
 takeN :: Int -> [Word8] -> [Word8]
 takeN n xs = let f = take n in f xs ++ reverse (f (reverse xs))
 
 evenShorts :: [Word8] -> [Word8]
-evenShorts (x:y:zs) = x : y : oddShorts zs
+evenShorts (x : y : zs) = x : y : oddShorts zs
 evenShorts _ = []
 
 oddShorts :: [Word8] -> [Word8]
-oddShorts (_:_:zs) = evenShorts zs
+oddShorts (_ : _ : zs) = evenShorts zs
 oddShorts _ = []
 
 takeSome :: [Word8] -> [Word8]
@@ -495,7 +577,7 @@ testConvertLoop = testCase "loop" $ do
   let mkLoopMarks = defineLoopMarks @Int defaultLoopMarkNames . fmap (* 6000)
       !loopMarks = mkLoopMarks (LoopMarks 1 2 3 4)
       !marks = Seq.fromList (fmap snd (toList loopMarks))
-  let !ne = Neutral { neCon = con, neLoopMarks = Just loopMarks, neMarks = marks }
+  let !ne = Neutral {neCon = con, neLoopMarks = Just loopMarks, neMarks = marks}
   -- Convert and write out for inspection
   let !fullWav = neutralToWav defaultNoteNumber ne
   BS.writeFile "testoutput/sin_mono_full.wav" (BSS.fromShort (runPut (put fullWav)))
@@ -518,7 +600,7 @@ testConvertFade = testCase "fade" $ do
   let mkLoopMarks = defineLoopMarks @Int defaultLoopMarkNames . fmap (* 4410)
       !loopMarks = mkLoopMarks (LoopMarks 0 3 6 10)
       !marks = Seq.fromList (fmap snd (toList loopMarks))
-  let !ne = Neutral { neCon = con, neLoopMarks = Just loopMarks, neMarks = marks }
+  let !ne = Neutral {neCon = con, neLoopMarks = Just loopMarks, neMarks = marks}
   -- Convert and write out for inspection
   let !fullWav = neutralToWav defaultNoteNumber ne
   BS.writeFile "testoutput/fadeout_full.wav" (BSS.fromShort (runPut (put fullWav)))
@@ -543,8 +625,8 @@ testDspMono :: TestTree
 testDspMono = testCase "mono" $ do
   let !larr1 = liftedPrimArrayFromList @Int16LE [0, 1, 2, 3, 4, 5]
       !larr2 = liftedPrimArrayFromList @Int16LE [0, 2, 4]
-      !mm1 = ModMeta { mmNumChannels = 2, mmBitsPerSample = 16, mmSampleRate = 44100 }
-      !mm2 = mm1 { mmNumChannels = 1 }
+      !mm1 = ModMeta {mmNumChannels = 2, mmBitsPerSample = 16, mmSampleRate = 44100}
+      !mm2 = mm1 {mmNumChannels = 1}
   (!mmx, !larrx) <- rethrow (runMod monoFromLeft mm1 larr1)
   mmx @?= mm2
   larrx @?= larr2
@@ -552,13 +634,13 @@ testDspMono = testCase "mono" $ do
 testDspFadeOne :: TestTree
 testDspFadeOne = testCase "fade one" $ do
   let !larr1 = liftedPrimArrayFromList @Int8 [5, 5, 5, 5, 5, 5, 5, 5, 5, 1, 1, 1, 1, 1, 1, 1, 1]
-  --                                                               ^                       ^
+      --                                                               ^                       ^
       !width = 1
       !loopStart = 7
       !loopEnd = 15
       !larr2 = liftedPrimArrayFromList @Int8 [5, 5, 5, 5, 5, 5, 5, 3, 5, 1, 1, 1, 1, 1, 5, 3, 1]
-  --                                                               ^                       ^
-      !mm = ModMeta { mmNumChannels = 1, mmBitsPerSample = 8, mmSampleRate = 44100 }
+      --                                                               ^                       ^
+      !mm = ModMeta {mmNumChannels = 1, mmBitsPerSample = 8, mmSampleRate = 44100}
   (!mmx, !larrx) <- rethrow (runMod (linearCrossFade width loopStart loopEnd) mm larr1)
   mmx @?= mm
   larrx @?= larr2
@@ -570,7 +652,7 @@ testDspFadeSome = testCase "fade some" $ do
       !loopStart = 7
       !loopEnd = 15
       !larr2 = liftedPrimArrayFromList @Int8 [5, 5, 5, 5, 5, 4, 3, 3, 3, 1, 1, 1, 5, 4, 3, 3, 2]
-      !mm = ModMeta { mmNumChannels = 1, mmBitsPerSample = 8, mmSampleRate = 44100 }
+      !mm = ModMeta {mmNumChannels = 1, mmBitsPerSample = 8, mmSampleRate = 44100}
   (!mmx, !larrx) <- rethrow (runMod (linearCrossFade width loopStart loopEnd) mm larr1)
   mmx @?= mm
   larrx @?= larr2
@@ -582,7 +664,7 @@ testDspFadeWider = testCase "fade wider" $ do
       !loopStart = 7
       !loopEnd = 15
       !larr2 = liftedPrimArrayFromList @Int16LE [5, 5, 5, 5, 5, 4, 3, 3, 3, 1, 1, 1, 5, 4, 3, 3, 2]
-      !mm = ModMeta { mmNumChannels = 1, mmBitsPerSample = 16, mmSampleRate = 44100 }
+      !mm = ModMeta {mmNumChannels = 1, mmBitsPerSample = 16, mmSampleRate = 44100}
   (!mmx, !larrx) <- rethrow (runMod (linearCrossFade width loopStart loopEnd) mm larr1)
   mmx @?= mm
   larrx @?= larr2

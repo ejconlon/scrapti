@@ -4,7 +4,8 @@ module Scrapti.Patches.ConvertPti
   ( Tempo (..)
   , PtiPatch (..)
   , instToPtiPatches
-  ) where
+  )
+where
 
 import Control.Monad (unless)
 import Dahdit (BoolByte (..), FloatLE (..), LiftedPrimArray (..), StaticBytes (..), Word16LE (..))
@@ -18,13 +19,41 @@ import qualified Data.Text.Encoding as TE
 import Data.Traversable (for)
 import Scrapti.Dsp (PcmContainer (..), PcmMeta (pmNumSamples), applyModGeneric, crop, linearCrossFade)
 import Scrapti.Midi.Notes (Interval (..), LinNote (..), NotePref (..), linSubInterval, linToOct, renderNote)
-import Scrapti.Patches.Inst (InstAuto (..), InstAutoType (..), InstBlock (..), InstConfig (..), InstCrop (..),
-                             InstEnv (..), InstFilter (..), InstFilterType (..), InstKeyRange (..), InstLfo (..),
-                             InstLfoWave (..), InstLoop (..), InstLoopType (..), InstRegion (..), InstSpec (..),
-                             Tempo (..))
-import Scrapti.Tracker.Pti (Auto (..), AutoEnvelope (..), AutoType (..), Block (..), Filter (..), FilterType (..),
-                            Header (..), InstParams (..), Lfo (..), LfoSteps (..), LfoType (..), Preamble (..), Pti,
-                            SamplePlayback (..), mkPti)
+import Scrapti.Patches.Inst
+  ( InstAuto (..)
+  , InstAutoType (..)
+  , InstBlock (..)
+  , InstConfig (..)
+  , InstCrop (..)
+  , InstEnv (..)
+  , InstFilter (..)
+  , InstFilterType (..)
+  , InstKeyRange (..)
+  , InstLfo (..)
+  , InstLfoWave (..)
+  , InstLoop (..)
+  , InstLoopType (..)
+  , InstRegion (..)
+  , InstSpec (..)
+  , Tempo (..)
+  )
+import Scrapti.Tracker.Pti
+  ( Auto (..)
+  , AutoEnvelope (..)
+  , AutoType (..)
+  , Block (..)
+  , Filter (..)
+  , FilterType (..)
+  , Header (..)
+  , InstParams (..)
+  , Lfo (..)
+  , LfoSteps (..)
+  , LfoType (..)
+  , Preamble (..)
+  , Pti
+  , SamplePlayback (..)
+  , mkPti
+  )
 
 minimumOn :: Ord b => (a -> b) -> [a] -> a
 minimumOn f = minimumBy (\x y -> compare (f x) (f y))
@@ -38,7 +67,7 @@ shortRatioPercent x y =
   let x' = toRational x
       y' = toRational y
       r = (x' * 65535) / y'
-  in round r
+  in  round r
 
 clamp :: Ord a => a -> a -> a -> a
 clamp minVal maxVal = max maxVal . min minVal
@@ -47,7 +76,8 @@ data PtiPatch = PtiPatch
   { ppName :: !Text
   , ppKeyRange :: !InstKeyRange
   , ppPti :: !Pti
-  } deriving stock (Eq, Show)
+  }
+  deriving stock (Eq, Show)
 
 convertPreamble :: Text -> LinNote -> InstRegion PcmContainer -> (Text, Preamble)
 convertPreamble namePrefix linNote (InstRegion con _ mayLoop mayCrop) =
@@ -74,17 +104,18 @@ convertPreamble namePrefix linNote (InstRegion con _ mayLoop mayCrop) =
         Just (InstLoop _ _ end) -> shortRatioPercent end sampLen
         Nothing -> 0
       loopEnd = if loopEndRaw < playEnd then loopEndRaw else playEnd - 1
-      preamble = def
-        { preIsWavetable = BoolByte False
-        , preName = StaticBytes (BSS.toShort (TE.encodeUtf8 name))
-        , preSampleLength = fromIntegral sampLen
-        , preSamplePlayback = sampPlay
-        , prePlaybackStart = playStart
-        , preLoopStart = loopStart
-        , preLoopEnd = loopEnd
-        , prePlaybackEnd = playEnd
-        }
-    in (name, preamble)
+      preamble =
+        def
+          { preIsWavetable = BoolByte False
+          , preName = StaticBytes (BSS.toShort (TE.encodeUtf8 name))
+          , preSampleLength = fromIntegral sampLen
+          , preSamplePlayback = sampPlay
+          , prePlaybackStart = playStart
+          , preLoopStart = loopStart
+          , preLoopEnd = loopEnd
+          , prePlaybackEnd = playEnd
+          }
+  in  (name, preamble)
 
 convertFilter :: Maybe InstFilter -> Either String Filter
 convertFilter = \case
@@ -97,10 +128,10 @@ convertFilter = \case
         -- TODO appropriately scale cut and res
         cut' = FloatLE (fromRational cut)
         res' = FloatLE (fromRational res)
-    in Right (Filter cut' res' ty')
+    in  Right (Filter cut' res' ty')
 
 convertBlock :: (Applicative m, Default b) => (a -> m b) -> InstBlock a -> m (Block b)
-convertBlock f b = fmap (\(InstBlock vol' pan' cut' fine') -> def { blockVolume = vol', blockPanning = pan' , blockCutoff = cut', blockFinetune = fine' }) (traverse f b)
+convertBlock f b = fmap (\(InstBlock vol' pan' cut' fine') -> def {blockVolume = vol', blockPanning = pan', blockCutoff = cut', blockFinetune = fine'}) (traverse f b)
 
 splitBlock :: Block (a, b) -> (Block a, Block b)
 splitBlock (Block (a0, b0) (a1, b1) (a2, b2) (a3, b3) (a4, b4) (a5, b5)) =
@@ -174,13 +205,13 @@ convertAuto tempo = convertSplitBlock $ \(InstAuto autoTy mayInstEnv mayInstLfo)
                 InstLfoTriangle -> LTTriangle
                 InstLfoSquare -> LTSquare
                 InstLfoRandom -> LTRandom
-          in def
-              { lfoType = ty
-              , lfoSteps = convertSteps tempo (ilFreq instLfo)
-              , lfoAmount = fromRational (ilDepth instLfo)
-              }
+          in  def
+                { lfoType = ty
+                , lfoSteps = convertSteps tempo (ilFreq instLfo)
+                , lfoAmount = fromRational (ilDepth instLfo)
+                }
         Nothing -> def
-  in Right (def { autoType = convertAutoTy autoTy, autoEnvelope = env}, lfo)
+  in  Right (def {autoType = convertAutoTy autoTy, autoEnvelope = env}, lfo)
 
 -- interval - negative difference from center note (possibly zero)
 -- tune - ratio of semitones
@@ -193,11 +224,12 @@ convertParams interval _panning tune = do
   let tuneArg = fromIntegral (unInterval coarse)
       fineTuneArg = clamp (-100) 100 (round (fine * 100))
       panningArg = 0 -- TODO convert panning
-  pure $! def
-    { ipTune = tuneArg
-    , ipFineTune = fineTuneArg
-    , ipPanning = panningArg
-    }
+  pure $!
+    def
+      { ipTune = tuneArg
+      , ipFineTune = fineTuneArg
+      , ipPanning = panningArg
+      }
 
 instRegionToPti :: Text -> Maybe LinNote -> Tempo -> InstConfig -> InstRegion PcmContainer -> Either String (Text, Pti)
 instRegionToPti namePrefix mayCenterNote tempo instConfig instRegion = do
@@ -213,12 +245,12 @@ instRegionToPti namePrefix mayCenterNote tempo instConfig instRegion = do
     Nothing -> pure con
     Just (InstLoop _ start end) ->
       let ea = applyModGeneric (linearCrossFade 16 (fromInteger start) (fromInteger end)) con
-      in either (Left . show) pure ea
+      in  either (Left . show) pure ea
   con'' <- case irCrop instRegion of
     Nothing -> pure con'
     Just (InstCrop start end) ->
       let ea = applyModGeneric (crop (fromInteger start) (fromInteger end)) con
-      in either (Left . show) pure ea
+      in  either (Left . show) pure ea
   let samp = LiftedPrimArray (pcData con'')
   let pti = mkPti header samp
   pure (name, pti)

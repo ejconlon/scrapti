@@ -16,13 +16,40 @@ module Scrapti.Aiff
   , lookupAiffDataChunk
   , aiffToPcmContainer
   , aiffGatherMarkers
-  ) where
+  )
+where
 
 import Control.Monad (unless)
-import Dahdit (Binary (..), ByteArray, ByteCount (..), ByteSized (..), Get, Put, ShortByteString, StaticByteSized (..),
-               StaticBytes (..), ViaGeneric (..), ViaStaticByteSized (..), Word16BE, Word32BE (..), byteSizeFoldable,
-               getByteString, getExact, getLookAhead, getRemainingByteArray, getRemainingSeq, getSeq, getSkip,
-               getWord16BE, getWord8, putByteArray, putByteString, putSeq, putWord16BE, putWord8)
+import Dahdit
+  ( Binary (..)
+  , ByteArray
+  , ByteCount (..)
+  , ByteSized (..)
+  , Get
+  , Put
+  , ShortByteString
+  , StaticByteSized (..)
+  , StaticBytes (..)
+  , ViaGeneric (..)
+  , ViaStaticByteSized (..)
+  , Word16BE
+  , Word32BE (..)
+  , byteSizeFoldable
+  , getByteString
+  , getExact
+  , getLookAhead
+  , getRemainingByteArray
+  , getRemainingSeq
+  , getSeq
+  , getSkip
+  , getWord16BE
+  , getWord8
+  , putByteArray
+  , putByteString
+  , putSeq
+  , putWord16BE
+  , putWord8
+  )
 import qualified Data.ByteString.Char8 as BSC
 import qualified Data.ByteString.Short as BSS
 import Data.Default (Default (..))
@@ -35,9 +62,22 @@ import qualified Data.Sequence as Seq
 import Data.Word (Word8)
 import GHC.Generics (Generic)
 import Scrapti.Binary (QuietArray (..))
-import Scrapti.Common (ConvertErr, KnownLabel (..), Label, SimpleMarker (..), UnparsedBody, chunkHeaderSize, countSize,
-                       dedupeSimpleMarkers, getChunkSizeBE, getExpectLabel, guardChunk, labelSize, padCount,
-                       putChunkSizeBE)
+import Scrapti.Common
+  ( ConvertErr
+  , KnownLabel (..)
+  , Label
+  , SimpleMarker (..)
+  , UnparsedBody
+  , chunkHeaderSize
+  , countSize
+  , dedupeSimpleMarkers
+  , getChunkSizeBE
+  , getExpectLabel
+  , guardChunk
+  , labelSize
+  , padCount
+  , putChunkSizeBE
+  )
 import Scrapti.Dsp (PcmContainer (PcmContainer), PcmMeta (PcmMeta))
 
 -- AIFF-C file parsing according to
@@ -62,7 +102,8 @@ labelSowt = "sowt"
 data Chunk a = Chunk
   { chunkLabel :: !Label
   , chunkBody :: !a
-  } deriving stock (Eq, Show)
+  }
+  deriving stock (Eq, Show)
 
 chunkUnpaddedByteSize :: ByteSized a => Chunk a -> ByteCount
 chunkUnpaddedByteSize (Chunk _ body) = byteSize body
@@ -89,8 +130,9 @@ instance Binary a => Binary (Chunk a) where
 
 newtype KnownChunk a = KnownChunk
   { knownChunkBody :: a
-  } deriving stock (Show)
-    deriving newtype (Eq, Default)
+  }
+  deriving stock (Show)
+  deriving newtype (Eq, Default)
 
 knownChunkUnpaddedByteSize :: ByteSized a => KnownChunk a -> ByteCount
 knownChunkUnpaddedByteSize (KnownChunk body) = byteSize body
@@ -117,7 +159,7 @@ instance (Binary a, KnownLabel a) => Binary (KnownChunk a) where
 
 -- | A "Pascal-style string" with a leading byte count and optional
 -- trailing padding byte to make total length even.
-newtype PascalString = PascalString { unPascalString :: ShortByteString }
+newtype PascalString = PascalString {unPascalString :: ShortByteString}
   deriving stock (Show)
   deriving newtype (Eq)
 
@@ -143,7 +185,7 @@ notCompressed :: PascalString
 notCompressed = PascalString (BSS.toShort (BSC.pack "not compressed"))
 
 -- | "80 bit IEEE Standard 754 floating point number"
-newtype ExtendedFloat = ExtendedFloat { unExtendedFloat :: StaticBytes 10 }
+newtype ExtendedFloat = ExtendedFloat {unExtendedFloat :: StaticBytes 10}
   deriving stock (Show)
   deriving newtype (Eq, Default, ByteSized, StaticByteSized, Binary)
 
@@ -154,8 +196,9 @@ data AiffCommonBody = AiffCommonBody
   , aceSampleRate :: !ExtendedFloat
   , aceCompressionType :: !Label
   , aceCompressionName :: !PascalString
-  } deriving stock (Eq, Show, Generic)
-    deriving (ByteSized, Binary) via (ViaGeneric AiffCommonBody)
+  }
+  deriving stock (Eq, Show, Generic)
+  deriving (ByteSized, Binary) via (ViaGeneric AiffCommonBody)
 
 instance KnownLabel AiffCommonBody where
   knownLabel _ = labelComm
@@ -167,8 +210,9 @@ data AiffCommonBodyOld = AiffCommonBodyOld
   , aceoNumSampleFrames :: !Word32BE
   , aceoSampleSize :: !Word16BE
   , aceoSampleRate :: !ExtendedFloat
-  } deriving stock (Eq, Show, Generic)
-    deriving (ByteSized, Binary) via (ViaGeneric AiffCommonBodyOld)
+  }
+  deriving stock (Eq, Show, Generic)
+  deriving (ByteSized, Binary) via (ViaGeneric AiffCommonBodyOld)
 
 instance KnownLabel AiffCommonBodyOld where
   knownLabel _ = labelComm
@@ -195,7 +239,8 @@ data AiffDataBody = AiffDataBody
   { adbOffset :: !Word32BE
   , adbBlockSize :: !Word32BE
   , adbSoundData :: !QuietArray
-  } deriving stock (Eq, Show, Generic)
+  }
+  deriving stock (Eq, Show, Generic)
 
 instance ByteSized AiffDataBody where
   byteSize (AiffDataBody _ _ (QuietArray arr)) = 8 + fromIntegral (sizeofByteArray arr)
@@ -225,13 +270,15 @@ data AiffMark = AiffMark
   { amId :: !Word16BE
   , amPosition :: !Word32BE
   , amName :: !PascalString
-  } deriving stock (Eq, Show, Generic)
-    deriving (ByteSized, Binary) via (ViaGeneric AiffMark)
+  }
+  deriving stock (Eq, Show, Generic)
+  deriving (ByteSized, Binary) via (ViaGeneric AiffMark)
 
 newtype AiffMarkBody = AiffMarkBody
   { ambMarkers :: Seq AiffMark
-  } deriving stock (Show)
-    deriving newtype (Eq)
+  }
+  deriving stock (Show)
+  deriving newtype (Eq)
 
 instance ByteSized AiffMarkBody where
   byteSize (AiffMarkBody marks) = 2 + byteSizeFoldable marks
@@ -252,8 +299,8 @@ type AiffMarkChunk = KnownChunk AiffMarkBody
 
 type AiffUnparsedChunk = Chunk UnparsedBody
 
-data AiffChunk =
-    AiffChunkCommon !AiffCommonChunk
+data AiffChunk
+  = AiffChunkCommon !AiffCommonChunk
   | AiffChunkData !AiffDataChunk
   | AiffChunkVersion !AiffVersionChunk
   | AiffChunkAnno !AiffAnnoChunk
@@ -274,12 +321,12 @@ getChunk :: Variant -> Get AiffChunk
 getChunk variant = do
   label <- getLookAhead get
   if
-    | label == labelComm -> fmap AiffChunkCommon (getCommonChunk variant)
-    | label == labelSsnd -> fmap AiffChunkData get
-    | label == labelFver -> fmap AiffChunkVersion get
-    | label == labelAnno -> fmap AiffChunkAnno get
-    | label == labelMark -> fmap AiffChunkMark get
-    | otherwise -> fmap AiffChunkUnparsed get
+      | label == labelComm -> fmap AiffChunkCommon (getCommonChunk variant)
+      | label == labelSsnd -> fmap AiffChunkData get
+      | label == labelFver -> fmap AiffChunkVersion get
+      | label == labelAnno -> fmap AiffChunkAnno get
+      | label == labelMark -> fmap AiffChunkMark get
+      | otherwise -> fmap AiffChunkUnparsed get
 
 putChunk :: Variant -> AiffChunk -> Put
 putChunk variant = \case
@@ -300,8 +347,9 @@ data Variant = VariantAiff | VariantAifc
 data AiffHeader = AiffHeader
   { ahVariant :: !Variant
   , ahRemainingSize :: ByteCount
-  } deriving stock (Eq, Show, Generic)
-    deriving (ByteSized) via (ViaStaticByteSized AiffHeader)
+  }
+  deriving stock (Eq, Show, Generic)
+  deriving (ByteSized) via (ViaStaticByteSized AiffHeader)
 
 aiffHeaderSize :: ByteCount
 aiffHeaderSize = 2 * labelSize + countSize
@@ -314,10 +362,11 @@ instance Binary AiffHeader where
     getExpectLabel labelForm
     sz <- getChunkSizeBE
     label <- get @Label
-    variant <- if
-      | label == labelAiff -> pure VariantAiff
-      | label == labelAifc -> pure VariantAifc
-      | otherwise -> fail ("Expected label AIFC or AIFF in header but got: " ++ show (unStaticBytes label))
+    variant <-
+      if
+          | label == labelAiff -> pure VariantAiff
+          | label == labelAifc -> pure VariantAifc
+          | otherwise -> fail ("Expected label AIFC or AIFF in header but got: " ++ show (unStaticBytes label))
     pure $! AiffHeader variant (sz - labelSize)
   put (AiffHeader variant remSz) = do
     put labelForm
@@ -329,7 +378,8 @@ instance Binary AiffHeader where
 data Aiff = Aiff
   { aiffVariant :: !Variant
   , aiffChunks :: !(Seq AiffChunk)
-  } deriving stock (Eq, Show)
+  }
+  deriving stock (Eq, Show)
 
 instance ByteSized Aiff where
   byteSize (Aiff _ chunks) = aiffHeaderSize + byteSizeFoldable chunks
@@ -362,7 +412,8 @@ swapDataEndian variant chunks =
           _ -> c
 
 swappedByteArray2 :: ByteArray -> [Word8]
-swappedByteArray2 arr = go 0 Empty where
+swappedByteArray2 arr = go 0 Empty
+ where
   sz = sizeofByteArray arr
   go !i !acc =
     if i == sz
@@ -370,7 +421,8 @@ swappedByteArray2 arr = go 0 Empty where
       else go (i + 2) (acc :|> indexByteArray arr (i + 1) :|> indexByteArray arr i)
 
 swappedByteArray3 :: ByteArray -> [Word8]
-swappedByteArray3 arr = go 0 Empty where
+swappedByteArray3 arr = go 0 Empty
+ where
   sz = sizeofByteArray arr
   go !i !acc =
     if i == sz
@@ -380,29 +432,29 @@ swappedByteArray3 arr = go 0 Empty where
 swapArrayEndian :: Int -> ByteArray -> ByteArray
 swapArrayEndian bitDepth arr =
   if
-    | bitDepth == 8 -> arr
-    | bitDepth == 16 -> byteArrayFromListN (sizeofByteArray arr) (swappedByteArray2 arr)
-    | bitDepth == 24 -> byteArrayFromListN (sizeofByteArray arr) (swappedByteArray3 arr)
-    | otherwise -> error ("Unsupported endian swap depth: " ++ show bitDepth)
+      | bitDepth == 8 -> arr
+      | bitDepth == 16 -> byteArrayFromListN (sizeofByteArray arr) (swappedByteArray2 arr)
+      | bitDepth == 24 -> byteArrayFromListN (sizeofByteArray arr) (swappedByteArray3 arr)
+      | otherwise -> error ("Unsupported endian swap depth: " ++ show bitDepth)
 
 lookupAiffChunk :: (AiffChunk -> Bool) -> Aiff -> Maybe AiffChunk
 lookupAiffChunk p (Aiff _ chunks) = fmap (Seq.index chunks) (Seq.findIndexL p chunks)
 
 lookupAiffCommonChunk :: Aiff -> Maybe AiffCommonChunk
 lookupAiffCommonChunk w =
-  case lookupAiffChunk (\case { AiffChunkCommon _ -> True; _ -> False }) w of
+  case lookupAiffChunk (\case AiffChunkCommon _ -> True; _ -> False) w of
     Just (AiffChunkCommon x) -> Just x
     _ -> Nothing
 
 lookupAiffDataChunk :: Aiff -> Maybe AiffDataChunk
 lookupAiffDataChunk w =
-  case lookupAiffChunk (\case { AiffChunkData _ -> True; _ -> False }) w of
+  case lookupAiffChunk (\case AiffChunkData _ -> True; _ -> False) w of
     Just (AiffChunkData x) -> Just x
     _ -> Nothing
 
 lookupAiffMarkChunk :: Aiff -> Maybe AiffMarkChunk
 lookupAiffMarkChunk w =
-  case lookupAiffChunk (\case { AiffChunkMark _ -> True; _ -> False }) w of
+  case lookupAiffChunk (\case AiffChunkMark _ -> True; _ -> False) w of
     Just (AiffChunkMark x) -> Just x
     _ -> Nothing
 

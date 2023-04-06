@@ -16,7 +16,8 @@ module Scrapti.Midi.Time
   , threadDelayDelta
   , awaitDelta
   , assertingNonNegative
-  ) where
+  )
+where
 
 import Control.Concurrent (threadDelay)
 import Data.Functor (($>))
@@ -33,7 +34,7 @@ assertingNonNegative a =
     else a
 
 -- | Non-negative time difference in nanoseconds since last event
-newtype TimeDelta = TimeDelta { unTimeDelta :: Word64 }
+newtype TimeDelta = TimeDelta {unTimeDelta :: Word64}
   deriving stock (Show, Generic)
   deriving newtype (Eq, Ord, Bounded, Num)
   deriving (Semigroup, Monoid) via (Sum Word64)
@@ -55,16 +56,20 @@ timeDeltaToNanos :: TimeDelta -> Word64
 timeDeltaToNanos = unTimeDelta
 
 -- | Return the difference of two time deltas
-diffTimeDelta :: TimeDelta         -- ^ the "larger" delta
-              -> TimeDelta         -- ^ the "smaller" delta
-              -> Maybe TimeDelta   -- ^ difference between the two (Nothing if negative)
+diffTimeDelta
+  :: TimeDelta
+  -- ^ the "larger" delta
+  -> TimeDelta
+  -- ^ the "smaller" delta
+  -> Maybe TimeDelta
+  -- ^ difference between the two (Nothing if negative)
 diffTimeDelta (TimeDelta big) (TimeDelta small) =
   if big <= small
     then Nothing
     else Just (TimeDelta (big - small))
 
 -- | Monotonic time in nanoseconds since some unspecified epoch (see 'getMonotonicTimeNs')
-newtype MonoTime = MonoTime { unMonoTime :: Word64 }
+newtype MonoTime = MonoTime {unMonoTime :: Word64}
   deriving stock (Show, Generic)
   deriving newtype (Eq, Ord, Bounded)
 
