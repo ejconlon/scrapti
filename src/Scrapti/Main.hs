@@ -7,7 +7,7 @@ where
 
 import Control.Exception (throwIO)
 import Control.Monad (unless, when)
-import Dahdit (put, runPutFile)
+import Dahdit (encodeFile)
 import Data.Default (Default (..))
 import Data.Foldable (for_)
 import qualified Data.Sequence as Seq
@@ -115,8 +115,8 @@ runInit pr = do
     putStrLn ("Processing: " ++ srcFile)
     sourceNe <- loadNeutral sr markNames srcFile
     let noteNum = unLinNote (octToLin (sampleNote srcSample))
-    convertedWav <- either throwIO pure (neutralToSampleWav noteNum xfadeWidth sourceNe)
-    runPutFile destFile (put convertedWav)
+    convertedWav <- either throwIO pure (neutralToSampleWav xfadeWidth noteNum sourceNe)
+    encodeFile convertedWav destFile
     pure $! srcSample {samplePath = destFile}
   -- Initialize instrument
   sfzExists <- doesFileExist sfzFile
@@ -155,7 +155,7 @@ runFreeze pr = do
   patches <- either fail pure (instToPtiPatches (T.pack name) Nothing def instWrite)
   createDirectoryIfMissing True instDir
   for_ patches $ \(PtiPatch nm _ pti) -> do
-    runPutFile (instDir </> T.unpack nm <.> "pti") (put pti)
+    encodeFile pti (instDir </> T.unpack nm <.> "pti")
 
 runClean :: PackRef -> IO ()
 runClean pr = do

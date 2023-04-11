@@ -1,7 +1,8 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Scrapti.Dsp
-  ( DspErr (..)
+  ( SampleCount (..)
+  , DspErr (..)
   , monoFromLeft
   , monoFromRight
   , monoFromAvg
@@ -24,7 +25,9 @@ where
 import Control.Exception (Exception)
 import Control.Monad (unless)
 import Dahdit
-  ( Int16LE
+  ( ByteCount (..)
+  , ElemCount (..)
+  , Int16LE
   , Int24LE
   , Int32LE
   , Int8
@@ -33,12 +36,19 @@ import Dahdit
   , cloneLiftedPrimArray
   , generateLiftedPrimArray
   , indexLiftedPrimArray
+  , lengthLiftedPrimArray
   , proxyForF
   , sizeofLiftedPrimArray
+  , staticByteSize
   )
 import Data.Bits (Bits (..))
+import Data.Coerce (coerce)
 import Data.Primitive.ByteArray (ByteArray, sizeofByteArray)
 import Data.Proxy (Proxy (..))
+
+newtype SampleCount = SampleCount {unSampleCount :: Int}
+  deriving stock (Show)
+  deriving newtype (Eq, Ord, Num, Enum, Real, Integral)
 
 data Sampled f where
   Sampled :: (LiftedPrim a, Integral a) => !(f a) -> Sampled f
@@ -63,7 +73,7 @@ data DspErr
 
 instance Exception DspErr
 
-newtype Sel a = Sel {runSel :: LiftedPrimArray a -> Int -> a}
+newtype Sel a = Sel {runSel :: LiftedPrimArray a -> ElemCount -> a}
 
 selMonoLeft, selMonoRight :: LiftedPrim a => Sel a
 selMonoLeft = Sel $ \arr i -> indexLiftedPrimArray arr (i * 2)
@@ -101,7 +111,7 @@ modAndThen modAB modBC = Mod $ \nc src -> do
 monoFromSel :: LiftedPrim a => Sel a -> Mod a a
 monoFromSel sel = Mod $ \mm src -> do
   unless (mmNumChannels mm == 2) (Left DspErrNotStereo)
-  let !srcLen = sizeofLiftedPrimArray src
+  let !srcLen = lengthLiftedPrimArray src
   unless (even srcLen) (Left DspErrOddSamples)
   let !destLen = div srcLen 2
       !dest = generateLiftedPrimArray destLen (runSel sel src)
@@ -132,21 +142,20 @@ reduceBitDepth = Mod $ \mm src -> do
         let x = indexLiftedPrimArray src24 i :: Int24LE
             y = shiftR (toInteger x) 8
         in  fromInteger y :: Int16LE
-  let !dest16 = generateLiftedPrimArray (sizeofLiftedPrimArray src24) go :: LiftedPrimArray Int16LE
-  unless (sizeofLiftedPrimArray src24 == sizeofLiftedPrimArray dest16) (error "Bad size (lifted array)")
-  unless (2 * sizeofByteArray (unLiftedPrimArray src24) == 3 * sizeofByteArray (unLiftedPrimArray dest16)) (error "Bad size (byte array)")
+  let !dest16 = generateLiftedPrimArray (lengthLiftedPrimArray src24) go :: LiftedPrimArray Int16LE
+  unless (2 * sizeofLiftedPrimArray src24 == 3 * sizeofLiftedPrimArray dest16) (error "Bad size (in bytes)")
   let !dest = LiftedPrimArray (unLiftedPrimArray dest16)
   pure (mm', dest)
 
 stereoFromMono :: LiftedPrim a => Mod a a
 stereoFromMono = Mod $ \mm src -> do
   unless (mmNumChannels mm == 1) (Left DspErrNotMono)
-  let !srcLen = sizeofLiftedPrimArray src
+  let !srcLen = lengthLiftedPrimArray src
       !destLen = srcLen * 2
       !dest = generateLiftedPrimArray destLen (\i -> indexLiftedPrimArray src (div i 2))
   Right (mm {mmNumChannels = 2}, dest)
 
-guardFade :: Int -> Int -> Int -> Either DspErr ()
+guardFade :: SampleCount -> SampleCount -> SampleCount -> Either DspErr ()
 guardFade width loopStart loopEnd = do
   if width <= 0
     || loopEnd <= loopStart
@@ -168,20 +177,21 @@ combine intDistTot intDist1 one two =
 -- Guarded to ensure inequalities are strict
 -- Width here is one-sided
 -- Width is number of samples to fade over
-linearCrossFade :: (LiftedPrim a, Integral a) => Int -> Int -> Int -> Mod a a
+linearCrossFade :: (LiftedPrim a, Integral a) => SampleCount -> SampleCount -> SampleCount -> Mod a a
 linearCrossFade width loopStart loopEnd = Mod $ \mm src -> do
   guardFade width loopStart loopEnd
   let !nc = mmNumChannels mm
-      !sampWidth = nc * width
+      !sampWidth = nc * coerce width
       !sampTotDist = 2 * sampWidth
-      !sampBetween = nc * (loopEnd - loopStart)
-      !sampPreStart = nc * (loopStart - width)
-      !sampStart = nc * loopStart
-      !sampPostStart = nc * (loopStart + width)
-      !sampPreEnd = nc * (loopEnd - width)
-      !sampEnd = nc * loopStart
-      !sampPostEnd = nc * (loopEnd + width)
-      !sampLast = sizeofLiftedPrimArray src - sampBetween
+      !sampBetween = ElemCount (nc * coerce (loopEnd - loopStart))
+      !sampPreStart = ElemCount (nc * coerce (loopStart - width))
+      !sampStart = ElemCount (nc * coerce loopStart)
+      !sampPostStart = ElemCount (nc * coerce (loopStart + width))
+      !sampPreEnd = ElemCount (nc * coerce (loopEnd - width))
+      !sampEnd = ElemCount (nc * coerce loopStart)
+      !sampPostEnd = ElemCount (nc * coerce (loopEnd + width))
+      !sz = lengthLiftedPrimArray src
+      !sampLast = sz - sampBetween
       genElem i =
         let !v = indexLiftedPrimArray src i
         in  if
@@ -190,38 +200,37 @@ linearCrossFade width loopStart loopEnd = Mod $ \mm src -> do
                       then v
                       else
                         let !w = indexLiftedPrimArray src (i + sampBetween)
-                            f = combine sampTotDist (sampPostStart - i)
+                            f = combine sampTotDist (coerce (sampPostStart - i))
                         in  if i < sampStart then f v w else f w v
                 | i >= sampPreEnd && i <= sampPostEnd ->
                     if i < sampBetween
                       then v
                       else
                         let !w = indexLiftedPrimArray src (i - sampBetween)
-                            f = combine sampTotDist (sampPostEnd - i)
+                            f = combine sampTotDist (coerce (sampPostEnd - i))
                         in  if i < sampEnd then f v w else f w v
                 | otherwise -> v
-      !sz = sizeofLiftedPrimArray src
       !dest = generateLiftedPrimArray sz genElem
   Right (mm, dest)
 
-guardCrop :: Int -> Int -> Either DspErr ()
+guardCrop :: SampleCount -> SampleCount -> Either DspErr ()
 guardCrop start end = do
   if end <= start
     then Left DspErrBadCrop
     else Right ()
 
-crop :: LiftedPrim a => Int -> Int -> Mod a a
+crop :: LiftedPrim a => SampleCount -> SampleCount -> Mod a a
 crop start end = Mod $ \mm src -> do
   guardCrop start end
   let !nc = mmNumChannels mm
-      !sampStart = nc * start
-      !sampEnd = nc * end
+      !sampStart = coerce nc * coerce start
+      !sampEnd = coerce nc * coerce end
       !dest = cloneLiftedPrimArray src sampStart (sampEnd - sampStart)
   Right (mm, dest)
 
 data PcmMeta = PcmMeta
   { pmNumChannels :: !Int
-  , pmNumSamples :: !Int
+  , pmNumSamples :: !SampleCount
   , pmBitsPerSample :: !Int
   , pmSampleRate :: !Int
   }
@@ -238,21 +247,21 @@ pmToMm (PcmMeta {..}) = ModMeta {mmNumChannels = pmNumChannels, mmBitsPerSample 
 
 toLifted :: LiftedPrim a => Proxy a -> PcmContainer -> Either DspErr (ModMeta, LiftedPrimArray a)
 toLifted prox (PcmContainer pm arr) = do
-  let !elemSize = elemSizeLifted prox
-  let !actualNs = div (sizeofByteArray arr) (elemSize * pmNumChannels pm)
-  unless (elemSize * 8 == pmBitsPerSample pm && actualNs == pmNumSamples pm) (Left DspErrBadElemSize)
+  let !elemSize = staticByteSize prox
+  let !actualNs = coerce (div (sizeofByteArray arr) (coerce elemSize * pmNumChannels pm))
+  unless (coerce elemSize * 8 == pmBitsPerSample pm && actualNs == pmNumSamples pm) (Left DspErrBadElemSize)
   let !mm = pmToMm pm
   let !larr = LiftedPrimArray arr
   Right (mm, larr)
 
 fromLifted :: LiftedPrim b => ModMeta -> LiftedPrimArray b -> Either DspErr PcmContainer
 fromLifted mm larr@(LiftedPrimArray arr) = do
-  let !elemSize = elemSizeLifted (proxyForF larr)
+  let !elemSize = staticByteSize (proxyForF larr)
       !nc = mmNumChannels mm
-      !ns = div (sizeofByteArray arr) (elemSize * nc)
-      !bps = elemSize * 8
+      !ns = coerce (div (sizeofByteArray arr) (coerce elemSize * nc))
+      !bps = coerce elemSize * 8
       !sr = mmSampleRate mm
-      !extraElems = rem (sizeofByteArray arr) (elemSize * nc)
+      !extraElems = rem (sizeofByteArray arr) (coerce elemSize * nc)
   unless (extraElems == 0) (Left DspErrBadElemSize)
   let !pm = PcmMeta nc ns bps sr
   Right $! PcmContainer pm arr

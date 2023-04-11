@@ -68,7 +68,7 @@ instance ByteSized a => ByteSized (Chunk a) where
 instance StaticByteSized a => StaticByteSized (Chunk a) where
   staticByteSize _ = padCount (chunkHeaderSize + staticByteSize (Proxy :: Proxy a))
 
-instance Binary a => Binary (Chunk a) where
+instance (Binary a, ByteSized a) => Binary (Chunk a) where
   get = do
     lab <- get
     usz <- getChunkSizeLE
@@ -97,7 +97,7 @@ instance ByteSized a => ByteSized (KnownChunk a) where
 instance StaticByteSized a => StaticByteSized (KnownChunk a) where
   staticByteSize _ = padCount (chunkHeaderSize + staticByteSize (Proxy :: Proxy a))
 
-instance (Binary a, KnownLabel a) => Binary (KnownChunk a) where
+instance (Binary a, KnownLabel a, ByteSized a) => Binary (KnownChunk a) where
   get = do
     getExpectLabel (knownLabel (Proxy :: Proxy a))
     usz <- getChunkSizeLE
@@ -145,7 +145,7 @@ newtype KnownListChunk a = KnownListChunk
 instance ByteSized a => ByteSized (KnownListChunk a) where
   byteSize (KnownListChunk body) = padCount (listChunkHeaderSize + byteSizeFoldable body)
 
-instance (Binary a, KnownLabel a) => Binary (KnownListChunk a) where
+instance (ByteSized a, Binary a, KnownLabel a) => Binary (KnownListChunk a) where
   get = do
     getExpectLabel labelList
     usz <- getChunkSizeLE
@@ -171,7 +171,7 @@ newtype KnownOptChunk a = KnownOptChunk
 instance ByteSized a => ByteSized (KnownOptChunk a) where
   byteSize (KnownOptChunk item) = padCount (listChunkHeaderSize + byteSizeFoldable item)
 
-instance (Binary a, KnownLabel a) => Binary (KnownOptChunk a) where
+instance (ByteSized a, Binary a, KnownLabel a) => Binary (KnownOptChunk a) where
   get = do
     getExpectLabel labelList
     usz <- getChunkSizeLE

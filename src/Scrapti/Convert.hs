@@ -16,8 +16,9 @@ module Scrapti.Convert
   )
 where
 
-import Control.Monad (unless)
-import Dahdit (Int16LE, LiftedPrim, LiftedPrimArray (..), Seq (..), get, runGetFile)
+import Control.Exception (throwIO)
+import Control.Monad (unless, (>=>))
+import Dahdit (Int16LE, LiftedPrim, LiftedPrimArray (..), Seq (..), decodeFile)
 import Data.Maybe (isJust)
 import qualified Data.Sequence as Seq
 import Scrapti.Aiff (Aiff, aiffGatherMarkers, aiffToPcmContainer)
@@ -36,6 +37,7 @@ import Scrapti.Dsp
   ( Mod
   , PcmContainer (..)
   , PcmMeta (..)
+  , SampleCount
   , applyMod
   , applyModGeneric
   , crop
@@ -62,10 +64,10 @@ convertModGeneric :: (forall a. (LiftedPrim a, Integral a) => Mod a a) -> PcmCon
 convertModGeneric modx con = either (Left . ConvertErrDsp) Right (applyModGeneric modx con)
 
 loadAiff :: FilePath -> IO Aiff
-loadAiff = fmap fst . runGetFile get
+loadAiff = decodeFile >=> either throwIO pure . fst
 
 loadWav :: FilePath -> IO Wav
-loadWav = fmap fst . runGetFile get
+loadWav = decodeFile >=> either throwIO pure . fst
 
 data Neutral = Neutral
   { neCon :: !PcmContainer
@@ -132,7 +134,7 @@ neutralDepth ne@(Neutral {..}) = do
       pure $! ne {neCon = con'}
     y -> Left (ConvertErrBadBps y)
 
-neutralCrossFade :: Int -> Neutral -> Either ConvertErr Neutral
+neutralCrossFade :: SampleCount -> Neutral -> Either ConvertErr Neutral
 neutralCrossFade width ne@(Neutral {..}) = do
   LoopMarks _ (_, !loopStart) (_, !loopEnd) _ <- maybe (Left ConvertErrNoLoopMarks) Right neLoopMarks
   let !loopStartPos = smPosition loopStart
@@ -161,12 +163,12 @@ neutralIfHasMarks f ne = do
     then f ne
     else Right ne
 
-neutralToSampleWav :: Int -> Int -> Neutral -> Either ConvertErr Wav
+neutralToSampleWav :: SampleCount -> Int -> Neutral -> Either ConvertErr Wav
 neutralToSampleWav width note ne = fmap (neutralToWav note) (neutralMono ne >>= neutralDepth >>= neutralIfHasMarks (neutralCrossFade width) >>= neutralIfHasMarks neutralCropLoop)
 
 readPtiWav :: Maybe LoopMarkNames -> FilePath -> IO (LiftedPrimArray Int16LE, Maybe LoopMarkPoints)
 readPtiWav mayNames fp = do
-  (wav, _) <- runGetFile (get @Wav) fp
+  wav <- loadWav fp
   ne <- rethrow (wavToNeutral wav mayNames)
   let !meta = pcMeta (neCon ne)
   unless

@@ -9,8 +9,8 @@ module Scrapti.Tracker.Checked
 where
 
 import Control.Monad (unless)
-import Dahdit (Binary, ByteSized, StaticByteSized, ViaStaticGeneric (..), Word32LE (..), put, runPut)
-import qualified Data.ByteString.Short as BSS
+import Dahdit (Binary, ByteSized, StaticByteSized, ViaStaticGeneric (..), Word32LE (..), encode)
+import Data.ByteString (ByteString)
 import Data.Default (Default (..))
 import Data.Digest.CRC32 (crc32)
 import GHC.Generics (Generic)
@@ -22,22 +22,22 @@ data Checked a = Checked
   deriving stock (Eq, Show, Generic)
   deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric (Checked a))
 
-instance (Default a, Binary a) => Default (Checked a) where
+instance (Default a, Binary a, ByteSized a) => Default (Checked a) where
   def = mkChecked def
 
-mkCode :: Binary a => a -> Word32LE
-mkCode val = fromIntegral (crc32 (BSS.fromShort (runPut (put val))))
+mkCode :: (Binary a, ByteSized a) => a -> Word32LE
+mkCode val = fromIntegral (crc32 @ByteString (encode val))
 
-mkChecked :: Binary a => a -> Checked a
+mkChecked :: (Binary a, ByteSized a) => a -> Checked a
 mkChecked a = Checked a (mkCode a)
 
-updateCheckedCode :: Binary a => Checked a -> Checked a
+updateCheckedCode :: (Binary a, ByteSized a) => Checked a -> Checked a
 updateCheckedCode = mkChecked . checkedVal
 
-verifyCheckedCode :: Binary a => Checked a -> Bool
+verifyCheckedCode :: (Binary a, ByteSized a) => Checked a -> Bool
 verifyCheckedCode (Checked val code) = code == mkCode val
 
-failCheckedCode :: (MonadFail m, Binary a) => String -> Checked a -> m ()
+failCheckedCode :: (MonadFail m, Binary a, ByteSized a) => String -> Checked a -> m ()
 failCheckedCode tyName (Checked val code) =
   let actual = mkCode val
   in  unless

@@ -2,10 +2,14 @@
 
 module Main (main) where
 
+import Control.Exception (Exception, throwIO)
+import Control.Monad ((>=>))
 import Dahdit
   ( Binary (..)
+  , BinaryTarget (..)
   , ByteCount
-  , ElementCount
+  , ByteSized
+  , ElemCount (..)
   , Get
   , Int16LE (..)
   , ShortByteString
@@ -14,18 +18,19 @@ import Dahdit
   , Word16LE
   , Word8
   , byteSize
+  , decode
+  , decodeFile
+  , encode
+  , encodeFile
   , getExact
   , getSkip
   , getWord32LE
+  , lengthLiftedPrimArray
   , liftedPrimArrayFromList
-  , runGetFile
-  , runGetIO
-  , runPut
-  , sizeofLiftedPrimArray
   )
-import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Short as BSS
+import Data.Coerce (coerce)
 import Data.Default (def)
 import Data.Foldable (for_, toList)
 import Data.Int (Int8)
@@ -150,18 +155,33 @@ drumEndOffset = drumFileSize + 8
 drumHeader :: WavHeader
 drumHeader = WavHeader (drumFileSize - 4)
 
-drumDataLen :: ElementCount
+drumDataLen :: ElemCount
 drumDataLen = 248886
 
 readShort :: FilePath -> IO ShortByteString
 readShort = fmap (BSS.toShort . BSL.toStrict) . BSL.readFile
 
+throwFirst :: Exception e => (Either e a, b) -> IO (a, b)
+throwFirst (ea, b) =
+  case ea of
+    Left e -> throwIO e
+    Right a -> pure (a, b)
+
+decodeThrow :: Binary a => ShortByteString -> IO (a, ByteCount)
+decodeThrow = throwFirst . decode
+
+getTargetThrow :: Get a -> ShortByteString -> IO (a, ByteCount)
+getTargetThrow g z = throwFirst (getTarget g z)
+
+decodeFileThrow :: Binary a => FilePath -> IO (a, ByteCount)
+decodeFileThrow = decodeFile >=> throwFirst
+
 testWavSerde :: TestTree
 testWavSerde = testCase "serde" $ do
   -- KnownChunk
   byteSize drumFmtChunk @?= 24
-  let fmtBs = runPut (put drumFmtChunk)
-  (fmt, fmtSz) <- runGetIO get fmtBs
+  let fmtBs = encode drumFmtChunk
+  (fmt, fmtSz) <- decodeThrow fmtBs
   byteSize fmt @?= fmtSz
   fmt @?= drumFmtChunk
   -- Odd and even unparsed chunks
@@ -170,12 +190,12 @@ testWavSerde = testCase "serde" $ do
       unpEven = Chunk "FOOB" (UnparsedBody "AB")
   byteSize unpOdd @?= unpSz
   byteSize unpEven @?= unpSz
-  let unpOddBs = runPut (put unpOdd)
-  (unpOdd', unpOddSz) <- runGetIO get unpOddBs
+  let unpOddBs = encode unpOdd
+  (unpOdd', unpOddSz) <- decodeThrow unpOddBs
   byteSize unpOdd' @?= unpOddSz
   unpOdd' @?= unpOdd
-  let unpEvenBs = runPut (put unpEven)
-  (unpEven', unpEvenSz) <- runGetIO get unpEvenBs
+  let unpEvenBs = encode unpEven
+  (unpEven', unpEvenSz) <- decodeThrow unpEvenBs
   byteSize unpEven' @?= unpEvenSz
   unpEven' @?= unpEven
   -- Adtl chunks
@@ -187,14 +207,14 @@ testWavSerde = testCase "serde" $ do
 testWavHeader :: TestTree
 testWavHeader = testCase "header" $ do
   bs <- readShort "testdata/drums.wav"
-  (header, bc) <- runGetIO get bs
+  (header, bc) <- decodeThrow bs
   header @?= drumHeader
   bc @?= drumFmtOffset
 
 testWavData :: TestTree
 testWavData = testCase "data" $ do
   bs <- readShort "testdata/drums.wav"
-  (arr, _) <- flip runGetIO bs $ do
+  (arr, _) <- flip getTargetThrow bs $ do
     getSkip drumDataOffset
     chunk <- get
     case chunk of
@@ -205,7 +225,7 @@ testWavData = testCase "data" $ do
 testWavInfo :: TestTree
 testWavInfo = testCase "info" $ do
   bs <- readShort "testdata/drums.wav"
-  (info, _) <- flip runGetIO bs $ do
+  (info, _) <- flip getTargetThrow bs $ do
     getSkip drumPostDataOffset
     chunk <- get
     case chunk of
@@ -216,7 +236,7 @@ testWavInfo = testCase "info" $ do
 testWavWhole :: TestTree
 testWavWhole = testCase "whole" $ do
   bs <- readShort "testdata/drums.wav"
-  (wav, _) <- runGetIO (get @Wav) bs
+  (wav, _) <- decodeThrow bs
   fmtChunk <- rethrow (guardChunk "format" (lookupWavFormatChunk wav))
   fmtChunk @?= drumFmtChunk
   KnownChunk (WavDataBody (QuietArray arr)) <- rethrow (guardChunk "data" (lookupWavDataChunk wav))
@@ -226,19 +246,19 @@ testWavWhole = testCase "whole" $ do
 testWavWrite :: TestTree
 testWavWrite = testCase "write" $ do
   bs <- readShort "testdata/drums.wav"
-  (wav, bc) <- runGetIO (get @Wav) bs
+  (wav, bc) <- decodeThrow bs
   byteSize wav @?= bc
   for_ (wavChunks wav) assertReparses
-  let bs' = runPut (put wav)
+  let bs' = encode wav
   bs' @?= bs
 
 testWavWrite2 :: TestTree
 testWavWrite2 = testCase "write" $ do
   bs <- readShort "testdata/DX-EPiano1-C1.wav"
-  (wav, bc) <- runGetIO (get @Wav) bs
+  (wav, bc) <- decodeThrow bs
   byteSize wav @?= bc
   for_ (wavChunks wav) assertReparses
-  let bs' = runPut (put wav)
+  let bs' = encode wav
   bs' @?= bs
 
 testWav :: TestTree
@@ -247,37 +267,37 @@ testWav = testGroup "wav" [testWavSerde, testWavHeader, testWavData, testWavInfo
 testAiff :: TestTree
 testAiff = testCase "aiff" $ do
   bs <- readShort "testdata/M1F1-int16s-AFsp.aif"
-  (aiff, bc) <- runGetIO (get :: Get Aiff) bs
+  (aiff, bc) <- decodeThrow bs
   byteSize aiff @?= bc
   bc @?= fromIntegral (BSS.length bs)
   for_ (aiffChunks aiff) assertReparses
-  let bs' = runPut (put aiff)
+  let bs' = encode aiff
   fromIntegral (BSS.length bs') @?= bc
   bs' @?= bs
 
 testSfontWhole :: TestTree
 testSfontWhole = testCase "whole" $ do
   bs <- readShort "testdata/timpani.sf2"
-  (Sfont (InfoChunk (KnownListChunk infos)) (SdtaChunk (KnownOptChunk maySdta)) (PdtaChunk (KnownListChunk pdtaBlocks)), _) <- runGetIO (get @Sfont) bs
+  (Sfont (InfoChunk (KnownListChunk infos)) (SdtaChunk (KnownOptChunk maySdta)) (PdtaChunk (KnownListChunk pdtaBlocks)), _) <- decodeThrow bs
   Seq.length infos @?= 5
   case maySdta of
     Nothing -> fail "Missing sdta"
     Just sdta -> do
-      sizeofLiftedPrimArray (sdtaHighBits sdta) @?= 1365026
+      lengthLiftedPrimArray (sdtaHighBits sdta) @?= 1365026
       sdtaLowBits sdta @?= Nothing
   Seq.length pdtaBlocks @?= 9
 
 testSfontWrite :: TestTree
 testSfontWrite = testCase "write" $ do
   bs <- readShort "testdata/timpani.sf2"
-  (sfont, _) <- runGetIO (get @Sfont) bs
-  let bs' = runPut (put sfont)
+  (sfont, _) <- decodeThrow @Sfont bs
+  let bs' = encode sfont
   bs' @?= bs
 
 testSfontManual :: TestTree
 testSfontManual = testCase "manual" $ do
   bs <- readShort "testdata/timpani.sf2"
-  ((info, sdta, pdta), _) <- flip runGetIO bs $ do
+  ((info, sdta, pdta), _) <- flip getTargetThrow bs $ do
     getExpectLabel labelRiff
     chunkSize <- getChunkSizeLE
     getExact chunkSize $ do
@@ -292,11 +312,11 @@ testSfontManual = testCase "manual" $ do
   byteSize info @?= expecInfoSize
   byteSize sdta @?= expecSdtaSize
   byteSize pdta @?= expecPdtaSize
-  let infoBs = runPut (put info)
+  let infoBs = encode info
   BSS.length infoBs @?= fromIntegral expecInfoSize
-  let sdtaBs = runPut (put sdta)
+  let sdtaBs = encode sdta
   BSS.length sdtaBs @?= fromIntegral expecSdtaSize
-  let pdtaBs = runPut (put pdta)
+  let pdtaBs = encode pdta
   BSS.length pdtaBs @?= fromIntegral expecPdtaSize
 
 testSfontSizes :: TestTree
@@ -337,12 +357,12 @@ testPtiSizes = testCase "sizes" $ do
 testPtiWrite :: TestTree
 testPtiWrite = testCase "write" $ do
   bs <- readShort "testdata/testproj16/instruments/1 drums.pti"
-  (pti, bc) <- runGetIO (get @Pti) bs
+  (pti, bc) <- decodeThrow bs
   byteSize pti @?= bc
   fromIntegral bc @?= BSS.length bs
   -- divide by two to compare number of elements (2-byte samples)
-  sizeofLiftedPrimArray (unQuietLiftedArray (ptiPcmData pti)) @?= div (fromIntegral drumDataLen) 2
-  let bs' = runPut (put pti)
+  lengthLiftedPrimArray (unQuietLiftedArray (ptiPcmData pti)) @?= div drumDataLen 2
+  let bs' = encode pti
   bs' @?= bs
 
 type Sel a = Header -> a
@@ -388,7 +408,7 @@ selEffAux387 = effAux387 . hdrEffects
 testPtiAux :: TestTree
 testPtiAux = testCase "aux" $ do
   bs <- readShort "testdata/testproj16/instruments/1 drums.pti"
-  (actHdr, _) <- runGetIO (get @Header) bs
+  (actHdr, _) <- decodeThrow bs
   let defHdr = def @Header
       same :: (Eq a, Show a) => Int -> Sel a -> IO ()
       same i sel = assertEqual ("aux " ++ show i) (sel defHdr) (sel actHdr)
@@ -410,7 +430,7 @@ testPtiAux = testCase "aux" $ do
 testPtiMinimal :: TestTree
 testPtiMinimal = testCase "minimal" $ do
   bs <- readShort "testdata/testproj16/instruments/1 drums.pti"
-  ((actHdr, actDigest), _) <- runGetIO ((,) <$> get @Header <*> getWord32LE) bs
+  ((actHdr, actDigest), _) <- getTargetThrow ((,) <$> get @Header <*> getWord32LE) bs
   let defHdr = def @Header
       actPre = hdrPreamble actHdr
       defPre = hdrPreamble defHdr
@@ -442,12 +462,12 @@ testPtiWav :: TestTree
 testPtiWav = testCase "wav" $ do
   wavBs <- readShort "testdata/drums.wav"
   ptiBs <- readShort "testdata/testproj16/instruments/1 drums.pti"
-  (wav, _) <- runGetIO (get @Wav) wavBs
-  (pti, _) <- runGetIO (get @Pti) ptiBs
+  (wav, _) <- decodeThrow wavBs
+  (pti, _) <- decodeThrow ptiBs
   KnownChunk (WavDataBody (QuietArray wavData)) <- rethrow (guardChunk "data" (lookupWavDataChunk wav))
   -- We expect there are half as many samples because it's converted to mono
   -- divide by four to compare number of elements (2-byte samples and 2 channels)
-  sizeofLiftedPrimArray (unQuietLiftedArray (ptiPcmData pti)) @?= div (sizeofByteArray wavData) 4
+  coerce (lengthLiftedPrimArray (unQuietLiftedArray (ptiPcmData pti))) @?= div (sizeofByteArray wavData) 4
 
 -- As far as the content, I have no idea what it's doing to the signal...
 
@@ -469,17 +489,17 @@ testProject = testCase "project" $ do
     q <- loadRichProject path
     q @?= p
 
-assertReparses :: (Binary a, Eq a, Show a) => a -> IO ()
+assertReparses :: (ByteSized a, Binary a, Eq a, Show a) => a -> IO ()
 assertReparses a = do
-  let !bs = runPut (put a)
-  (a', bc) <- runGetIO get bs
+  let !bs = encode a
+  (a', bc) <- decodeThrow bs
   byteSize a' @?= bc
   a' @?= a
 
 testConvertDx :: TestTree
 testConvertDx = testCase "DX" $ do
   bs <- readShort "testdata/DX-EPiano1-C1.aif"
-  (aif, _) <- runGetIO get bs
+  (aif, _) <- decodeThrow bs
   ne <- rethrow (aiffToNeutral 44100 aif (Just defaultLoopMarkNames))
   -- Test that a standard translation of the wav works
   let !wav = neutralToWav defaultNoteNumber ne
@@ -535,8 +555,8 @@ takeSomeEvens = evenShorts . takeN 20
 
 tryAifToWav :: Int -> String -> IO ()
 tryAifToWav channels variant = do
-  (aif, _) <- runGetFile (get @Aiff) ("testdata/sin_" ++ variant ++ ".aifc")
-  (wav, _) <- runGetFile (get @Wav) ("testdata/sin_" ++ variant ++ ".wav")
+  (aif, _) <- decodeFileThrow ("testdata/sin_" ++ variant ++ ".aifc")
+  (wav, _) <- decodeFileThrow ("testdata/sin_" ++ variant ++ ".wav")
   ne <- rethrow (aiffToNeutral 44100 aif Nothing)
   let !conv = neutralToWav defaultNoteNumber ne
   let !aifPart = takeSome (aifSamples aif)
@@ -554,8 +574,8 @@ tryAifToWav channels variant = do
 tryWavMono :: IO ()
 tryWavMono = do
   -- Read stereo + mono versions of same wav, assert their samples are correct
-  (wavStereo, _) <- runGetFile (get @Wav) "testdata/sin_stereo.wav"
-  (wavMono, _) <- runGetFile (get @Wav) "testdata/sin_mono.wav"
+  (wavStereo, _) <- decodeFileThrow "testdata/sin_stereo.wav"
+  (wavMono, _) <- decodeFileThrow "testdata/sin_mono.wav"
   let !leftStereoPart = takeSomeEvens (wavSamples wavStereo)
   let !monoPart = takeSome (wavSamples wavMono)
   monoPart @?= leftStereoPart
@@ -572,7 +592,7 @@ testConvertSin = testCase "sin" $ do
 
 testConvertLoop :: TestTree
 testConvertLoop = testCase "loop" $ do
-  (wav, _) <- runGetFile (get @Wav) "testdata/sin_mono.wav"
+  (wav, _) <- decodeFileThrow "testdata/sin_mono.wav"
   con <- rethrow (wavToPcmContainer wav)
   let mkLoopMarks = defineLoopMarks @Int defaultLoopMarkNames . fmap (* 6000)
       !loopMarks = mkLoopMarks (LoopMarks 1 2 3 4)
@@ -580,9 +600,9 @@ testConvertLoop = testCase "loop" $ do
   let !ne = Neutral {neCon = con, neLoopMarks = Just loopMarks, neMarks = marks}
   -- Convert and write out for inspection
   let !fullWav = neutralToWav defaultNoteNumber ne
-  BS.writeFile "testoutput/sin_mono_full.wav" (BSS.fromShort (runPut (put fullWav)))
+  encodeFile fullWav "testoutput/sin_mono_full.wav"
   sampleWav <- rethrow (neutralToSampleWav 2500 defaultNoteNumber ne)
-  BS.writeFile "testoutput/sin_mono_sample.wav" (BSS.fromShort (runPut (put sampleWav)))
+  encodeFile sampleWav "testoutput/sin_mono_sample.wav"
   -- Test full wav marks
   fullNe <- rethrow (wavToNeutral fullWav (Just defaultLoopMarkNames))
   let !actualFullLoopMarks = neLoopMarks fullNe
@@ -595,7 +615,7 @@ testConvertLoop = testCase "loop" $ do
 
 testConvertFade :: TestTree
 testConvertFade = testCase "fade" $ do
-  (wav, _) <- runGetFile (get @Wav) "testdata/fadeout_post.wav"
+  (wav, _) <- decodeFileThrow "testdata/fadeout_post.wav"
   con <- rethrow (wavToPcmContainer wav)
   let mkLoopMarks = defineLoopMarks @Int defaultLoopMarkNames . fmap (* 4410)
       !loopMarks = mkLoopMarks (LoopMarks 0 3 6 10)
@@ -603,20 +623,20 @@ testConvertFade = testCase "fade" $ do
   let !ne = Neutral {neCon = con, neLoopMarks = Just loopMarks, neMarks = marks}
   -- Convert and write out for inspection
   let !fullWav = neutralToWav defaultNoteNumber ne
-  BS.writeFile "testoutput/fadeout_full.wav" (BSS.fromShort (runPut (put fullWav)))
+  encodeFile fullWav "testoutput/fadeout_full.wav"
   sampleWav <- rethrow (neutralToSampleWav 1000 defaultNoteNumber ne)
-  BS.writeFile "testoutput/fadeout_sample.wav" (BSS.fromShort (runPut (put sampleWav)))
+  encodeFile sampleWav "testoutput/fadeout_sample.wav"
 
 testConvertDxFade :: TestTree
 testConvertDxFade = testCase "dx fade" $ do
-  (wav, _) <- runGetFile (get @Wav) "testdata/DX-EPiano1-C1.wav"
+  (wav, _) <- decodeFileThrow "testdata/DX-EPiano1-C1.wav"
   ne <- rethrow (wavToNeutral wav (Just defaultLoopMarkNames))
   neMon <- rethrow (neutralMono ne)
   -- Convert and write out for inspection
   let !fullWav = neutralToWav defaultNoteNumber neMon
-  BS.writeFile "testoutput/dx_full.wav" (BSS.fromShort (runPut (put fullWav)))
+  encodeFile fullWav "testoutput/dx_full.wav"
   sampleWav <- rethrow (neutralToSampleWav 2500 defaultNoteNumber neMon)
-  BS.writeFile "testoutput/dx_sample.wav" (BSS.fromShort (runPut (put sampleWav)))
+  encodeFile sampleWav "testoutput/dx_sample.wav"
 
 testConvert :: TestTree
 testConvert = testGroup "convert" [testConvertDx, testConvertSin, testConvertLoop, testConvertFade, testConvertDxFade]
@@ -716,7 +736,7 @@ testPatchPti = testCase "pti" $ do
   loadedSpec <- traverse (loadSamp (Just "testdata")) fileSpec
   patches <- either fail pure (instToPtiPatches "DX-EPiano1" Nothing def loadedSpec)
   Seq.length patches @?= 1
-  (expectedPti, _) <- runGetFile get "testdata/DX-EPiano1-C1.pti"
+  (expectedPti, _) <- decodeFileThrow "testdata/DX-EPiano1-C1.pti"
   patches @?= Seq.singleton (PtiPatch "DX-EPiano1-C1" (InstKeyRange 0 24 127) expectedPti)
 
 testPatches :: TestTree

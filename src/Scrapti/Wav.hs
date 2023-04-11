@@ -85,7 +85,7 @@ import Scrapti.Common
   , padCount
   , putChunkSizeLE
   )
-import Scrapti.Dsp (PcmContainer (..), PcmMeta (..))
+import Scrapti.Dsp (PcmContainer (..), PcmMeta (..), SampleCount (..))
 import Scrapti.Riff (Chunk (..), ChunkLabel (..), KnownChunk (..), KnownListChunk (..), labelRiff, peekChunkLabel)
 
 labelWave, labelFmt, labelData, labelInfo, labelAdtl, labelCue, labelNote, labelLabl, labelLtxt, labelSmpl :: Label
@@ -516,7 +516,7 @@ wavToPcmContainer wav = do
   let !nc = fromIntegral (wfbNumChannels fmtBody)
       !bps = fromIntegral (wfbBitsPerSample fmtBody)
       !sr = fromIntegral (wfbSampleRate fmtBody)
-      !ns = div (sizeofByteArray arr) (nc * div bps 8)
+      !ns = SampleCount (div (sizeofByteArray arr) (nc * div bps 8))
       !meta = PcmMeta nc ns bps sr
   pure $! PcmContainer meta arr
 

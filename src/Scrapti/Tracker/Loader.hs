@@ -2,7 +2,7 @@ module Scrapti.Tracker.Loader where
 
 import Control.Exception (Exception, throwIO)
 import Control.Monad (unless, (>=>))
-import Dahdit (Binary (..), GetError, runGet, runPut)
+import Dahdit (Binary (..), ByteSized, GetError, decode, encodeFile)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
 import Data.Foldable (for_)
@@ -98,7 +98,7 @@ runGetRes :: Binary a => FilePath -> Res -> FilePath -> IO a
 runGetRes projDir res resPart = do
   let resFile = projDir </> resPart
   bs <- fmap BSS.toShort (BS.readFile resFile)
-  let (ea, _) = runGet get bs
+  let (ea, _) = decode bs
   case ea of
     Left e -> throwIO (LoadErrorBadResGet projDir res resPart e)
     Right a -> pure a
@@ -132,27 +132,24 @@ enrichProject projPath =
 loadRichProject :: FilePath -> IO RichProject
 loadRichProject projPath = loadBareProject projPath >>= enrichProject projPath
 
-runPutRes :: Binary a => FilePath -> a -> FilePath -> IO ()
-runPutRes projDir val resPath =
-  let resFile = projDir </> resPath
-      bs = BSS.fromShort (runPut (put val))
-  in  BS.writeFile resFile bs
+encodeRes :: (Binary a, ByteSized a) => FilePath -> a -> FilePath -> IO ()
+encodeRes projDir val resPath = encodeFile val (projDir </> resPath)
 
 saveSong :: FilePath -> Project Mt i p -> IO ()
 saveSong projDir proj = do
   let s = projectSong proj
   failCheckedCode "saved song" (unMt s)
-  runPutRes projDir s "project.mt"
+  encodeRes projDir s "project.mt"
 
 saveInstruments :: FilePath -> Project s (String, Pti) p -> IO ()
 saveInstruments projDir proj = for_ (Map.toList (projectInsts proj)) $ \(i, (n, x)) -> do
   failCheckedCode "saved instrument" (ptiHeader x)
-  runPutRes projDir x (renderInstPart i n)
+  encodeRes projDir x (renderInstPart i n)
 
 savePatterns :: FilePath -> Project s i Mtp -> IO ()
 savePatterns projDir proj = for_ (Map.toList (projectPats proj)) $ \(i, x) -> do
   failCheckedCode "saved pattern" (unMtp x)
-  runPutRes projDir x (renderPatPart i)
+  encodeRes projDir x (renderPatPart i)
 
 data Overwrite
   = OverwriteNo

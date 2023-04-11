@@ -8,5 +8,8 @@ packages:
 
 extra-deps:
 - aeson-via-0.2.1
-- dahdit-0.1.1
+# TODO use dahdit from hackage when released
+# - dahdit-0.2.0
+- git: git@github.com:ejconlon/dahdit.git
+  commit: f517f40fddcd02bec7f1306eb33bfcb66bfc3f1e
 - data-sword-0.2.0.3
