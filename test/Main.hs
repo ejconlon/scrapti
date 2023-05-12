@@ -6,7 +6,6 @@ import Control.Exception (Exception, throwIO)
 import Control.Monad ((>=>))
 import Dahdit
   ( Binary (..)
-  , BinaryTarget (..)
   , ByteCount
   , ByteSized
   , ElemCount (..)
@@ -24,6 +23,7 @@ import Dahdit
   , encodeFile
   , getExact
   , getSkip
+  , getTarget
   , getWord32LE
   , lengthLiftedPrimArray
   , liftedPrimArrayFromList
