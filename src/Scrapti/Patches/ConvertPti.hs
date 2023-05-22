@@ -17,6 +17,7 @@ import Data.Sequence (Seq)
 import Data.Text (Text)
 import qualified Data.Text.Encoding as TE
 import Data.Traversable (for)
+import Scrapti.Binary (QuietArray (..))
 import Scrapti.Dsp (PcmContainer (..), PcmMeta (pmNumSamples), applyModGeneric, crop, linearCrossFade)
 import Scrapti.Midi.Notes (Interval (..), LinNote (..), NotePref (..), linSubInterval, linToOct, renderNote)
 import Scrapti.Patches.Inst
@@ -251,7 +252,7 @@ instRegionToPti namePrefix mayCenterNote tempo instConfig instRegion = do
     Just (InstCrop start end) ->
       let ea = applyModGeneric (crop (fromInteger start) (fromInteger end)) con
       in  either (Left . show) pure ea
-  let samp = LiftedPrimArray (pcData con'')
+  let samp = LiftedPrimArray (unQuietArray (pcData con''))
   let pti = mkPti header samp
   pure (name, pti)
 

@@ -1,5 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE NoStarIsType #-}
+{-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 
 module Scrapti.Aiff
   ( PascalString (..)
@@ -24,14 +27,13 @@ import Dahdit
   ( Binary (..)
   , ByteArray
   , ByteCount (..)
-  , ByteSized (..)
   , Get
   , Put
   , ShortByteString
   , StaticByteSized (..)
   , StaticBytes (..)
   , ViaGeneric (..)
-  , ViaStaticByteSized (..)
+  , ViaStaticGeneric (..)
   , Word16BE
   , Word32BE (..)
   , byteSizeFoldable
@@ -61,11 +63,16 @@ import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
 import Data.Word (Word8)
 import GHC.Generics (Generic)
+import GHC.TypeLits (type (*), type (+))
 import Scrapti.Binary (QuietArray (..))
 import Scrapti.Common
-  ( ConvertErr
+  ( ChunkHeaderSize
+  , ConvertErr
+  , CountSize
   , KnownLabel (..)
   , Label
+  , LabelSize
+  , PadCount
   , SimpleMarker (..)
   , UnparsedBody
   , chunkHeaderSize
@@ -105,16 +112,14 @@ data Chunk a = Chunk
   }
   deriving stock (Eq, Show)
 
-chunkUnpaddedByteSize :: ByteSized a => Chunk a -> ByteCount
+chunkUnpaddedByteSize :: Binary a => Chunk a -> ByteCount
 chunkUnpaddedByteSize (Chunk _ body) = byteSize body
 
-instance ByteSized a => ByteSized (Chunk a) where
-  byteSize c = padCount (chunkHeaderSize + chunkUnpaddedByteSize c)
-
 instance StaticByteSized a => StaticByteSized (Chunk a) where
-  staticByteSize _ = padCount (chunkHeaderSize + staticByteSize (Proxy :: Proxy a))
+  type StaticSize (Chunk a) = PadCount (ChunkHeaderSize + StaticSize a)
 
-instance (Binary a, ByteSized a) => Binary (Chunk a) where
+instance (Binary a) => Binary (Chunk a) where
+  byteSize c = padCount (chunkHeaderSize + chunkUnpaddedByteSize c)
   get = do
     lab <- get
     usz <- getChunkSizeBE
@@ -134,16 +139,14 @@ newtype KnownChunk a = KnownChunk
   deriving stock (Show)
   deriving newtype (Eq, Default)
 
-knownChunkUnpaddedByteSize :: ByteSized a => KnownChunk a -> ByteCount
+knownChunkUnpaddedByteSize :: Binary a => KnownChunk a -> ByteCount
 knownChunkUnpaddedByteSize (KnownChunk body) = byteSize body
 
-instance ByteSized a => ByteSized (KnownChunk a) where
-  byteSize kc = padCount (chunkHeaderSize + knownChunkUnpaddedByteSize kc)
-
 instance StaticByteSized a => StaticByteSized (KnownChunk a) where
-  staticByteSize _ = padCount (chunkHeaderSize + staticByteSize (Proxy :: Proxy a))
+  type StaticSize (KnownChunk a) = PadCount (ChunkHeaderSize + StaticSize a)
 
-instance (Binary a, KnownLabel a, ByteSized a) => Binary (KnownChunk a) where
+instance (Binary a, KnownLabel a) => Binary (KnownChunk a) where
+  byteSize kc = padCount (chunkHeaderSize + knownChunkUnpaddedByteSize kc)
   get = do
     getExpectLabel (knownLabel (Proxy :: Proxy a))
     usz <- getChunkSizeBE
@@ -166,10 +169,8 @@ newtype PascalString = PascalString {unPascalString :: ShortByteString}
 instance Default PascalString where
   def = PascalString BSS.empty
 
-instance ByteSized PascalString where
-  byteSize (PascalString sbs) = padCount (byteSize sbs + 1)
-
 instance Binary PascalString where
+  byteSize (PascalString sbs) = padCount (ByteCount (BSS.length sbs + 1))
   get = do
     usz <- fmap fromIntegral getWord8
     sbs <- getByteString usz
@@ -187,7 +188,7 @@ notCompressed = PascalString (BSS.toShort (BSC.pack "not compressed"))
 -- | "80 bit IEEE Standard 754 floating point number"
 newtype ExtendedFloat = ExtendedFloat {unExtendedFloat :: StaticBytes 10}
   deriving stock (Show)
-  deriving newtype (Eq, Default, ByteSized, StaticByteSized, Binary)
+  deriving newtype (Eq, Default, StaticByteSized, Binary)
 
 data AiffCommonBody = AiffCommonBody
   { aceNumChannels :: !Word16BE
@@ -198,7 +199,7 @@ data AiffCommonBody = AiffCommonBody
   , aceCompressionName :: !PascalString
   }
   deriving stock (Eq, Show, Generic)
-  deriving (ByteSized, Binary) via (ViaGeneric AiffCommonBody)
+  deriving (Binary) via (ViaGeneric AiffCommonBody)
 
 instance KnownLabel AiffCommonBody where
   knownLabel _ = labelComm
@@ -212,7 +213,7 @@ data AiffCommonBodyOld = AiffCommonBodyOld
   , aceoSampleRate :: !ExtendedFloat
   }
   deriving stock (Eq, Show, Generic)
-  deriving (ByteSized, Binary) via (ViaGeneric AiffCommonBodyOld)
+  deriving (Binary) via (ViaStaticGeneric AiffCommonBodyOld)
 
 instance KnownLabel AiffCommonBodyOld where
   knownLabel _ = labelComm
@@ -242,10 +243,8 @@ data AiffDataBody = AiffDataBody
   }
   deriving stock (Eq, Show, Generic)
 
-instance ByteSized AiffDataBody where
-  byteSize (AiffDataBody _ _ (QuietArray arr)) = 8 + fromIntegral (sizeofByteArray arr)
-
 instance Binary AiffDataBody where
+  byteSize (AiffDataBody _ _ (QuietArray arr)) = 8 + fromIntegral (sizeofByteArray arr)
   get = do
     adbOffset <- get
     unless (adbOffset == 0) (fail "need zero offset")
@@ -272,7 +271,7 @@ data AiffMark = AiffMark
   , amName :: !PascalString
   }
   deriving stock (Eq, Show, Generic)
-  deriving (ByteSized, Binary) via (ViaGeneric AiffMark)
+  deriving (Binary) via (ViaGeneric AiffMark)
 
 newtype AiffMarkBody = AiffMarkBody
   { ambMarkers :: Seq AiffMark
@@ -280,10 +279,8 @@ newtype AiffMarkBody = AiffMarkBody
   deriving stock (Show)
   deriving newtype (Eq)
 
-instance ByteSized AiffMarkBody where
-  byteSize (AiffMarkBody marks) = 2 + byteSizeFoldable marks
-
 instance Binary AiffMarkBody where
+  byteSize (AiffMarkBody marks) = 2 + byteSizeFoldable marks
   get = do
     ec <- fmap fromIntegral getWord16BE
     marks <- getSeq ec get
@@ -308,15 +305,6 @@ data AiffChunk
   | AiffChunkUnparsed !AiffUnparsedChunk
   deriving stock (Eq, Show, Generic)
 
-instance ByteSized AiffChunk where
-  byteSize = \case
-    AiffChunkCommon x -> byteSize x
-    AiffChunkData x -> byteSize x
-    AiffChunkVersion x -> byteSize x
-    AiffChunkAnno x -> byteSize x
-    AiffChunkMark x -> byteSize x
-    AiffChunkUnparsed x -> byteSize x
-
 getChunk :: Variant -> Get AiffChunk
 getChunk variant = do
   label <- getLookAhead get
@@ -338,6 +326,13 @@ putChunk variant = \case
   AiffChunkUnparsed x -> put x
 
 instance Binary AiffChunk where
+  byteSize = \case
+    AiffChunkCommon x -> byteSize x
+    AiffChunkData x -> byteSize x
+    AiffChunkVersion x -> byteSize x
+    AiffChunkAnno x -> byteSize x
+    AiffChunkMark x -> byteSize x
+    AiffChunkUnparsed x -> byteSize x
   get = getChunk VariantAifc
   put = putChunk VariantAifc
 
@@ -349,12 +344,14 @@ data AiffHeader = AiffHeader
   , ahRemainingSize :: ByteCount
   }
   deriving stock (Eq, Show, Generic)
-  deriving (ByteSized) via (ViaStaticByteSized AiffHeader)
+
+type AiffHeaderSize = 2 * LabelSize + CountSize
 
 aiffHeaderSize :: ByteCount
 aiffHeaderSize = 2 * labelSize + countSize
 
 instance StaticByteSized AiffHeader where
+  type StaticSize AiffHeader = AiffHeaderSize
   staticByteSize _ = aiffHeaderSize
 
 instance Binary AiffHeader where
@@ -381,10 +378,8 @@ data Aiff = Aiff
   }
   deriving stock (Eq, Show)
 
-instance ByteSized Aiff where
-  byteSize (Aiff _ chunks) = aiffHeaderSize + byteSizeFoldable chunks
-
 instance Binary Aiff where
+  byteSize (Aiff _ chunks) = aiffHeaderSize + byteSizeFoldable chunks
   get = do
     AiffHeader variant remSz <- get
     chunks <- getExact remSz (getRemainingSeq (getChunk variant))
@@ -467,7 +462,7 @@ aiffToPcmContainer sr aiff = do
       !ns = fromIntegral (aceNumSampleFrames commBody)
       !bps = fromIntegral (aceSampleSize commBody)
       !meta = PcmMeta nc ns bps sr
-      !arr = unQuietArray (adbSoundData dataBody)
+      !arr = adbSoundData dataBody
   pure $! PcmContainer meta arr
 
 aiffGatherMarkers :: Aiff -> Seq SimpleMarker

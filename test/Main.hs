@@ -7,7 +7,6 @@ import Control.Monad ((>=>))
 import Dahdit
   ( Binary (..)
   , ByteCount
-  , ByteSized
   , ElemCount (..)
   , Get
   , Int16LE (..)
@@ -253,7 +252,7 @@ testWavWrite = testCase "write" $ do
   bs' @?= bs
 
 testWavWrite2 :: TestTree
-testWavWrite2 = testCase "write" $ do
+testWavWrite2 = testCase "write 2" $ do
   bs <- readShort "testdata/DX-EPiano1-C1.wav"
   (wav, bc) <- decodeThrow bs
   byteSize wav @?= bc
@@ -273,6 +272,13 @@ testAiff = testCase "aiff" $ do
   for_ (aiffChunks aiff) assertReparses
   let bs' = encode aiff
   fromIntegral (BSS.length bs') @?= bc
+  bs' @?= bs
+
+testAiff2 :: TestTree
+testAiff2 = testCase "aiff2" $ do
+  bs <- readShort "testdata/DX-EPiano1-C1.aif"
+  (aiff :: Aiff, _) <- decodeThrow bs
+  let bs' = encode aiff
   bs' @?= bs
 
 testSfontWhole :: TestTree
@@ -489,7 +495,7 @@ testProject = testCase "project" $ do
     q <- loadRichProject path
     q @?= p
 
-assertReparses :: (ByteSized a, Binary a, Eq a, Show a) => a -> IO ()
+assertReparses :: (Binary a, Eq a, Show a) => a -> IO ()
 assertReparses a = do
   let !bs = encode a
   (a', bc) <- decodeThrow bs
@@ -512,6 +518,7 @@ testConvertDx = testCase "DX" $ do
   let !width = 2500 -- double this is 0.1s of total fade
   swav <- rethrow (neutralToSampleWav width defaultNoteNumber ne)
   assertReparses swav
+  pure ()
 
 aifSamples :: Aiff -> [Word8]
 aifSamples aif =
@@ -527,7 +534,7 @@ wavSamples wav =
 
 neutralSamples :: Neutral -> [Word8]
 neutralSamples ne =
-  let !wavData = pcData (neCon ne)
+  let !wavData = unQuietArray (pcData (neCon ne))
       !sz = sizeofByteArray wavData
   in  fmap (indexByteArray wavData) [0 .. sz - 1]
 
@@ -743,7 +750,7 @@ testPatches :: TestTree
 testPatches = testGroup "patches" [testMatchSamples, testPatchSfz, testPatchPti]
 
 testScrapti :: TestTree
-testScrapti = testGroup "Scrapti" [testWav, testAiff, testSfont, testPti, testProject, testConvert, testDsp, testOtherSizes, testPatches]
+testScrapti = testGroup "Scrapti" [testWav, testAiff, testAiff2, testSfont, testPti, testProject, testConvert, testDsp, testOtherSizes, testPatches]
 
 main :: IO ()
 main = defaultMain testScrapti

@@ -17,7 +17,7 @@ dependencies:
 - base >= 4.12 && < 5
 - bytestring >= 0.10 && < 0.12
 - containers >= 0.6 && < 0.7
-- dahdit >= 0.3 && < 0.4
+- dahdit >= 0.4 && < 0.5
 - data-default >= 0.7 && < 0.8
 - data-sword >= 0.2 && < 0.3
 - digest >= 0.0.1 && < 0.0.2
@@ -35,6 +35,8 @@ dependencies:
 - aeson-pretty >= 0.8 && < 0.9
 - optparse-applicative >= 0.16 && < 0.18
 - aeson-casing >= 0.2 && < 0.3
+# Used as build plugin
+- ghc-typelits-knownnat >= 0.7 && < 0.8
 
 default-extensions:
 - BangPatterns

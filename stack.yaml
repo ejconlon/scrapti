@@ -1,4 +1,4 @@
-resolver: lts-20.20
+resolver: lts-20.22
 
 ghc-options:
   "$everything": -haddock
@@ -8,5 +8,8 @@ packages:
 
 extra-deps:
 - aeson-via-0.2.1
-- dahdit-0.3.0
+# TODO Use Hackage version when released
+# - dahdit-0.4.0
+- git: git@github.com:ejconlon/dahdit.git
+  commit: f02a4aad80fcd65e671453f4f83589568002a355
 - data-sword-0.2.0.3

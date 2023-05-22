@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 
 module Scrapti.Riff
   ( labelRiff
@@ -20,7 +21,6 @@ import Control.Monad (unless)
 import Dahdit
   ( Binary (..)
   , ByteCount
-  , ByteSized (..)
   , Get
   , StaticByteSized (..)
   , byteSizeFoldable
@@ -34,9 +34,13 @@ import Dahdit
 import Data.Default (Default)
 import Data.Proxy (Proxy (..))
 import Data.Sequence (Seq)
+import GHC.TypeLits (Nat, type (+))
 import Scrapti.Common
-  ( KnownLabel (..)
+  ( ChunkHeaderSize
+  , KnownLabel (..)
   , Label
+  , LabelSize
+  , PadCount
   , chunkHeaderSize
   , countSize
   , getChunkSizeLE
@@ -50,6 +54,8 @@ labelRiff, labelList :: Label
 labelRiff = "RIFF"
 labelList = "LIST"
 
+type ListChunkHeaderSize = (ChunkHeaderSize + LabelSize) :: Nat
+
 listChunkHeaderSize :: ByteCount
 listChunkHeaderSize = chunkHeaderSize + labelSize
 
@@ -59,16 +65,14 @@ data Chunk a = Chunk
   }
   deriving stock (Eq, Show)
 
-chunkUnpaddedByteSize :: ByteSized a => Chunk a -> ByteCount
+chunkUnpaddedByteSize :: Binary a => Chunk a -> ByteCount
 chunkUnpaddedByteSize (Chunk _ body) = byteSize body
 
-instance ByteSized a => ByteSized (Chunk a) where
-  byteSize c = padCount (chunkHeaderSize + chunkUnpaddedByteSize c)
-
 instance StaticByteSized a => StaticByteSized (Chunk a) where
-  staticByteSize _ = padCount (chunkHeaderSize + staticByteSize (Proxy :: Proxy a))
+  type StaticSize (Chunk a) = PadCount (ChunkHeaderSize + StaticSize a)
 
-instance (Binary a, ByteSized a) => Binary (Chunk a) where
+instance Binary a => Binary (Chunk a) where
+  byteSize c = padCount (chunkHeaderSize + chunkUnpaddedByteSize c)
   get = do
     lab <- get
     usz <- getChunkSizeLE
@@ -88,16 +92,14 @@ newtype KnownChunk a = KnownChunk
   deriving stock (Show)
   deriving newtype (Eq, Default)
 
-knownChunkUnpaddedByteSize :: ByteSized a => KnownChunk a -> ByteCount
+knownChunkUnpaddedByteSize :: Binary a => KnownChunk a -> ByteCount
 knownChunkUnpaddedByteSize (KnownChunk body) = byteSize body
 
-instance ByteSized a => ByteSized (KnownChunk a) where
-  byteSize c = padCount (chunkHeaderSize + knownChunkUnpaddedByteSize c)
-
 instance StaticByteSized a => StaticByteSized (KnownChunk a) where
-  staticByteSize _ = padCount (chunkHeaderSize + staticByteSize (Proxy :: Proxy a))
+  type StaticSize (KnownChunk a) = PadCount (ChunkHeaderSize + StaticSize a)
 
-instance (Binary a, KnownLabel a, ByteSized a) => Binary (KnownChunk a) where
+instance (Binary a, KnownLabel a) => Binary (KnownChunk a) where
+  byteSize c = padCount (chunkHeaderSize + knownChunkUnpaddedByteSize c)
   get = do
     getExpectLabel (knownLabel (Proxy :: Proxy a))
     usz <- getChunkSizeLE
@@ -117,10 +119,8 @@ data ListChunkBody a = ListChunkBody
   }
   deriving stock (Eq, Show)
 
-instance ByteSized a => ByteSized (ListChunkBody a) where
-  byteSize (ListChunkBody _ items) = labelSize + byteSizeFoldable items
-
 instance Binary a => Binary (ListChunkBody a) where
+  byteSize (ListChunkBody _ items) = labelSize + byteSizeFoldable items
   get = do
     label <- get
     items <- getRemainingSeq get
@@ -134,7 +134,7 @@ instance KnownLabel (ListChunkBody a) where
 
 newtype ListChunk a = ListChunk {unListChunk :: KnownChunk (ListChunkBody a)}
   deriving stock (Show)
-  deriving newtype (Eq, ByteSized, Binary)
+  deriving newtype (Eq, Binary)
 
 newtype KnownListChunk a = KnownListChunk
   { klcItems :: Seq a
@@ -142,10 +142,8 @@ newtype KnownListChunk a = KnownListChunk
   deriving stock (Show)
   deriving newtype (Eq, Default)
 
-instance ByteSized a => ByteSized (KnownListChunk a) where
+instance (Binary a, KnownLabel a) => Binary (KnownListChunk a) where
   byteSize (KnownListChunk body) = padCount (listChunkHeaderSize + byteSizeFoldable body)
-
-instance (ByteSized a, Binary a, KnownLabel a) => Binary (KnownListChunk a) where
   get = do
     getExpectLabel labelList
     usz <- getChunkSizeLE
@@ -168,10 +166,8 @@ newtype KnownOptChunk a = KnownOptChunk
   deriving stock (Show)
   deriving newtype (Eq, Default)
 
-instance ByteSized a => ByteSized (KnownOptChunk a) where
+instance (Binary a, KnownLabel a) => Binary (KnownOptChunk a) where
   byteSize (KnownOptChunk item) = padCount (listChunkHeaderSize + byteSizeFoldable item)
-
-instance (ByteSized a, Binary a, KnownLabel a) => Binary (KnownOptChunk a) where
   get = do
     getExpectLabel labelList
     usz <- getChunkSizeLE

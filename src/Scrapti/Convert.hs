@@ -22,6 +22,7 @@ import Dahdit (Int16LE, LiftedPrim, LiftedPrimArray (..), Seq (..), decodeFile)
 import Data.Maybe (isJust)
 import qualified Data.Sequence as Seq
 import Scrapti.Aiff (Aiff, aiffGatherMarkers, aiffToPcmContainer)
+import Scrapti.Binary (QuietArray (..))
 import Scrapti.Common
   ( ConvertErr (..)
   , LoopMarkNames
@@ -174,6 +175,6 @@ readPtiWav mayNames fp = do
   unless
     (pmNumChannels meta == 1 && pmSampleRate meta == 44100 && pmBitsPerSample meta == 16)
     (fail ("bad pti wav: " ++ fp))
-  let !arr = LiftedPrimArray (pcData (neCon ne))
+  let !arr = LiftedPrimArray (unQuietArray (pcData (neCon ne)))
       !points = neLoopMarks ne
   pure (arr, points)

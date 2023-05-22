@@ -1,5 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE NoStarIsType #-}
 
 module Scrapti.Wav
   ( PaddedString (..)
@@ -37,11 +39,9 @@ where
 import Control.Monad (unless)
 import Dahdit
   ( Binary (..)
-  , ByteCount
-  , ByteSized (..)
+  , ByteCount (..)
   , ShortByteString
   , StaticByteSized (..)
-  , ViaStaticByteSized (..)
   , ViaStaticGeneric (..)
   , Word16LE
   , Word32LE (..)
@@ -65,17 +65,18 @@ import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
 import Data.String (IsString)
 import GHC.Generics (Generic)
+import GHC.TypeLits (Nat, type (*), type (+))
 import Scrapti.Binary (QuietArray (..))
 import Scrapti.Common
   ( ConvertErr
+  , CountSize
   , KnownLabel (..)
   , Label
+  , LabelSize
   , LoopMarkPoints
   , LoopMarks (..)
   , SimpleMarker (..)
   , UnparsedBody (..)
-  , bssInit
-  , bssLast
   , countSize
   , dedupeSimpleMarkers
   , getChunkSizeLE
@@ -108,17 +109,15 @@ newtype PaddedString = PaddedString {unPaddedString :: ShortByteString}
 instance Default PaddedString where
   def = PaddedString BSS.empty
 
-instance ByteSized PaddedString where
-  byteSize (PaddedString sbs) = padCount (byteSize sbs)
-
 mkPaddedString :: ShortByteString -> PaddedString
 mkPaddedString sbs =
   PaddedString $
-    if not (BSS.null sbs) && bssLast sbs == 0
-      then bssInit sbs
+    if not (BSS.null sbs) && BSS.last sbs == 0
+      then BSS.init sbs
       else sbs
 
 instance Binary PaddedString where
+  byteSize (PaddedString sbs) = padCount (ByteCount (BSS.length sbs))
   get = do
     sbs <- getRemainingString
     pure $! mkPaddedString sbs
@@ -139,9 +138,6 @@ data WavFormatBody = WavFormatBody
 instance Default WavFormatBody where
   def = WavFormatBody 1 1 44100 16 mempty
 
-instance ByteSized WavFormatBody where
-  byteSize wf = 16 + byteSize (wfbExtra wf)
-
 isSupportedBPS :: Word16LE -> Bool
 isSupportedBPS w = mod w 8 == 0 && w <= 64
 
@@ -149,6 +145,7 @@ isSupportedFmtExtraSize :: ByteCount -> Bool
 isSupportedFmtExtraSize x = x == 0 || x == 2 || x == 24
 
 instance Binary WavFormatBody where
+  byteSize wf = 16 + ByteCount (BSS.length (wfbExtra wf))
   get = do
     formatType <- get
     numChannels <- get
@@ -160,7 +157,7 @@ instance Binary WavFormatBody where
     unless (bpsSlice == div bps 8 * numChannels) (fail ("Bad bps slice: " ++ show bpsSlice))
     unless (bpsAvg == sampleRate * fromIntegral bpsSlice) (fail ("Bad average bps: " ++ show bpsAvg))
     extra <- getRemainingString
-    let !extraLen = byteSize extra
+    let !extraLen = ByteCount (BSS.length extra)
     unless (isSupportedFmtExtraSize extraLen) (fail ("Bad extra length: " ++ show extraLen))
     pure $! WavFormatBody formatType numChannels sampleRate bps extra
   put (WavFormatBody fty nchan sr bps extra) = do
@@ -186,10 +183,8 @@ newtype WavDataBody = WavDataBody {unWavDataBody :: QuietArray}
 instance KnownLabel WavDataBody where
   knownLabel _ = labelData
 
-instance ByteSized WavDataBody where
-  byteSize (WavDataBody (QuietArray arr)) = fromIntegral (sizeofByteArray arr)
-
 instance Binary WavDataBody where
+  byteSize (WavDataBody (QuietArray arr)) = fromIntegral (sizeofByteArray arr)
   get = fmap (WavDataBody . QuietArray) getRemainingByteArray
   put (WavDataBody (QuietArray arr)) = putByteArray arr
 
@@ -201,10 +196,8 @@ data WavInfoElem = WavInfoElem
   }
   deriving stock (Eq, Show)
 
-instance ByteSized WavInfoElem where
-  byteSize (WavInfoElem _ val) = labelSize + countSize + byteSize val
-
 instance Binary WavInfoElem where
+  byteSize (WavInfoElem _ val) = labelSize + countSize + byteSize val
   get = do
     key <- get
     sz <- getChunkSizeLE
@@ -228,11 +221,11 @@ data WavAdtlData
   | WavAdtlDataLtxt !PaddedString
   deriving stock (Eq, Show)
 
-instance ByteSized WavAdtlData where
-  byteSize = \case
-    WavAdtlDataLabl bs -> byteSize bs
-    WavAdtlDataNote bs -> byteSize bs
-    WavAdtlDataLtxt bs -> byteSize bs
+byteSizeWavAdtlData :: WavAdtlData -> ByteCount
+byteSizeWavAdtlData = \case
+  WavAdtlDataLabl bs -> byteSize bs
+  WavAdtlDataNote bs -> byteSize bs
+  WavAdtlDataLtxt bs -> byteSize bs
 
 wadString :: WavAdtlData -> ShortByteString
 wadString = \case
@@ -246,10 +239,8 @@ data WavAdtlElem = WavAdtlElem
   }
   deriving stock (Eq, Show)
 
-instance ByteSized WavAdtlElem where
-  byteSize (WavAdtlElem _ dat) = 12 + byteSize dat
-
 instance Binary WavAdtlElem where
+  byteSize (WavAdtlElem _ dat) = 12 + byteSizeWavAdtlData dat
   get = do
     lab <- get
     sz <- getChunkSizeLE
@@ -269,7 +260,7 @@ instance Binary WavAdtlElem where
       WavAdtlDataLabl _ -> labelLabl
       WavAdtlDataNote _ -> labelNote
       WavAdtlDataLtxt _ -> labelLtxt
-    putChunkSizeLE (4 + byteSize dat)
+    putChunkSizeLE (4 + byteSizeWavAdtlData dat)
     put cueId
     case dat of
       WavAdtlDataLabl bs -> put bs
@@ -291,16 +282,17 @@ data WavCuePoint = WavCuePoint
   }
   deriving stock (Eq, Show)
 
+type CuePointSize = 24 :: Nat
+
 cuePointSize :: ByteCount
 cuePointSize = 24
 
-instance ByteSized WavCuePoint where
-  byteSize _ = cuePointSize
-
 instance StaticByteSized WavCuePoint where
+  type StaticSize WavCuePoint = CuePointSize
   staticByteSize _ = cuePointSize
 
 instance Binary WavCuePoint where
+  byteSize _ = cuePointSize
   get = do
     wcpPointId <- get
     wcpPosition <- get
@@ -322,10 +314,8 @@ newtype WavCueBody = WavCueBody
   }
   deriving stock (Eq, Show)
 
-instance ByteSized WavCueBody where
-  byteSize (WavCueBody points) = countSize + fromIntegral (Seq.length points) * cuePointSize
-
 instance Binary WavCueBody where
+  byteSize (WavCueBody points) = countSize + fromIntegral (Seq.length points) * cuePointSize
   get = do
     count <- get @Word32LE
     points <- getSeq (fromIntegral count) get
@@ -348,7 +338,7 @@ data WavSampleLoop = WavSampleLoop
   , wslNumPlays :: !Word32LE
   }
   deriving stock (Eq, Show, Generic)
-  deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric WavSampleLoop)
+  deriving (StaticByteSized, Binary) via (ViaStaticGeneric WavSampleLoop)
 
 -- See https://www.recordingblogs.com/wiki/sample-chunk-of-a-wave-file
 -- for explanation of sample period - for 44100 sr it's 0x00005893
@@ -364,10 +354,8 @@ data WavSampleBody = WavSampleBody
   }
   deriving stock (Eq, Show)
 
-instance ByteSized WavSampleBody where
-  byteSize wsb = 32 + byteSize (wsbSampleLoops wsb)
-
 instance Binary WavSampleBody where
+  byteSize wsb = 32 + byteSize (wsbSampleLoops wsb)
   get = do
     wsbManufacturer <- get
     wsbProduct <- get
@@ -407,7 +395,7 @@ data WavChunk
   | WavChunkUnparsed !WavUnparsedChunk
   deriving stock (Eq, Show)
 
-instance ByteSized WavChunk where
+instance Binary WavChunk where
   byteSize = \case
     WavChunkFormat x -> byteSize x
     WavChunkData x -> byteSize x
@@ -417,7 +405,6 @@ instance ByteSized WavChunk where
     WavChunkSample x -> byteSize x
     WavChunkUnparsed x -> byteSize x
 
-instance Binary WavChunk where
   get = do
     chunkLabel <- peekChunkLabel
     case chunkLabel of
@@ -442,12 +429,14 @@ newtype WavHeader = WavHeader
   }
   deriving stock (Show)
   deriving newtype (Eq)
-  deriving (ByteSized) via (ViaStaticByteSized WavHeader)
+
+type WavHeaderSize = 2 * LabelSize + CountSize
 
 wavHeaderSize :: ByteCount
 wavHeaderSize = 2 * labelSize + countSize
 
 instance StaticByteSized WavHeader where
+  type StaticSize WavHeader = WavHeaderSize
   staticByteSize _ = wavHeaderSize
 
 instance Binary WavHeader where
@@ -466,10 +455,8 @@ newtype Wav = Wav
   }
   deriving stock (Eq, Show)
 
-instance ByteSized Wav where
-  byteSize (Wav chunks) = wavHeaderSize + byteSizeFoldable chunks
-
 instance Binary Wav where
+  byteSize (Wav chunks) = wavHeaderSize + byteSizeFoldable chunks
   get = do
     WavHeader remSz <- get
     chunks <- getExact remSz (getRemainingSeq get)
@@ -512,13 +499,13 @@ lookupWavAdtlChunk w =
 wavToPcmContainer :: Wav -> Either ConvertErr PcmContainer
 wavToPcmContainer wav = do
   KnownChunk fmtBody <- guardChunk "format" (lookupWavFormatChunk wav)
-  KnownChunk (WavDataBody (QuietArray arr)) <- guardChunk "data" (lookupWavDataChunk wav)
+  KnownChunk (WavDataBody qa@(QuietArray arr)) <- guardChunk "data" (lookupWavDataChunk wav)
   let !nc = fromIntegral (wfbNumChannels fmtBody)
       !bps = fromIntegral (wfbBitsPerSample fmtBody)
       !sr = fromIntegral (wfbSampleRate fmtBody)
       !ns = SampleCount (div (sizeofByteArray arr) (nc * div bps 8))
       !meta = PcmMeta nc ns bps sr
-  pure $! PcmContainer meta arr
+  pure $! PcmContainer meta qa
 
 wavFromPcmContainer :: PcmContainer -> Wav
 wavFromPcmContainer (PcmContainer (PcmMeta {..}) arr) =
@@ -531,7 +518,7 @@ wavFromPcmContainer (PcmContainer (PcmMeta {..}) arr) =
           , wfbExtra = mempty
           }
       fmtChunk = WavChunkFormat (KnownChunk fmtBody)
-      dataChunk = WavChunkData (KnownChunk (WavDataBody (QuietArray arr)))
+      dataChunk = WavChunkData (KnownChunk (WavDataBody arr))
   in  Wav (Seq.fromList [fmtChunk, dataChunk])
 
 wcpFromMarker :: Int -> SimpleMarker -> WavCuePoint

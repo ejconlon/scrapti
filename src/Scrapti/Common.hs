@@ -2,6 +2,8 @@
 
 module Scrapti.Common
   ( rethrow
+  , LabelSize
+  , CountSize
   , Label
   , labelSize
   , countSize
@@ -12,12 +14,12 @@ module Scrapti.Common
   , getChunkSizeBE
   , expectChunkSizeBE
   , putChunkSizeBE
+  , ChunkHeaderSize
   , chunkHeaderSize
   , KnownLabel (..)
   , UnparsedBody (..)
+  , PadCount
   , padCount
-  , bssLast
-  , bssInit
   , SimpleMarker (..)
   , dedupeSimpleMarkers
   , ConvertErr (..)
@@ -42,13 +44,11 @@ import Control.Monad (unless)
 import Dahdit
   ( Binary (..)
   , ByteCount
-  , ByteSized (..)
   , Get
   , Put
   , StaticBytes
   , Word32BE
   , Word32LE
-  , Word8
   , getExpect
   , getRemainingString
   , putByteString
@@ -60,12 +60,17 @@ import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 import Data.Word (Word32)
+import GHC.TypeLits (Mod, Nat, type (+))
 import Scrapti.Dsp (DspErr)
 
 rethrow :: Exception e => Either e a -> IO a
 rethrow = either throwIO pure
 
-type Label = StaticBytes 4
+type LabelSize = 4 :: Nat
+
+type CountSize = 4 :: Nat
+
+type Label = StaticBytes LabelSize
 
 labelSize, countSize :: ByteCount
 labelSize = 4
@@ -92,6 +97,8 @@ expectChunkSizeBE = getExpect "chunk size" getChunkSizeBE
 putChunkSizeBE :: ByteCount -> Put
 putChunkSizeBE = put @Word32BE . fromIntegral
 
+type ChunkHeaderSize = 8 :: Nat
+
 chunkHeaderSize :: ByteCount
 chunkHeaderSize = 8
 
@@ -104,25 +111,15 @@ newtype UnparsedBody = UnparsedBody
   deriving stock (Show)
   deriving newtype (Eq)
 
-instance ByteSized UnparsedBody where
-  byteSize (UnparsedBody bs) = byteSize bs
-
 instance Binary UnparsedBody where
+  byteSize (UnparsedBody bs) = fromIntegral (BSS.length bs)
   get = fmap UnparsedBody getRemainingString
   put (UnparsedBody bs) = putByteString bs
 
+type PadCount (n :: Nat) = n + Mod n 2
+
 padCount :: ByteCount -> ByteCount
 padCount bc = if even bc then bc else bc + 1
-
--- NOTE: Remove this when BS lib is updated
-bssLast :: ShortByteString -> Word8
--- bssLast = BSS.last
-bssLast sbs = BSS.index sbs (BSS.length sbs - 1)
-
--- NOTE: Remove this when BS lib is updated
-bssInit :: ShortByteString -> ShortByteString
--- bssInit = BSS.init
-bssInit = BSS.pack . init . BSS.unpack
 
 data SimpleMarker = SimpleMarker
   { smName :: !ShortByteString

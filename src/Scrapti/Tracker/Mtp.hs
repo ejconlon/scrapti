@@ -1,9 +1,11 @@
+{-# LANGUAGE UndecidableInstances #-}
+{-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
+
 module Scrapti.Tracker.Mtp where
 
 import Dahdit
   ( Binary
   , BinaryRep (..)
-  , ByteSized
   , ExactBytes
   , StaticByteSized
   , StaticBytes
@@ -22,7 +24,7 @@ data FxType
   | FxTypeChord
   | FxTypeArp
   deriving stock (Eq, Show)
-  deriving (ByteSized, StaticByteSized, Binary) via (ViaBinaryRep FxType)
+  deriving (StaticByteSized, Binary) via (ViaBinaryRep Word8 FxType)
 
 instance BinaryRep Word8 FxType where
   fromBinaryRep = error "TODO"
@@ -35,18 +37,18 @@ instance BinaryRep Word8 FxType where
 
 newtype Note = Node {unNode :: Word8}
   deriving stock (Show)
-  deriving newtype (Eq, ByteSized, StaticByteSized, Binary)
+  deriving newtype (Eq, StaticByteSized, Binary)
 
 newtype Inst = Inst {unInst :: Word8}
   deriving stock (Show)
-  deriving newtype (Eq, ByteSized, StaticByteSized, Binary)
+  deriving newtype (Eq, StaticByteSized, Binary)
 
 data Fx = Fx
   { fxType :: !FxType
   , fxValue :: !Word8
   }
   deriving stock (Eq, Show, Generic)
-  deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Fx)
+  deriving (StaticByteSized, Binary) via (ViaStaticGeneric Fx)
 
 data Step = Step
   { stepNote :: !Note
@@ -55,7 +57,7 @@ data Step = Step
   , stepFx2 :: !Fx
   }
   deriving stock (Eq, Show, Generic)
-  deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Step)
+  deriving (StaticByteSized, Binary) via (ViaStaticGeneric Step)
 
 -- TODO
 data Track = Track
@@ -63,18 +65,18 @@ data Track = Track
   , trackFake :: !()
   }
   deriving stock (Eq, Show, Generic)
-  deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Track)
+  deriving (StaticByteSized, Binary) via (ViaStaticGeneric Track)
 
 instance Default Track where
   def = Track def def
 
 data MtpBody = MtpBody
-  { mtpbFileType :: !(ExactBytes "KS")
+  { mtpbFileType :: !(ExactBytes 2 "KS")
   , mtpbAux2To28 :: !(StaticBytes 26)
   , mtpbPattern :: !(StaticSeq 8 Track)
   }
   deriving stock (Eq, Show, Generic)
-  deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric MtpBody)
+  deriving (StaticByteSized, Binary) via (ViaStaticGeneric MtpBody)
 
 -- TODO
 instance Default MtpBody where
@@ -82,7 +84,7 @@ instance Default MtpBody where
 
 newtype Mtp = Mtp {unMtp :: Checked MtpBody}
   deriving stock (Show)
-  deriving newtype (Eq, ByteSized, StaticByteSized, Binary)
+  deriving newtype (Eq, StaticByteSized, Binary)
 
 instance Default Mtp where
   def = Mtp (mkChecked def)

@@ -43,8 +43,9 @@ import Dahdit
   )
 import Data.Bits (Bits (..))
 import Data.Coerce (coerce)
-import Data.Primitive.ByteArray (ByteArray, sizeofByteArray)
+import Data.Primitive.ByteArray (sizeofByteArray)
 import Data.Proxy (Proxy (..))
+import Scrapti.Binary (QuietArray (..))
 
 newtype SampleCount = SampleCount {unSampleCount :: Int}
   deriving stock (Show)
@@ -238,7 +239,7 @@ data PcmMeta = PcmMeta
 
 data PcmContainer = PcmContainer
   { pcMeta :: !PcmMeta
-  , pcData :: !ByteArray
+  , pcData :: !QuietArray
   }
   deriving stock (Eq, Show)
 
@@ -246,7 +247,7 @@ pmToMm :: PcmMeta -> ModMeta
 pmToMm (PcmMeta {..}) = ModMeta {mmNumChannels = pmNumChannels, mmBitsPerSample = pmBitsPerSample, mmSampleRate = pmSampleRate}
 
 toLifted :: LiftedPrim a => Proxy a -> PcmContainer -> Either DspErr (ModMeta, LiftedPrimArray a)
-toLifted prox (PcmContainer pm arr) = do
+toLifted prox (PcmContainer pm (QuietArray arr)) = do
   let !elemSize = staticByteSize prox
   let !actualNs = coerce (div (sizeofByteArray arr) (coerce elemSize * pmNumChannels pm))
   unless (coerce elemSize * 8 == pmBitsPerSample pm && actualNs == pmNumSamples pm) (Left DspErrBadElemSize)
@@ -264,7 +265,7 @@ fromLifted mm larr@(LiftedPrimArray arr) = do
       !extraElems = rem (sizeofByteArray arr) (coerce elemSize * nc)
   unless (extraElems == 0) (Left DspErrBadElemSize)
   let !pm = PcmMeta nc ns bps sr
-  Right $! PcmContainer pm arr
+  Right $! PcmContainer pm (QuietArray arr)
 
 proxyFromFirst :: m a b -> Proxy a
 proxyFromFirst _ = Proxy

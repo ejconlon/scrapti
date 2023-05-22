@@ -1,20 +1,22 @@
+{-# LANGUAGE UndecidableInstances #-}
+
 module Scrapti.Tracker.Mt
   ( MtBody (..)
   , Mt (..)
   )
 where
 
-import Dahdit (Binary, ByteSized, ExactBytes, StaticByteSized, StaticBytes, ViaStaticGeneric (..))
+import Dahdit (Binary, ExactBytes, StaticByteSized, StaticBytes, ViaStaticGeneric (..))
 import GHC.Generics (Generic)
 import Scrapti.Tracker.Checked (Checked (..))
 
 data MtBody = MtBody
-  { mtbFileType :: !(ExactBytes "MT")
+  { mtbFileType :: !(ExactBytes 2 "MT")
   , mtbAux2To1792 :: !(StaticBytes 1790)
   }
   deriving stock (Eq, Show, Generic)
-  deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric MtBody)
+  deriving (StaticByteSized, Binary) via (ViaStaticGeneric MtBody)
 
 newtype Mt = Mt {unMt :: Checked MtBody}
   deriving stock (Show)
-  deriving newtype (Eq, ByteSized, StaticByteSized, Binary)
+  deriving newtype (Eq, StaticByteSized, Binary)

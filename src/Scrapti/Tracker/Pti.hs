@@ -1,5 +1,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 
 module Scrapti.Tracker.Pti
   ( WavetableWindowSize (..)
@@ -32,7 +34,6 @@ import Dahdit
   ( Binary (..)
   , BinaryRep (..)
   , BoolByte (..)
-  , ByteSized (..)
   , ExactBytes
   , FloatLE
   , Int16LE
@@ -49,6 +50,7 @@ import Dahdit
   , getLiftedPrimArray
   , getRemainingLiftedPrimArray
   , putLiftedPrimArray
+  , sizeofLiftedPrimArray
   )
 import Data.Default (Default (..))
 import Data.Int (Int8)
@@ -66,7 +68,7 @@ data WavetableWindowSize
   | WWS1024
   | WWS2048
   deriving stock (Eq, Ord, Show, Enum, Bounded)
-  deriving (ByteSized, StaticByteSized, Binary) via (ViaBinaryRep WavetableWindowSize)
+  deriving (StaticByteSized, Binary) via (ViaBinaryRep Word16LE WavetableWindowSize)
 
 instance BinaryRep Word16LE WavetableWindowSize where
   fromBinaryRep = \case
@@ -96,10 +98,10 @@ data SamplePlayback
   | SPGranular
   deriving stock (Eq, Ord, Show, Enum, Bounded)
   deriving (BinaryRep Word8) via (ViaBoundedEnum Word8 SamplePlayback)
-  deriving (ByteSized, StaticByteSized, Binary) via (ViaBinaryRep SamplePlayback)
+  deriving (StaticByteSized, Binary) via (ViaBinaryRep Word8 SamplePlayback)
 
 data Preamble = Preamble
-  { preFileType :: !(ExactBytes "TI")
+  { preFileType :: !(ExactBytes 2 "TI")
   , -- 0-1
     preAux2To19 :: !(StaticBytes 18)
   , -- 2-19
@@ -139,7 +141,7 @@ data Preamble = Preamble
     -- 90-91
   }
   deriving stock (Eq, Show, Generic)
-  deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Preamble)
+  deriving (StaticByteSized, Binary) via (ViaStaticGeneric Preamble)
 
 fw15Preamble, fw16Preamble :: ShortByteString
 fw15Preamble = "\SOH\NUL\SOH\ENQ\NUL\SOH\t\t\t\tt\SOHff\SOH\NUL\NUL\NUL"
@@ -186,7 +188,7 @@ data AutoEnvelope = AutoEnvelope
     -- 108-109
   }
   deriving stock (Eq, Show, Generic)
-  deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric AutoEnvelope)
+  deriving (StaticByteSized, Binary) via (ViaStaticGeneric AutoEnvelope)
 
 instance Default AutoEnvelope where
   def =
@@ -205,7 +207,7 @@ data AutoType
   | ATEnvelope
   | ATLfo
   deriving stock (Eq, Ord, Show, Enum, Bounded)
-  deriving (ByteSized, StaticByteSized, Binary) via (ViaBinaryRep AutoType)
+  deriving (StaticByteSized, Binary) via (ViaBinaryRep Word16LE AutoType)
 
 instance Default AutoType where
   def = ATOff
@@ -226,7 +228,7 @@ data Auto = Auto
   , autoType :: !AutoType
   }
   deriving stock (Eq, Show, Generic)
-  deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Auto)
+  deriving (StaticByteSized, Binary) via (ViaStaticGeneric Auto)
 
 instance Default Auto where
   def = Auto def def
@@ -239,7 +241,7 @@ data LfoType
   | LTRandom
   deriving stock (Eq, Ord, Show, Enum, Bounded)
   deriving (BinaryRep Word8) via (ViaBoundedEnum Word8 LfoType)
-  deriving (ByteSized, StaticByteSized, Binary) via (ViaBinaryRep LfoType)
+  deriving (StaticByteSized, Binary) via (ViaBinaryRep Word8 LfoType)
 
 data LfoSteps
   = LS24
@@ -268,7 +270,7 @@ data LfoSteps
   | LS1Over64
   deriving stock (Eq, Ord, Show, Enum, Bounded)
   deriving (BinaryRep Word8) via (ViaBoundedEnum Word8 LfoSteps)
-  deriving (ByteSized, StaticByteSized, Binary) via (ViaBinaryRep LfoSteps)
+  deriving (StaticByteSized, Binary) via (ViaBinaryRep Word8 LfoSteps)
 
 data Lfo = Lfo
   { lfoType :: !LfoType
@@ -281,7 +283,7 @@ data Lfo = Lfo
     -- 216-219
   }
   deriving stock (Eq, Show, Generic)
-  deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Lfo)
+  deriving (StaticByteSized, Binary) via (ViaStaticGeneric Lfo)
 
 instance Default Lfo where
   def =
@@ -298,7 +300,7 @@ data FilterType
   | FTHighPass
   | FTBandPass
   deriving stock (Eq, Ord, Show, Enum, Bounded)
-  deriving (ByteSized, StaticByteSized, Binary) via (ViaBinaryRep FilterType)
+  deriving (StaticByteSized, Binary) via (ViaBinaryRep Word16LE FilterType)
 
 instance Default FilterType where
   def = FTDisabled
@@ -322,7 +324,7 @@ data Filter = Filter
   , filtType :: !FilterType
   }
   deriving stock (Eq, Show, Generic)
-  deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Filter)
+  deriving (StaticByteSized, Binary) via (ViaStaticGeneric Filter)
 
 instance Default Filter where
   def =
@@ -351,7 +353,7 @@ data InstParams = InstParams
     -- 279
   }
   deriving stock (Eq, Show, Generic)
-  deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric InstParams)
+  deriving (StaticByteSized, Binary) via (ViaStaticGeneric InstParams)
 
 instance Default InstParams where
   def =
@@ -372,7 +374,7 @@ data Slices = Slices
   , slicesActive :: !Word8
   }
   deriving stock (Eq, Show, Generic)
-  deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Slices)
+  deriving (StaticByteSized, Binary) via (ViaStaticGeneric Slices)
 
 instance Default Slices where
   def =
@@ -388,7 +390,7 @@ data GranularShape
   | GSGauss
   deriving stock (Eq, Ord, Show, Enum, Bounded)
   deriving (BinaryRep Word8) via (ViaBoundedEnum Word8 GranularShape)
-  deriving (ByteSized, StaticByteSized, Binary) via (ViaBinaryRep GranularShape)
+  deriving (StaticByteSized, Binary) via (ViaBinaryRep Word8 GranularShape)
 
 instance Default GranularShape where
   def = GSSquare
@@ -399,7 +401,7 @@ data GranularLoopMode
   | GLMPingPong
   deriving stock (Eq, Ord, Show, Enum, Bounded)
   deriving (BinaryRep Word8) via (ViaBoundedEnum Word8 GranularLoopMode)
-  deriving (ByteSized, StaticByteSized, Binary) via (ViaBinaryRep GranularLoopMode)
+  deriving (StaticByteSized, Binary) via (ViaBinaryRep Word8 GranularLoopMode)
 
 instance Default GranularLoopMode where
   def = GLMForward
@@ -411,7 +413,7 @@ data Granular = Granular
   , granLoopMode :: !GranularLoopMode
   }
   deriving stock (Eq, Show, Generic)
-  deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Granular)
+  deriving (StaticByteSized, Binary) via (ViaStaticGeneric Granular)
 
 instance Default Granular where
   def =
@@ -433,7 +435,7 @@ data Effects = Effects
     -- 387
   }
   deriving stock (Eq, Show, Generic)
-  deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Effects)
+  deriving (StaticByteSized, Binary) via (ViaStaticGeneric Effects)
 
 instance Default Effects where
   def =
@@ -453,7 +455,7 @@ data Block a = Block
   , blockFinetune :: !a
   }
   deriving stock (Eq, Show, Generic, Functor, Foldable, Traversable)
-  deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric (Block a))
+  deriving (StaticByteSized, Binary) via (ViaStaticGeneric (Block a))
 
 mkBlock :: a -> Block a
 mkBlock a = Block a a a a a a
@@ -481,7 +483,7 @@ data Header = Header
   , hdrEffects :: !Effects
   }
   deriving stock (Eq, Show, Generic)
-  deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Header)
+  deriving (StaticByteSized, Binary) via (ViaStaticGeneric Header)
 
 instance Default Header where
   def = Header def defAutoBlock def def def def def def
@@ -492,9 +494,6 @@ data Pti = Pti
   }
   deriving stock (Eq, Show)
 
-instance ByteSized Pti where
-  byteSize (Pti hd (QuietLiftedArray larr)) = byteSize hd + byteSize larr
-
 updatePtiCode :: Pti -> Pti
 updatePtiCode pti = pti {ptiHeader = updateCheckedCode (ptiHeader pti)}
 
@@ -502,18 +501,18 @@ verifyPtiCode :: Pti -> Bool
 verifyPtiCode pti = verifyCheckedCode (ptiHeader pti)
 
 instance Binary Pti where
+  byteSize (Pti header (QuietLiftedArray pcmData)) = byteSize header + sizeofLiftedPrimArray pcmData
   get = do
     header <- get
     let !sampleLength = fromIntegral (preSampleLength (hdrPreamble (checkedVal header)))
     pcmData <-
-      fmap QuietLiftedArray $
-        if sampleLength == 0 -- what the heck, it happens
-          then getRemainingLiftedPrimArray (Proxy :: Proxy Int16LE)
-          else getLiftedPrimArray (Proxy :: Proxy Int16LE) sampleLength
-    pure $! Pti header pcmData
-  put (Pti header pcmData) = do
+      if sampleLength == 0 -- what the heck, it happens
+        then getRemainingLiftedPrimArray (Proxy :: Proxy Int16LE)
+        else getLiftedPrimArray (Proxy :: Proxy Int16LE) sampleLength
+    pure $! Pti header (QuietLiftedArray pcmData)
+  put (Pti header (QuietLiftedArray pcmData)) = do
     put header
-    putLiftedPrimArray (unQuietLiftedArray pcmData)
+    putLiftedPrimArray pcmData
 
 instance Default Pti where
   def = Pti def def

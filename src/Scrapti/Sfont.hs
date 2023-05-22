@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Scrapti.Sfont
   ( Sfont (..)
@@ -28,7 +29,7 @@ where
 import Control.Monad (unless)
 import Dahdit
   ( Binary (..)
-  , ByteSized (..)
+  , ByteCount (..)
   , Get
   , Int16LE (..)
   , LiftedPrimArray
@@ -37,10 +38,10 @@ import Dahdit
   , StaticByteSized (..)
   , StaticBytes
   , TermBytes
-  , ViaStaticByteSized (..)
   , ViaStaticGeneric (..)
   , Word16LE
   , Word32LE
+  , byteSizeViaStatic
   , getExact
   , getLiftedPrimArray
   , getRemainingSeq
@@ -51,7 +52,9 @@ import Dahdit
   , putByteString
   , putLiftedPrimArray
   , putSeq
+  , sizeofLiftedPrimArray
   )
+import qualified Data.ByteString.Short as BSS
 import Data.Foldable (foldl')
 import Data.Int (Int8)
 import Data.Proxy (Proxy (..))
@@ -128,7 +131,7 @@ labelShdr = "shdr"
 
 newtype SampleCount = SampleCount {unSampleCount :: Word32LE}
   deriving stock (Show)
-  deriving newtype (Eq, Ord, Num, Enum, Real, Integral, ByteSized, StaticByteSized, Binary)
+  deriving newtype (Eq, Ord, Num, Enum, Real, Integral, StaticByteSized, Binary)
 
 type ShortText = StaticBytes 20
 
@@ -139,10 +142,8 @@ data Sfont = Sfont
   }
   deriving stock (Eq, Show)
 
-instance ByteSized Sfont where
-  byteSize (Sfont info sdta pdta) = chunkHeaderSize + labelSize + byteSize info + byteSize sdta + byteSize pdta
-
 instance Binary Sfont where
+  byteSize (Sfont info sdta pdta) = chunkHeaderSize + labelSize + byteSize info + byteSize sdta + byteSize pdta
   get = do
     getExpectLabel labelRiff
     chunkSize <- getChunkSizeLE
@@ -163,11 +164,11 @@ instance Binary Sfont where
 
 newtype InfoChunk = InfoChunk {unInfoChunk :: KnownListChunk Info}
   deriving stock (Show)
-  deriving newtype (Eq, ByteSized, Binary)
+  deriving newtype (Eq, Binary)
 
 newtype PdtaChunk = PdtaChunk {unPdtaChunk :: KnownListChunk PdtaBlock}
   deriving stock (Show)
-  deriving newtype (Eq, ByteSized, Binary)
+  deriving newtype (Eq, Binary)
 
 data Info
   = InfoVersion !Word16LE !Word16LE
@@ -187,22 +188,6 @@ data Info
 instance KnownLabel Info where
   knownLabel _ = labelInfo
 
-instance ByteSized Info where
-  byteSize info =
-    chunkHeaderSize + case info of
-      InfoVersion _ _ -> 4
-      InfoTargetSoundEngine z -> byteSize z
-      InfoBankName z -> byteSize z
-      InfoRomName z -> byteSize z
-      InfoRomVersion _ _ -> 4
-      InfoCreationDate z -> byteSize z
-      InfoAuthors z -> byteSize z
-      InfoIntendedProduct z -> byteSize z
-      InfoCopyrightMessage z -> byteSize z
-      InfoComments z -> byteSize z
-      InfoUsedTools z -> byteSize z
-      InfoReserved _ bs -> byteSize bs
-
 whichLabelInfo :: Info -> Label
 whichLabelInfo = \case
   InfoVersion _ _ -> labelIfil
@@ -219,6 +204,20 @@ whichLabelInfo = \case
   InfoReserved l _ -> l
 
 instance Binary Info where
+  byteSize info =
+    chunkHeaderSize + case info of
+      InfoVersion _ _ -> 4
+      InfoTargetSoundEngine z -> byteSize z
+      InfoBankName z -> byteSize z
+      InfoRomName z -> byteSize z
+      InfoRomVersion _ _ -> 4
+      InfoCreationDate z -> byteSize z
+      InfoAuthors z -> byteSize z
+      InfoIntendedProduct z -> byteSize z
+      InfoCopyrightMessage z -> byteSize z
+      InfoComments z -> byteSize z
+      InfoUsedTools z -> byteSize z
+      InfoReserved _ bs -> ByteCount (BSS.length bs)
   get = do
     label <- get
     chunkSize <- getChunkSizeLE
@@ -271,12 +270,6 @@ data Sdta = Sdta
   }
   deriving stock (Eq, Show)
 
-instance ByteSized Sdta where
-  byteSize (Sdta high mlow) = sizeHigh + sizeLow
-   where
-    sizeHigh = chunkHeaderSize + byteSize high
-    sizeLow = maybe 0 (\low -> chunkHeaderSize + byteSize low) mlow
-
 instance KnownLabel Sdta where
   knownLabel _ = labelSdta
 
@@ -287,6 +280,11 @@ getLowBits :: SampleCount -> Get (LiftedPrimArray Word8)
 getLowBits numSamples = getLiftedPrimArray (Proxy :: Proxy Word8) (fromIntegral numSamples)
 
 instance Binary Sdta where
+  byteSize (Sdta high mlow) = sizeHigh + sizeLow
+   where
+    sizeHigh = chunkHeaderSize + sizeofLiftedPrimArray high
+    sizeLow = maybe 0 (\low -> chunkHeaderSize + sizeofLiftedPrimArray low) mlow
+
   get = do
     chunkSize <- getRemainingSize
     getExpectLabel labelSmpl
@@ -307,18 +305,18 @@ instance Binary Sdta where
         | otherwise -> fail "invalid sdata chunk/sample sizes"
   put (Sdta highBits mayLowBits) = do
     put labelSmpl
-    putChunkSizeLE (byteSize highBits)
+    putChunkSizeLE (sizeofLiftedPrimArray highBits)
     putLiftedPrimArray highBits
     case mayLowBits of
       Nothing -> pure ()
       Just lowBits -> do
         put labelSm24
-        putChunkSizeLE (byteSize lowBits)
+        putChunkSizeLE (sizeofLiftedPrimArray lowBits)
         putLiftedPrimArray lowBits
 
 newtype SdtaChunk = SdtaChunk {unSdtaChunk :: KnownOptChunk Sdta}
   deriving stock (Show)
-  deriving newtype (Eq, ByteSized, Binary)
+  deriving newtype (Eq, Binary)
 
 data PdtaCat
   = PdtaCatPreset
@@ -337,7 +335,22 @@ data PdtaBlock
 instance KnownLabel PdtaBlock where
   knownLabel _ = labelPdta
 
-instance ByteSized PdtaBlock where
+whichLabelPdtaBlock :: PdtaBlock -> Label
+whichLabelPdtaBlock = \case
+  PdtaBlockPhdr _ -> labelPhdr
+  PdtaBlockBag pc _ -> case pc of
+    PdtaCatPreset -> labelPbag
+    PdtaCatInst -> labelIbag
+  PdtaBlockMod pc _ -> case pc of
+    PdtaCatPreset -> labelPmod
+    PdtaCatInst -> labelImod
+  PdtaBlockGen pc _ -> case pc of
+    PdtaCatPreset -> labelPgen
+    PdtaCatInst -> labelIgen
+  PdtaBlockInst _ -> labelInst
+  PdtaBlockShdr _ -> labelShdr
+
+instance Binary PdtaBlock where
   byteSize block = res
    where
     res =
@@ -355,22 +368,6 @@ instance ByteSized PdtaBlock where
     sizeInst = staticByteSize (Proxy :: Proxy Inst)
     sizeShdr = staticByteSize (Proxy :: Proxy Shdr)
 
-whichLabelPdtaBlock :: PdtaBlock -> Label
-whichLabelPdtaBlock = \case
-  PdtaBlockPhdr _ -> labelPhdr
-  PdtaBlockBag pc _ -> case pc of
-    PdtaCatPreset -> labelPbag
-    PdtaCatInst -> labelIbag
-  PdtaBlockMod pc _ -> case pc of
-    PdtaCatPreset -> labelPmod
-    PdtaCatInst -> labelImod
-  PdtaBlockGen pc _ -> case pc of
-    PdtaCatPreset -> labelPgen
-    PdtaCatInst -> labelIgen
-  PdtaBlockInst _ -> labelInst
-  PdtaBlockShdr _ -> labelShdr
-
-instance Binary PdtaBlock where
   get = do
     label <- get
     chunkSize <- getChunkSizeLE
@@ -420,14 +417,14 @@ data Phdr = Phdr
   , phdrMorphology :: !Word32LE
   }
   deriving stock (Eq, Show, Generic)
-  deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Phdr)
+  deriving (StaticByteSized, Binary) via (ViaStaticGeneric Phdr)
 
 data Bag = Bag
   { bagGenIndex :: !Word16LE
   , bagModIndex :: !Word16LE
   }
   deriving stock (Eq, Show, Generic)
-  deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Bag)
+  deriving (StaticByteSized, Binary) via (ViaStaticGeneric Bag)
 
 -- | Modulator
 data Mod = Mod
@@ -438,19 +435,20 @@ data Mod = Mod
   , modTransOper :: !Word16LE
   }
   deriving stock (Eq, Show, Generic)
-  deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Mod)
+  deriving (StaticByteSized, Binary) via (ViaStaticGeneric Mod)
 
 data SampleMode
   = SampleModeNoLoop !Int16LE
   | SampleModeContLoop
   | SampleModePressLoop
   deriving stock (Eq, Ord, Show)
-  deriving (ByteSized) via (ViaStaticByteSized SampleMode)
 
 instance StaticByteSized SampleMode where
+  type StaticSize SampleMode = 2
   staticByteSize _ = 2
 
 instance Binary SampleMode where
+  byteSize = byteSizeViaStatic
   get = do
     c <- get
     pure $! case c of
@@ -468,14 +466,14 @@ data Range = Range
   , rangeHi :: !Word8
   }
   deriving stock (Eq, Ord, Show, Generic)
-  deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Range)
+  deriving (StaticByteSized, Binary) via (ViaStaticGeneric Range)
 
 data ReservedGen = ReservedGen
   { reservedGenTag :: !Word16LE
   , reservedGetVal :: !Int16LE
   }
   deriving stock (Eq, Ord, Show, Generic)
-  deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric ReservedGen)
+  deriving (StaticByteSized, Binary) via (ViaStaticGeneric ReservedGen)
 
 -- | Instrument
 data Inst = Inst
@@ -483,7 +481,7 @@ data Inst = Inst
   , instBagIndex :: !Word16LE
   }
   deriving stock (Eq, Show, Generic)
-  deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Inst)
+  deriving (StaticByteSized, Binary) via (ViaStaticGeneric Inst)
 
 -- | Sample header
 data Shdr = Shdr
@@ -499,7 +497,7 @@ data Shdr = Shdr
   , shdrSampleType :: !Word16LE
   }
   deriving stock (Eq, Show, Generic)
-  deriving (ByteSized, StaticByteSized, Binary) via (ViaStaticGeneric Shdr)
+  deriving (StaticByteSized, Binary) via (ViaStaticGeneric Shdr)
 
 data Pdta = Pdta
   { pdtaPhdrs :: !(Seq Phdr)
@@ -676,7 +674,6 @@ data Gen
   | GenRange !(GenPair Range)
   | GenSampleMode !(GenPair SampleMode)
   deriving stock (Eq, Ord, Show)
-  deriving (ByteSized) via (ViaStaticByteSized Gen)
 
 getGenInt :: GenTag Int16LE -> Get Gen
 getGenInt tag = fmap (GenInt . GenPair tag) get
@@ -691,9 +688,11 @@ getGenSampleMode :: GenTag SampleMode -> Get Gen
 getGenSampleMode tag = fmap (GenSampleMode . GenPair tag) get
 
 instance StaticByteSized Gen where
+  type StaticSize Gen = 4
   staticByteSize _ = 4
 
 instance Binary Gen where
+  byteSize = byteSizeViaStatic
   get = do
     tag <- get
     case tag of

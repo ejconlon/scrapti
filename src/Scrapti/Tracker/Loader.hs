@@ -2,7 +2,7 @@ module Scrapti.Tracker.Loader where
 
 import Control.Exception (Exception, throwIO)
 import Control.Monad (unless, (>=>))
-import Dahdit (Binary (..), ByteSized, GetError, decode, encodeFile)
+import Dahdit (Binary (..), GetError, decode, encodeFile)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as BSS
 import Data.Foldable (for_)
@@ -132,7 +132,7 @@ enrichProject projPath =
 loadRichProject :: FilePath -> IO RichProject
 loadRichProject projPath = loadBareProject projPath >>= enrichProject projPath
 
-encodeRes :: (Binary a, ByteSized a) => FilePath -> a -> FilePath -> IO ()
+encodeRes :: Binary a => FilePath -> a -> FilePath -> IO ()
 encodeRes projDir val resPath = encodeFile val (projDir </> resPath)
 
 saveSong :: FilePath -> Project Mt i p -> IO ()
