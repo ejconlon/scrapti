@@ -37,7 +37,7 @@ import Dahdit
   , ShortByteString
   , StaticByteSized (..)
   , StaticBytes
-  , TermBytes
+  , TermBytes16
   , ViaStaticGeneric (..)
   , Word16LE
   , Word32LE
@@ -172,16 +172,16 @@ newtype PdtaChunk = PdtaChunk {unPdtaChunk :: KnownListChunk PdtaBlock}
 
 data Info
   = InfoVersion !Word16LE !Word16LE
-  | InfoTargetSoundEngine !TermBytes
-  | InfoBankName !TermBytes
-  | InfoRomName !TermBytes
+  | InfoTargetSoundEngine !TermBytes16
+  | InfoBankName !TermBytes16
+  | InfoRomName !TermBytes16
   | InfoRomVersion !Word16LE !Word16LE
-  | InfoCreationDate !TermBytes
-  | InfoAuthors !TermBytes
-  | InfoIntendedProduct !TermBytes
-  | InfoCopyrightMessage !TermBytes
-  | InfoComments !TermBytes
-  | InfoUsedTools !TermBytes
+  | InfoCreationDate !TermBytes16
+  | InfoAuthors !TermBytes16
+  | InfoIntendedProduct !TermBytes16
+  | InfoCopyrightMessage !TermBytes16
+  | InfoComments !TermBytes16
+  | InfoUsedTools !TermBytes16
   | InfoReserved !Label !ShortByteString
   deriving stock (Eq, Show)
 

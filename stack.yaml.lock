@@ -12,15 +12,15 @@ packages:
   original:
     hackage: aeson-via-0.2.1
 - completed:
-    commit: f02a4aad80fcd65e671453f4f83589568002a355
+    commit: 09d1ef1fd74158fdf000e4e09f3a0379331b78e0
     git: git@github.com:ejconlon/dahdit.git
     name: dahdit
     pantry-tree:
-      sha256: 8a4704a8a3bab9d4a9b89cbee00d0b7e3838aed06264a9149cf4daeed062a2f4
-      size: 1689
+      sha256: 9ab30a3590e4f9b04fb70457e3cf75c12d2e556d9c9d481b3446c53dcced3463
+      size: 1690
     version: 0.4.0
   original:
-    commit: f02a4aad80fcd65e671453f4f83589568002a355
+    commit: 09d1ef1fd74158fdf000e4e09f3a0379331b78e0
     git: git@github.com:ejconlon/dahdit.git
 - completed:
     hackage: data-sword-0.2.0.3@sha256:953cca4b4533a388df0ef17e06ac5530652d1d73decfe8b656242ccdf4b40999,1568
