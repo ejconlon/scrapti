@@ -13,3 +13,7 @@ extra-deps:
 - git: git@github.com:ejconlon/dahdit.git
   commit: f02a4aad80fcd65e671453f4f83589568002a355
 - data-sword-0.2.0.3
+- falsify-0.1.1
+# TODO Use Hackage version when released
+- git: git@github.com:ejconlon/dahdit-test.git
+  commit: 1627e917a78d72ef4391bd8bedaa55f1c4808314

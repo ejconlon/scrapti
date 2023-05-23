@@ -29,6 +29,24 @@ packages:
       size: 439
   original:
     hackage: data-sword-0.2.0.3
+- completed:
+    hackage: falsify-0.1.1@sha256:49c4d6acba99a2647b18502ff0265fb98570b77d7893c355ede4f2db17295cc1,5236
+    pantry-tree:
+      sha256: 96d0d0b4ef5b87b88f4c7e6ca93de6a9cfca5f788713be8faf32d6125000aa60
+      size: 3162
+  original:
+    hackage: falsify-0.1.1
+- completed:
+    commit: 1627e917a78d72ef4391bd8bedaa55f1c4808314
+    git: git@github.com:ejconlon/dahdit-test.git
+    name: dahdit-test
+    pantry-tree:
+      sha256: eaec2a525ceb071b7a836d34fa16dce57aa5e454ad7e176fbcc3c8ca1f3a6db2
+      size: 841
+    version: 0.1.0
+  original:
+    commit: 1627e917a78d72ef4391bd8bedaa55f1c4808314
+    git: git@github.com:ejconlon/dahdit-test.git
 snapshots:
 - completed:
     sha256: dcf4fc28f12d805480ddbe8eb8c370e11db12f0461d0110a4240af27ac88d725

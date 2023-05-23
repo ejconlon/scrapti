@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.35.1.
+-- This file has been generated from package.yaml by hpack version 0.35.2.
 --
 -- see: https://github.com/sol/hpack
 
@@ -205,6 +205,7 @@ test-suite scrapti-test
     , bytestring >=0.10 && <0.12
     , containers ==0.6.*
     , dahdit ==0.4.*
+    , dahdit-test
     , data-default ==0.7.*
     , data-sword ==0.2.*
     , digest ==0.0.1.*
