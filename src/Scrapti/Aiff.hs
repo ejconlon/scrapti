@@ -8,6 +8,7 @@ module Scrapti.Aiff
   ( PascalString (..)
   , Chunk (..)
   , KnownChunk (..)
+  , Variant (..)
   , AiffCommonBody (..)
   , AiffCommonChunk
   , AiffDataBody (..)

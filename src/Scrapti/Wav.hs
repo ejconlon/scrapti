@@ -355,7 +355,7 @@ data WavSampleBody = WavSampleBody
   deriving stock (Eq, Show)
 
 instance Binary WavSampleBody where
-  byteSize wsb = 32 + byteSize (wsbSampleLoops wsb)
+  byteSize wsb = 32 + byteSizeFoldable (wsbSampleLoops wsb)
   get = do
     wsbManufacturer <- get
     wsbProduct <- get
