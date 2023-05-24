@@ -37,15 +37,15 @@ packages:
   original:
     hackage: falsify-0.1.1
 - completed:
-    commit: 1237a5e8161dfe71ec71007438766cf3f3be8686
+    commit: 822111a3e6e93c7b4ecccc9429609e1350ec509e
     git: git@github.com:ejconlon/dahdit-test.git
     name: dahdit-test
     pantry-tree:
-      sha256: 4cef2f32f7aaab65c89952cb7eecb1edf10066874efed41462c1cb34de413b98
+      sha256: 9f59f78498acb7e7e52dad209c670a30793aca688edc7fa951d3cea2d0f1f635
       size: 841
     version: 0.1.0
   original:
-    commit: 1237a5e8161dfe71ec71007438766cf3f3be8686
+    commit: 822111a3e6e93c7b4ecccc9429609e1350ec509e
     git: git@github.com:ejconlon/dahdit-test.git
 snapshots:
 - completed:

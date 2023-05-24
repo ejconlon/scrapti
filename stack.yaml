@@ -16,4 +16,4 @@ extra-deps:
 - falsify-0.1.1
 # TODO Use Hackage version when released
 - git: git@github.com:ejconlon/dahdit-test.git
-  commit: 1237a5e8161dfe71ec71007438766cf3f3be8686
+  commit: 822111a3e6e93c7b4ecccc9429609e1350ec509e
