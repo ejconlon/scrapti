@@ -1,19 +1,7 @@
-resolver: lts-20.22
+resolver: "https://raw.githubusercontent.com/ejconlon/stack-resolvers/master/head.yaml#0"
 
 ghc-options:
   "$everything": -haddock
 
 packages:
 - .
-
-extra-deps:
-- aeson-via-0.2.1
-# TODO Use Hackage version when released
-# - dahdit-0.4.0
-- git: git@github.com:ejconlon/dahdit.git
-  commit: bf4c9bdbc3cf6eedf3d946704a6df3c027e5c888
-- data-sword-0.2.0.3
-- falsify-0.1.1
-# TODO Use Hackage version when released
-- git: git@github.com:ejconlon/dahdit-test.git
-  commit: 1f8dae4ae6b523e1e8e75319333844dd54583076
