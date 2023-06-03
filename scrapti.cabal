@@ -86,7 +86,7 @@ library
     , base >=4.12 && <5
     , bytestring >=0.10 && <0.12
     , containers ==0.6.*
-    , dahdit ==0.4.*
+    , dahdit >=0.4.1 && <0.5
     , data-default ==0.7.*
     , data-sword ==0.2.*
     , digest ==0.0.1.*
@@ -144,7 +144,7 @@ executable scrapti-exe
     , base >=4.12 && <5
     , bytestring >=0.10 && <0.12
     , containers ==0.6.*
-    , dahdit ==0.4.*
+    , dahdit >=0.4.1 && <0.5
     , data-default ==0.7.*
     , data-sword ==0.2.*
     , digest ==0.0.1.*
@@ -204,7 +204,7 @@ test-suite scrapti-test
     , base >=4.12 && <5
     , bytestring >=0.10 && <0.12
     , containers ==0.6.*
-    , dahdit ==0.4.*
+    , dahdit >=0.4.1 && <0.5
     , dahdit-test
     , data-default ==0.7.*
     , data-sword ==0.2.*

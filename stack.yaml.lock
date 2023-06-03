@@ -26,37 +26,37 @@ packages:
   original:
     hackage: aeson-via-0.2.1
 - completed:
-    commit: 2a19b73918f0480d43054de47a643595799cfa00
+    commit: d6a31cf6333f3e918a61ac84a069286983cdcc27
     git: git@github.com:ejconlon/dahdit.git
     name: dahdit
     pantry-tree:
-      sha256: 8b7a77ced137270521713dada9aed2764a9ea5b7eaf7d1aa80d565900b26f632
-      size: 1690
-    version: 0.4.0
+      sha256: 551fbd48feed5df157fbe091940a5ebdbd1832ed71887e8d687ace65e0461c08
+      size: 1691
+    version: 0.4.1
   original:
-    commit: 2a19b73918f0480d43054de47a643595799cfa00
+    commit: d6a31cf6333f3e918a61ac84a069286983cdcc27
     git: git@github.com:ejconlon/dahdit.git
 - completed:
-    commit: 6059638114aa51d4a7f21f590ea25589d323e650
+    commit: 4eded9b1c0f2fdaa54ff94d369f7c8cf729e2b5a
     git: git@github.com:ejconlon/dahdit-test.git
     name: dahdit-test
     pantry-tree:
-      sha256: b3d632d998e7fce1a8775be91ab3a217c781d36e669eb53a17e294be3abb8c57
+      sha256: 0a81d3ac7dce4e33884611f31697d3c83cdb98d3881cead1d042630212c302fc
       size: 841
     version: 0.1.0
   original:
-    commit: 6059638114aa51d4a7f21f590ea25589d323e650
+    commit: 4eded9b1c0f2fdaa54ff94d369f7c8cf729e2b5a
     git: git@github.com:ejconlon/dahdit-test.git
 - completed:
-    commit: 21e1281b913c2f6c129e80f525c1a6d6154a2ca8
+    commit: 4403254c5ba3cd558204a0e406af47fbd3658c22
     git: git@github.com:ejconlon/dahdit-network.git
     name: dahdit-network
     pantry-tree:
-      sha256: ff492ae92c7ea180c3651c656c39ae5e3ba5af9012e043b15a1cb85e11278663
+      sha256: 0c8543ed1394606b815eedf1c27cc1b1634df8ab56270b17ef466aabfea91857
       size: 713
     version: 0.1.0
   original:
-    commit: 21e1281b913c2f6c129e80f525c1a6d6154a2ca8
+    commit: 4403254c5ba3cd558204a0e406af47fbd3658c22
     git: git@github.com:ejconlon/dahdit-network.git
 - completed:
     commit: 77f5bff4ac0c6434bc248766096eb387bf5ef8e3
@@ -81,6 +81,17 @@ packages:
     commit: 920713db1c51b90089d6e464b4022daa0643459b
     git: git@github.com:ejconlon/midiot.git
 - completed:
+    commit: f006e1d040f05a7974910d2392c09090bf71a8bb
+    git: git@github.com:riottracker/RtMidi.git
+    name: RtMidi
+    pantry-tree:
+      sha256: e77f781a10d0778c7f3abe653d4727dada9481592ee4898847a21b30714e339e
+      size: 1411
+    version: 0.7.0.0
+  original:
+    commit: f006e1d040f05a7974910d2392c09090bf71a8bb
+    git: git@github.com:riottracker/RtMidi.git
+- completed:
     hackage: data-sword-0.2.0.3@sha256:953cca4b4533a388df0ef17e06ac5530652d1d73decfe8b656242ccdf4b40999,1568
     pantry-tree:
       sha256: 60a104a3d3cbba2e099a9e7ce561322b2884f5323cf74fd876dfb59f265d803c
@@ -95,13 +106,6 @@ packages:
   original:
     hackage: falsify-0.1.1
 - completed:
-    hackage: RtMidi-0.6.1.0@sha256:8c9694126352ae2b8935554ff25a4f2d8541ec0f39805300c4ca9fd0620604ef,3806
-    pantry-tree:
-      sha256: 406147390d64947da0062a10837108797d0be59cf3157b4e375fa66cd3490e67
-      size: 860
-  original:
-    hackage: RtMidi-0.6.1.0
-- completed:
     hackage: primitive-0.8.0.0@sha256:826bf2a702a26ef87532a135808abad69d74f70ead39f26c06d034b1f0537a19,3104
     pantry-tree:
       sha256: eaf8b0689d5a3cbc38b5a5b4bf665ec5822ad0060e8876b26bf6f13b9741295a
@@ -110,13 +114,13 @@ packages:
     hackage: primitive-0.8.0.0
 snapshots:
 - completed:
-    sha256: 6fcd59b8b5d39580b372d25b16ddfa1be5fef28ae7c80110167874642d41e8d5
-    size: 1109
-    url: https://raw.githubusercontent.com/ejconlon/stack-resolvers/master/head.yaml#0
+    sha256: fca7899d0402032595080fed4eee5d83018c7d11f4f47f8e5208cd4313a61b74
+    size: 1223
+    url: https://raw.githubusercontent.com/ejconlon/stack-resolvers/master/head.yaml#8
   original:
-    url: https://raw.githubusercontent.com/ejconlon/stack-resolvers/master/head.yaml#0
+    url: https://raw.githubusercontent.com/ejconlon/stack-resolvers/master/head.yaml#8
 - completed:
-    sha256: dcf4fc28f12d805480ddbe8eb8c370e11db12f0461d0110a4240af27ac88d725
-    size: 650255
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/20/22.yaml
-  original: lts-20.22
+    sha256: 4c972e067bae16b95961dbfdd12e07f1ee6c8fffabbfa05c3d65100b03f548b7
+    size: 650253
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/20/23.yaml
+  original: lts-20.23

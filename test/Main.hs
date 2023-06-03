@@ -168,10 +168,10 @@ throwFirst (ea, b) =
     Right a -> pure (a, b)
 
 decodeThrow :: Binary a => ShortByteString -> IO (a, ByteCount)
-decodeThrow = throwFirst . decode
+decodeThrow = decode >=> throwFirst
 
 getTargetThrow :: Get a -> ShortByteString -> IO (a, ByteCount)
-getTargetThrow g z = throwFirst (getTarget g z)
+getTargetThrow g z = getTarget g z >>= throwFirst
 
 decodeFileThrow :: Binary a => FilePath -> IO (a, ByteCount)
 decodeFileThrow = decodeFile >=> throwFirst
@@ -180,7 +180,7 @@ testWavSerde :: TestTree
 testWavSerde = testCase "serde" $ do
   -- KnownChunk
   byteSize drumFmtChunk @?= 24
-  let fmtBs = encode drumFmtChunk
+  fmtBs <- encode drumFmtChunk
   (fmt, fmtSz) <- decodeThrow fmtBs
   byteSize fmt @?= fmtSz
   fmt @?= drumFmtChunk
@@ -190,11 +190,11 @@ testWavSerde = testCase "serde" $ do
       unpEven = Chunk "FOOB" (UnparsedBody "AB")
   byteSize unpOdd @?= unpSz
   byteSize unpEven @?= unpSz
-  let unpOddBs = encode unpOdd
+  unpOddBs <- encode unpOdd
   (unpOdd', unpOddSz) <- decodeThrow unpOddBs
   byteSize unpOdd' @?= unpOddSz
   unpOdd' @?= unpOdd
-  let unpEvenBs = encode unpEven
+  unpEvenBs <- encode unpEven
   (unpEven', unpEvenSz) <- decodeThrow unpEvenBs
   byteSize unpEven' @?= unpEvenSz
   unpEven' @?= unpEven
@@ -249,7 +249,7 @@ testWavWrite = testCase "write" $ do
   (wav, bc) <- decodeThrow bs
   byteSize wav @?= bc
   for_ (wavChunks wav) assertReparses
-  let bs' = encode wav
+  bs' <- encode wav
   bs' @?= bs
 
 testWavWrite2 :: TestTree
@@ -258,7 +258,7 @@ testWavWrite2 = testCase "write 2" $ do
   (wav, bc) <- decodeThrow bs
   byteSize wav @?= bc
   for_ (wavChunks wav) assertReparses
-  let bs' = encode wav
+  bs' <- encode wav
   bs' @?= bs
 
 testWav :: TestTree
@@ -271,7 +271,7 @@ testAiff = testCase "aiff" $ do
   byteSize aiff @?= bc
   bc @?= fromIntegral (BSS.length bs)
   for_ (aiffChunks aiff) assertReparses
-  let bs' = encode aiff
+  bs' <- encode aiff
   fromIntegral (BSS.length bs') @?= bc
   bs' @?= bs
 
@@ -279,7 +279,7 @@ testAiff2 :: TestTree
 testAiff2 = testCase "aiff2" $ do
   bs <- readShort "testdata/DX-EPiano1-C1.aif"
   (aiff :: Aiff, _) <- decodeThrow bs
-  let bs' = encode aiff
+  bs' <- encode aiff
   bs' @?= bs
 
 testSfontWhole :: TestTree
@@ -298,7 +298,7 @@ testSfontWrite :: TestTree
 testSfontWrite = testCase "write" $ do
   bs <- readShort "testdata/timpani.sf2"
   (sfont, _) <- decodeThrow @Sfont bs
-  let bs' = encode sfont
+  bs' <- encode sfont
   bs' @?= bs
 
 testSfontManual :: TestTree
@@ -319,11 +319,11 @@ testSfontManual = testCase "manual" $ do
   byteSize info @?= expecInfoSize
   byteSize sdta @?= expecSdtaSize
   byteSize pdta @?= expecPdtaSize
-  let infoBs = encode info
+  infoBs <- encode info
   BSS.length infoBs @?= fromIntegral expecInfoSize
-  let sdtaBs = encode sdta
+  sdtaBs <- encode sdta
   BSS.length sdtaBs @?= fromIntegral expecSdtaSize
-  let pdtaBs = encode pdta
+  pdtaBs <- encode pdta
   BSS.length pdtaBs @?= fromIntegral expecPdtaSize
 
 testSfontSizes :: TestTree
@@ -369,7 +369,7 @@ testPtiWrite = testCase "write" $ do
   fromIntegral bc @?= BSS.length bs
   -- divide by two to compare number of elements (2-byte samples)
   lengthLiftedPrimArray (unQuietLiftedArray (ptiPcmData pti)) @?= div drumDataLen 2
-  let bs' = encode pti
+  bs' <- encode pti
   bs' @?= bs
 
 type Sel a = Header -> a
@@ -498,7 +498,7 @@ testProject = testCase "project" $ do
 
 assertReparses :: (Binary a, Eq a, Show a) => a -> IO ()
 assertReparses a = do
-  let !bs = encode a
+  bs <- encode a
   (a', bc) <- decodeThrow bs
   byteSize a' @?= bc
   a' @?= a

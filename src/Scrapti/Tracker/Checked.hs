@@ -12,8 +12,10 @@ module Scrapti.Tracker.Checked
 where
 
 import Control.Monad (unless)
+import Control.Monad.ST.Strict (runST)
 import Dahdit (Binary, StaticByteSized, ViaStaticGeneric (..), Word32LE (..), encode)
 import Data.ByteString (ByteString)
+import qualified Data.ByteString.Short as BSS
 import Data.Default (Default (..))
 import Data.Digest.CRC32 (crc32)
 import GHC.Generics (Generic)
@@ -29,7 +31,7 @@ instance (Default a, Binary a) => Default (Checked a) where
   def = mkChecked def
 
 mkCode :: Binary a => a -> Word32LE
-mkCode val = fromIntegral (crc32 @ByteString (encode val))
+mkCode val = fromIntegral (crc32 @ByteString (BSS.fromShort (runST (encode val))))
 
 mkChecked :: Binary a => a -> Checked a
 mkChecked a = Checked a (mkCode a)

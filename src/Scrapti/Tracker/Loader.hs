@@ -98,7 +98,7 @@ runGetRes :: Binary a => FilePath -> Res -> FilePath -> IO a
 runGetRes projDir res resPart = do
   let resFile = projDir </> resPart
   bs <- fmap BSS.toShort (BS.readFile resFile)
-  let (ea, _) = decode bs
+  (ea, _) <- decode bs
   case ea of
     Left e -> throwIO (LoadErrorBadResGet projDir res resPart e)
     Right a -> pure a
