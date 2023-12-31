@@ -5,92 +5,19 @@
 
 packages:
 - completed:
-    hackage: little-rio-2.0.0@sha256:73bf58bb2a56b08fd7a968d969bae09861bb6bb5ae9efa781a3253d95586dc61,1624
+    hackage: aeson-via-0.2.2@sha256:0e4d16af860305e551cfa13cd741fef3b317c1cdfdbd473e0cc0863036fa096c,1849
     pantry-tree:
-      sha256: a262ed987f894242c7c2ed9bc598e09e0e9b888b6955c2a985f4dbd62dab9158
-      size: 213
+      sha256: b3b1bd33010ececb67959daa605e600bcc8c71ab7e721d30a143870309233ab7
+      size: 264
   original:
-    hackage: little-rio-2.0.0
+    hackage: aeson-via-0.2.2
 - completed:
-    hackage: little-logger-1.0.1@sha256:3c2bc7a993a74d0ee4afb86ddbe6b246443392384bbd99ee3a7a030cc6d60060,2219
+    hackage: dahdit-0.5.1@sha256:f583794914a2c775f3e59fe4ef1d39c5ab827ff27894da32f7ae0de4ea9f15b1,3704
     pantry-tree:
-      sha256: 825572cf5c1660f00b2ac1ad35b59534c9d44945d0929dc417c4ee57074db052
-      size: 318
+      sha256: 9b42c87254506abaa97962be7cdd558388ae0e77bf13678017a97c6feddf773b
+      size: 1135
   original:
-    hackage: little-logger-1.0.1
-- completed:
-    hackage: aeson-via-0.2.1@sha256:349f5b3609ad0060949e1213d129ad5f8bbbdca8d8ef4e5e5c8db7e6b5a22180,1926
-    pantry-tree:
-      sha256: 4c71cf25f486f5f6428c8bf45a00ed5f98d4055bbf273ede2c42efcedf06b41b
-      size: 310
-  original:
-    hackage: aeson-via-0.2.1
-- completed:
-    commit: d6a31cf6333f3e918a61ac84a069286983cdcc27
-    git: git@github.com:ejconlon/dahdit.git
-    name: dahdit
-    pantry-tree:
-      sha256: 551fbd48feed5df157fbe091940a5ebdbd1832ed71887e8d687ace65e0461c08
-      size: 1691
-    version: 0.4.1
-  original:
-    commit: d6a31cf6333f3e918a61ac84a069286983cdcc27
-    git: git@github.com:ejconlon/dahdit.git
-- completed:
-    commit: 4eded9b1c0f2fdaa54ff94d369f7c8cf729e2b5a
-    git: git@github.com:ejconlon/dahdit-test.git
-    name: dahdit-test
-    pantry-tree:
-      sha256: 0a81d3ac7dce4e33884611f31697d3c83cdb98d3881cead1d042630212c302fc
-      size: 841
-    version: 0.1.0
-  original:
-    commit: 4eded9b1c0f2fdaa54ff94d369f7c8cf729e2b5a
-    git: git@github.com:ejconlon/dahdit-test.git
-- completed:
-    commit: 4403254c5ba3cd558204a0e406af47fbd3658c22
-    git: git@github.com:ejconlon/dahdit-network.git
-    name: dahdit-network
-    pantry-tree:
-      sha256: 0c8543ed1394606b815eedf1c27cc1b1634df8ab56270b17ef466aabfea91857
-      size: 713
-    version: 0.1.0
-  original:
-    commit: 4403254c5ba3cd558204a0e406af47fbd3658c22
-    git: git@github.com:ejconlon/dahdit-network.git
-- completed:
-    commit: 77f5bff4ac0c6434bc248766096eb387bf5ef8e3
-    git: git@github.com:ejconlon/looksie.git
-    name: looksie
-    pantry-tree:
-      sha256: 8e04691e755d154efc231f37b291a2e6528997d2a7dae38c762615d898140d1d
-      size: 714
-    version: 0.1.0
-  original:
-    commit: 77f5bff4ac0c6434bc248766096eb387bf5ef8e3
-    git: git@github.com:ejconlon/looksie.git
-- completed:
-    commit: 920713db1c51b90089d6e464b4022daa0643459b
-    git: git@github.com:ejconlon/midiot.git
-    name: midiot
-    pantry-tree:
-      sha256: 135e771823b84c0b2485cf849aff77d7d6c3a1582854f87022abb6866cd26ea5
-      size: 7140
-    version: 0.1.0
-  original:
-    commit: 920713db1c51b90089d6e464b4022daa0643459b
-    git: git@github.com:ejconlon/midiot.git
-- completed:
-    commit: f006e1d040f05a7974910d2392c09090bf71a8bb
-    git: git@github.com:riottracker/RtMidi.git
-    name: RtMidi
-    pantry-tree:
-      sha256: e77f781a10d0778c7f3abe653d4727dada9481592ee4898847a21b30714e339e
-      size: 1411
-    version: 0.7.0.0
-  original:
-    commit: f006e1d040f05a7974910d2392c09090bf71a8bb
-    git: git@github.com:riottracker/RtMidi.git
+    hackage: dahdit-0.5.1
 - completed:
     hackage: data-sword-0.2.0.3@sha256:953cca4b4533a388df0ef17e06ac5530652d1d73decfe8b656242ccdf4b40999,1568
     pantry-tree:
@@ -99,28 +26,22 @@ packages:
   original:
     hackage: data-sword-0.2.0.3
 - completed:
-    hackage: falsify-0.1.1@sha256:49c4d6acba99a2647b18502ff0265fb98570b77d7893c355ede4f2db17295cc1,5236
+    hackage: daytripper-0.3.1@sha256:225a6e9348c2b5b6e0a55d408559b55df06f1365d5741d2f9d1856d8632769ae,2985
     pantry-tree:
-      sha256: 96d0d0b4ef5b87b88f4c7e6ca93de6a9cfca5f788713be8faf32d6125000aa60
-      size: 3162
+      sha256: 5b714aec8cd526cec33a5b269f332d59fe8587e20cb83af9a5e7c3b53ddde351
+      size: 225
   original:
-    hackage: falsify-0.1.1
+    hackage: daytripper-0.3.1
 - completed:
-    hackage: primitive-0.8.0.0@sha256:826bf2a702a26ef87532a135808abad69d74f70ead39f26c06d034b1f0537a19,3104
+    hackage: falsify-0.2.0@sha256:a9ec175cfb20dc5afeedac69f424c77589729fce23733030abf22dc2053abc41,5265
     pantry-tree:
-      sha256: eaf8b0689d5a3cbc38b5a5b4bf665ec5822ad0060e8876b26bf6f13b9741295a
-      size: 1721
+      sha256: c798208320e84b3d05564d73a63c6686499a68d667e33e2b8873035f15eaf81b
+      size: 3378
   original:
-    hackage: primitive-0.8.0.0
+    hackage: falsify-0.2.0
 snapshots:
 - completed:
-    sha256: fca7899d0402032595080fed4eee5d83018c7d11f4f47f8e5208cd4313a61b74
-    size: 1223
-    url: https://raw.githubusercontent.com/ejconlon/stack-resolvers/master/head.yaml#8
-  original:
-    url: https://raw.githubusercontent.com/ejconlon/stack-resolvers/master/head.yaml#8
-- completed:
-    sha256: 4c972e067bae16b95961dbfdd12e07f1ee6c8fffabbfa05c3d65100b03f548b7
-    size: 650253
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/20/23.yaml
-  original: lts-20.23
+    sha256: 53a2800f7fe0c4628af0e7d5e985707dd3af9863ac3983a43c835dbaa8ed5f35
+    size: 714094
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/22/3.yaml
+  original: lts-22.3

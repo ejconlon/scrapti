@@ -128,7 +128,7 @@ import Scrapti.Wav
 import System.Directory (doesFileExist)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
-import Test.Dahdit.Tasty (dahditMain)
+import Test.Daytripper (daytripperMain)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (assertBool, assertEqual, testCase, (@?=))
 
@@ -754,4 +754,4 @@ testScrapti :: TestTree
 testScrapti = testGroup "Scrapti" [testWav, testAiff, testAiff2, testSfont, testPti, testProject, testConvert, testDsp, testOtherSizes, testPatches]
 
 main :: IO ()
-main = dahditMain testScrapti
+main = daytripperMain testScrapti

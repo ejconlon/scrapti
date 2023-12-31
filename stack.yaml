@@ -1,7 +1,18 @@
-resolver: "https://raw.githubusercontent.com/ejconlon/stack-resolvers/master/head.yaml#8"
+resolver: lts-22.3
 
 ghc-options:
   "$everything": -haddock
 
 packages:
 - .
+
+extra-deps:
+- aeson-via-0.2.2
+- dahdit-0.5.1
+- data-sword-0.2.0.3
+- daytripper-0.3.1
+- falsify-0.2.0
+
+allow-newer: true
+allow-newer-deps:
+- falsify
