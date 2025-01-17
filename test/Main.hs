@@ -754,4 +754,4 @@ testScrapti :: TestTree
 testScrapti = testGroup "Scrapti" [testWav, testAiff, testAiff2, testSfont, testPti, testProject, testConvert, testDsp, testOtherSizes, testPatches]
 
 main :: IO ()
-main = daytripperMain testScrapti
+main = daytripperMain (const testScrapti)

@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.36.0.
+-- This file has been generated from package.yaml by hpack version 0.37.0.
 --
 -- see: https://github.com/sol/hpack
 
@@ -79,14 +79,14 @@ library
       TypeFamilies
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints -fno-warn-unused-top-binds -fwrite-ide-info -hiedir=.hie
   build-depends:
-      aeson >=2.0 && <2.2
+      aeson ==2.2.*
     , aeson-casing ==0.2.*
     , aeson-pretty ==0.8.*
     , aeson-via ==0.2.*
     , base >=4.12 && <5
-    , bytestring >=0.10 && <0.12
+    , bytestring ==0.12.*
     , containers ==0.6.*
-    , dahdit ==0.5.*
+    , dahdit ==0.7.*
     , data-default ==0.7.*
     , data-sword ==0.2.*
     , digest >=0.0.1 && <0.0.3
@@ -97,9 +97,9 @@ library
     , mtl >=2.2 && <2.4
     , optparse-applicative >=0.16 && <0.19
     , prettyprinter ==1.7.*
-    , primitive >=0.7 && <0.9
+    , primitive ==0.9.*
     , regex-tdfa ==1.3.*
-    , text >=1.2 && <2.1
+    , text ==2.1.*
     , transformers >=0.5 && <0.7
   default-language: Haskell2010
 
@@ -137,14 +137,14 @@ executable scrapti-exe
       TypeFamilies
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints -fno-warn-unused-top-binds -fwrite-ide-info -hiedir=.hie -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      aeson >=2.0 && <2.2
+      aeson ==2.2.*
     , aeson-casing ==0.2.*
     , aeson-pretty ==0.8.*
     , aeson-via ==0.2.*
     , base >=4.12 && <5
-    , bytestring >=0.10 && <0.12
+    , bytestring ==0.12.*
     , containers ==0.6.*
-    , dahdit ==0.5.*
+    , dahdit ==0.7.*
     , data-default ==0.7.*
     , data-sword ==0.2.*
     , digest >=0.0.1 && <0.0.3
@@ -155,10 +155,10 @@ executable scrapti-exe
     , mtl >=2.2 && <2.4
     , optparse-applicative >=0.16 && <0.19
     , prettyprinter ==1.7.*
-    , primitive >=0.7 && <0.9
+    , primitive ==0.9.*
     , regex-tdfa ==1.3.*
     , scrapti
-    , text >=1.2 && <2.1
+    , text ==2.1.*
     , transformers >=0.5 && <0.7
   default-language: Haskell2010
 
@@ -197,14 +197,14 @@ test-suite scrapti-test
       TypeFamilies
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints -fno-warn-unused-top-binds -fwrite-ide-info -hiedir=.hie -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      aeson >=2.0 && <2.2
+      aeson ==2.2.*
     , aeson-casing ==0.2.*
     , aeson-pretty ==0.8.*
     , aeson-via ==0.2.*
     , base >=4.12 && <5
-    , bytestring >=0.10 && <0.12
+    , bytestring ==0.12.*
     , containers ==0.6.*
-    , dahdit ==0.5.*
+    , dahdit ==0.7.*
     , data-default ==0.7.*
     , data-sword ==0.2.*
     , daytripper
@@ -217,12 +217,12 @@ test-suite scrapti-test
     , optparse-applicative >=0.16 && <0.19
     , pretty-simple
     , prettyprinter ==1.7.*
-    , primitive >=0.7 && <0.9
+    , primitive ==0.9.*
     , regex-tdfa ==1.3.*
     , scrapti
-    , tasty ==1.4.*
+    , tasty ==1.5.*
     , tasty-hunit ==0.10.*
     , temporary ==1.3.*
-    , text >=1.2 && <2.1
+    , text ==2.1.*
     , transformers >=0.5 && <0.7
   default-language: Haskell2010
