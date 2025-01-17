@@ -56,9 +56,9 @@ data OctNote = OctNote
 octNoteIsMidi :: OctNote -> Bool
 octNoteIsMidi (OctNote (Octave oct) name) =
   if
-      | oct == -1 -> name == NoteNameC
-      | oct == 9 -> name <= NoteNameG
-      | otherwise -> oct >= 0 && oct <= 8
+    | oct == -1 -> name == NoteNameC
+    | oct == 9 -> name <= NoteNameG
+    | otherwise -> oct >= 0 && oct <= 8
 
 -- | An integral note type that can represent notes outside the MIDI scale.
 newtype LinNote = LinNote {unLinNote :: Int}

@@ -20,5 +20,5 @@ instance Default QuietArray where
 newtype QuietLiftedArray a = QuietLiftedArray {unQuietLiftedArray :: LiftedPrimArray a}
   deriving newtype (Eq, Default)
 
-instance LiftedPrim a => Show (QuietLiftedArray a) where
+instance (LiftedPrim a) => Show (QuietLiftedArray a) where
   show (QuietLiftedArray arr) = "QuietLiftedArray{" ++ show (sizeofLiftedPrimArray arr) ++ "}"

@@ -65,13 +65,13 @@ data Chunk a = Chunk
   }
   deriving stock (Eq, Show)
 
-chunkUnpaddedByteSize :: Binary a => Chunk a -> ByteCount
+chunkUnpaddedByteSize :: (Binary a) => Chunk a -> ByteCount
 chunkUnpaddedByteSize (Chunk _ body) = byteSize body
 
-instance StaticByteSized a => StaticByteSized (Chunk a) where
+instance (StaticByteSized a) => StaticByteSized (Chunk a) where
   type StaticSize (Chunk a) = PadCount (ChunkHeaderSize + StaticSize a)
 
-instance Binary a => Binary (Chunk a) where
+instance (Binary a) => Binary (Chunk a) where
   byteSize c = padCount (chunkHeaderSize + chunkUnpaddedByteSize c)
   get = do
     lab <- get
@@ -92,10 +92,10 @@ newtype KnownChunk a = KnownChunk
   deriving stock (Show)
   deriving newtype (Eq, Default)
 
-knownChunkUnpaddedByteSize :: Binary a => KnownChunk a -> ByteCount
+knownChunkUnpaddedByteSize :: (Binary a) => KnownChunk a -> ByteCount
 knownChunkUnpaddedByteSize (KnownChunk body) = byteSize body
 
-instance StaticByteSized a => StaticByteSized (KnownChunk a) where
+instance (StaticByteSized a) => StaticByteSized (KnownChunk a) where
   type StaticSize (KnownChunk a) = PadCount (ChunkHeaderSize + StaticSize a)
 
 instance (Binary a, KnownLabel a) => Binary (KnownChunk a) where
@@ -119,7 +119,7 @@ data ListChunkBody a = ListChunkBody
   }
   deriving stock (Eq, Show)
 
-instance Binary a => Binary (ListChunkBody a) where
+instance (Binary a) => Binary (ListChunkBody a) where
   byteSize (ListChunkBody _ items) = labelSize + byteSizeFoldable items
   get = do
     label <- get

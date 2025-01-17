@@ -161,19 +161,19 @@ drumDataLen = 248886
 readShort :: FilePath -> IO ShortByteString
 readShort = fmap (BSS.toShort . BSL.toStrict) . BSL.readFile
 
-throwFirst :: Exception e => (Either e a, b) -> IO (a, b)
+throwFirst :: (Exception e) => (Either e a, b) -> IO (a, b)
 throwFirst (ea, b) =
   case ea of
     Left e -> throwIO e
     Right a -> pure (a, b)
 
-decodeThrow :: Binary a => ShortByteString -> IO (a, ByteCount)
+decodeThrow :: (Binary a) => ShortByteString -> IO (a, ByteCount)
 decodeThrow = decode >=> throwFirst
 
 getTargetThrow :: Get a -> ShortByteString -> IO (a, ByteCount)
 getTargetThrow g z = getTarget g z >>= throwFirst
 
-decodeFileThrow :: Binary a => FilePath -> IO (a, ByteCount)
+decodeFileThrow :: (Binary a) => FilePath -> IO (a, ByteCount)
 decodeFileThrow = decodeFile >=> throwFirst
 
 testWavSerde :: TestTree
@@ -285,7 +285,10 @@ testAiff2 = testCase "aiff2" $ do
 testSfontWhole :: TestTree
 testSfontWhole = testCase "whole" $ do
   bs <- readShort "testdata/timpani.sf2"
-  (Sfont (InfoChunk (KnownListChunk infos)) (SdtaChunk (KnownOptChunk maySdta)) (PdtaChunk (KnownListChunk pdtaBlocks)), _) <- decodeThrow bs
+  ( Sfont (InfoChunk (KnownListChunk infos)) (SdtaChunk (KnownOptChunk maySdta)) (PdtaChunk (KnownListChunk pdtaBlocks))
+    , _
+    ) <-
+    decodeThrow bs
   Seq.length infos @?= 5
   case maySdta of
     Nothing -> fail "Missing sdta"
@@ -751,7 +754,10 @@ testPatches :: TestTree
 testPatches = testGroup "patches" [testMatchSamples, testPatchSfz, testPatchPti]
 
 testScrapti :: TestTree
-testScrapti = testGroup "Scrapti" [testWav, testAiff, testAiff2, testSfont, testPti, testProject, testConvert, testDsp, testOtherSizes, testPatches]
+testScrapti =
+  testGroup
+    "Scrapti"
+    [testWav, testAiff, testAiff2, testSfont, testPti, testProject, testConvert, testDsp, testOtherSizes, testPatches]
 
 main :: IO ()
 main = daytripperMain (const testScrapti)

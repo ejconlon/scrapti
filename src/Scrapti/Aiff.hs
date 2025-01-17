@@ -113,10 +113,10 @@ data Chunk a = Chunk
   }
   deriving stock (Eq, Show)
 
-chunkUnpaddedByteSize :: Binary a => Chunk a -> ByteCount
+chunkUnpaddedByteSize :: (Binary a) => Chunk a -> ByteCount
 chunkUnpaddedByteSize (Chunk _ body) = byteSize body
 
-instance StaticByteSized a => StaticByteSized (Chunk a) where
+instance (StaticByteSized a) => StaticByteSized (Chunk a) where
   type StaticSize (Chunk a) = PadCount (ChunkHeaderSize + StaticSize a)
 
 instance (Binary a) => Binary (Chunk a) where
@@ -140,10 +140,10 @@ newtype KnownChunk a = KnownChunk
   deriving stock (Show)
   deriving newtype (Eq, Default)
 
-knownChunkUnpaddedByteSize :: Binary a => KnownChunk a -> ByteCount
+knownChunkUnpaddedByteSize :: (Binary a) => KnownChunk a -> ByteCount
 knownChunkUnpaddedByteSize (KnownChunk body) = byteSize body
 
-instance StaticByteSized a => StaticByteSized (KnownChunk a) where
+instance (StaticByteSized a) => StaticByteSized (KnownChunk a) where
   type StaticSize (KnownChunk a) = PadCount (ChunkHeaderSize + StaticSize a)
 
 instance (Binary a, KnownLabel a) => Binary (KnownChunk a) where
@@ -310,12 +310,12 @@ getChunk :: Variant -> Get AiffChunk
 getChunk variant = do
   label <- getLookAhead get
   if
-      | label == labelComm -> fmap AiffChunkCommon (getCommonChunk variant)
-      | label == labelSsnd -> fmap AiffChunkData get
-      | label == labelFver -> fmap AiffChunkVersion get
-      | label == labelAnno -> fmap AiffChunkAnno get
-      | label == labelMark -> fmap AiffChunkMark get
-      | otherwise -> fmap AiffChunkUnparsed get
+    | label == labelComm -> fmap AiffChunkCommon (getCommonChunk variant)
+    | label == labelSsnd -> fmap AiffChunkData get
+    | label == labelFver -> fmap AiffChunkVersion get
+    | label == labelAnno -> fmap AiffChunkAnno get
+    | label == labelMark -> fmap AiffChunkMark get
+    | otherwise -> fmap AiffChunkUnparsed get
 
 putChunk :: Variant -> AiffChunk -> Put
 putChunk variant = \case
@@ -362,9 +362,9 @@ instance Binary AiffHeader where
     label <- get @Label
     variant <-
       if
-          | label == labelAiff -> pure VariantAiff
-          | label == labelAifc -> pure VariantAifc
-          | otherwise -> fail ("Expected label AIFC or AIFF in header but got: " ++ show (unStaticBytes label))
+        | label == labelAiff -> pure VariantAiff
+        | label == labelAifc -> pure VariantAifc
+        | otherwise -> fail ("Expected label AIFC or AIFF in header but got: " ++ show (unStaticBytes label))
     pure $! AiffHeader variant (sz - labelSize)
   put (AiffHeader variant remSz) = do
     put labelForm
@@ -428,10 +428,10 @@ swappedByteArray3 arr = go 0 Empty
 swapArrayEndian :: Int -> ByteArray -> ByteArray
 swapArrayEndian bitDepth arr =
   if
-      | bitDepth == 8 -> arr
-      | bitDepth == 16 -> byteArrayFromListN (sizeofByteArray arr) (swappedByteArray2 arr)
-      | bitDepth == 24 -> byteArrayFromListN (sizeofByteArray arr) (swappedByteArray3 arr)
-      | otherwise -> error ("Unsupported endian swap depth: " ++ show bitDepth)
+    | bitDepth == 8 -> arr
+    | bitDepth == 16 -> byteArrayFromListN (sizeofByteArray arr) (swappedByteArray2 arr)
+    | bitDepth == 24 -> byteArrayFromListN (sizeofByteArray arr) (swappedByteArray3 arr)
+    | otherwise -> error ("Unsupported endian swap depth: " ++ show bitDepth)
 
 lookupAiffChunk :: (AiffChunk -> Bool) -> Aiff -> Maybe AiffChunk
 lookupAiffChunk p (Aiff _ chunks) = fmap (Seq.index chunks) (Seq.findIndexL p chunks)

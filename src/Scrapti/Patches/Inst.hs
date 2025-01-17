@@ -104,7 +104,7 @@ data InstBlock a = InstBlock
 pureInstBlock :: a -> InstBlock a
 pureInstBlock a = InstBlock a a a a
 
-instance Default a => Default (InstBlock a) where
+instance (Default a) => Default (InstBlock a) where
   def = pureInstBlock def
 
 data InstFilterType
@@ -208,13 +208,14 @@ data InstDef x = InstDef
   deriving stock (Eq, Show, Functor, Foldable, Traversable, Generic)
   deriving (ToJSON, FromJSON) via (AesonRecord (InstDef x))
 
-instToJson :: ToJSON x => InstDef x -> Text
+instToJson :: (ToJSON x) => InstDef x -> Text
 instToJson = TL.toStrict . TLB.toLazyText . encodePrettyToTextBuilder
 
-jsonToInst :: FromJSON x => Text -> Either String (InstDef x)
+jsonToInst :: (FromJSON x) => Text -> Either String (InstDef x)
 jsonToInst = eitherDecodeStrict' . TE.encodeUtf8
 
-traverseBlock :: Applicative m => (InstAutoTarget -> InstAuto -> m InstAuto) -> InstBlock InstAuto -> m (InstBlock InstAuto)
+traverseBlock
+  :: (Applicative m) => (InstAutoTarget -> InstAuto -> m InstAuto) -> InstBlock InstAuto -> m (InstBlock InstAuto)
 traverseBlock onAuto (InstBlock volAuto panAuto cutoffAuto tuneAuto) =
   InstBlock
     <$> onAuto InstAutoTargetVolume volAuto
@@ -222,7 +223,7 @@ traverseBlock onAuto (InstBlock volAuto panAuto cutoffAuto tuneAuto) =
     <*> onAuto InstAutoTargetCutoff cutoffAuto
     <*> onAuto InstAutoTargetFinetune tuneAuto
 
-traverseBlock_ :: Applicative m => (InstAutoTarget -> InstAuto -> m ()) -> InstBlock InstAuto -> m ()
+traverseBlock_ :: (Applicative m) => (InstAutoTarget -> InstAuto -> m ()) -> InstBlock InstAuto -> m ()
 traverseBlock_ onAuto (InstBlock volAuto panAuto cutoffAuto tuneAuto) =
   onAuto InstAutoTargetVolume volAuto
     *> onAuto InstAutoTargetPanning panAuto

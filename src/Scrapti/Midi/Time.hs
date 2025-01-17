@@ -49,7 +49,7 @@ timeDeltaFromFracSecs d = TimeDelta (round (1000000000 * toRational (assertingNo
 timeDeltaFromNanos :: (Integral a, Show a) => a -> TimeDelta
 timeDeltaFromNanos = TimeDelta . fromIntegral . assertingNonNegative
 
-timeDeltaToFracSecs :: Fractional a => TimeDelta -> a
+timeDeltaToFracSecs :: (Fractional a) => TimeDelta -> a
 timeDeltaToFracSecs (TimeDelta n) = fromIntegral n / 1000000000
 
 timeDeltaToNanos :: TimeDelta -> Word64
@@ -79,7 +79,7 @@ monoTimeFromFracSecs d = MonoTime (round (1000000000 * toRational (assertingNonN
 monoTimeFromNanos :: (Integral a, Show a) => a -> MonoTime
 monoTimeFromNanos = MonoTime . fromIntegral . assertingNonNegative
 
-monoTimeToFracSecs :: Fractional a => MonoTime -> a
+monoTimeToFracSecs :: (Fractional a) => MonoTime -> a
 monoTimeToFracSecs (MonoTime n) = fromIntegral n / 1000000000
 
 monoTimeToNanos :: MonoTime -> Word64

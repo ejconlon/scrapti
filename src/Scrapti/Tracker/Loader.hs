@@ -94,7 +94,7 @@ loadBareProject projDir = do
   pats <- fmap (fmap snd) (crawlThingDir parsePatPart projDir "patterns")
   pure (Project songPart insts pats)
 
-runGetRes :: Binary a => FilePath -> Res -> FilePath -> IO a
+runGetRes :: (Binary a) => FilePath -> Res -> FilePath -> IO a
 runGetRes projDir res resPart = do
   let resFile = projDir </> resPart
   bs <- fmap BSS.toShort (BS.readFile resFile)
@@ -132,7 +132,7 @@ enrichProject projPath =
 loadRichProject :: FilePath -> IO RichProject
 loadRichProject projPath = loadBareProject projPath >>= enrichProject projPath
 
-encodeRes :: Binary a => FilePath -> a -> FilePath -> IO ()
+encodeRes :: (Binary a) => FilePath -> a -> FilePath -> IO ()
 encodeRes projDir val resPath = encodeFile val (projDir </> resPath)
 
 saveSong :: FilePath -> Project Mt i p -> IO ()

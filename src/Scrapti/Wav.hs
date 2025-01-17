@@ -250,10 +250,10 @@ instance Binary WavAdtlElem where
       pure (cueId, bs)
     dat <-
       if
-          | lab == labelNote -> pure $! WavAdtlDataNote bs
-          | lab == labelLabl -> pure $! WavAdtlDataLabl bs
-          | lab == labelLtxt -> pure $! WavAdtlDataLtxt bs
-          | otherwise -> fail ("Unknown adtl sub-chunk: " ++ show lab)
+        | lab == labelNote -> pure $! WavAdtlDataNote bs
+        | lab == labelLabl -> pure $! WavAdtlDataLabl bs
+        | lab == labelLtxt -> pure $! WavAdtlDataLtxt bs
+        | otherwise -> fail ("Unknown adtl sub-chunk: " ++ show lab)
     pure $! WavAdtlElem cueId dat
   put (WavAdtlElem cueId dat) = do
     put $! case dat of

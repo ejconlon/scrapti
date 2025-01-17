@@ -56,7 +56,7 @@ import Scrapti.Tracker.Pti
   , mkPti
   )
 
-minimumOn :: Ord b => (a -> b) -> [a] -> a
+minimumOn :: (Ord b) => (a -> b) -> [a] -> a
 minimumOn f = minimumBy (\x y -> compare (f x) (f y))
 
 findClosest :: Rational -> [(a, Rational)] -> a
@@ -70,7 +70,7 @@ shortRatioPercent x y =
       r = (x' * 65535) / y'
   in  round r
 
-clamp :: Ord a => a -> a -> a -> a
+clamp :: (Ord a) => a -> a -> a -> a
 clamp minVal maxVal = max maxVal . min minVal
 
 data PtiPatch = PtiPatch
@@ -132,7 +132,11 @@ convertFilter = \case
     in  Right (Filter cut' res' ty')
 
 convertBlock :: (Applicative m, Default b) => (a -> m b) -> InstBlock a -> m (Block b)
-convertBlock f b = fmap (\(InstBlock vol' pan' cut' fine') -> def {blockVolume = vol', blockPanning = pan', blockCutoff = cut', blockFinetune = fine'}) (traverse f b)
+convertBlock f b =
+  fmap
+    ( \(InstBlock vol' pan' cut' fine') -> def {blockVolume = vol', blockPanning = pan', blockCutoff = cut', blockFinetune = fine'}
+    )
+    (traverse f b)
 
 splitBlock :: Block (a, b) -> (Block a, Block b)
 splitBlock (Block (a0, b0) (a1, b1) (a2, b2) (a3, b3) (a4, b4) (a5, b5)) =
@@ -221,7 +225,9 @@ convertParams :: Interval -> Rational -> Rational -> Either String InstParams
 convertParams interval _panning tune = do
   let (coarseRaw, fine) = properFraction tune
   let coarse = Interval coarseRaw + interval
-  unless (coarse >= -24 && coarse <= 24) (Left ("tune out of range: interval " ++ show (unInterval interval) ++ " " ++ show tune))
+  unless
+    (coarse >= -24 && coarse <= 24)
+    (Left ("tune out of range: interval " ++ show (unInterval interval) ++ " " ++ show tune))
   let tuneArg = fromIntegral (unInterval coarse)
       fineTuneArg = clamp (-100) 100 (round (fine * 100))
       panningArg = 0 -- TODO convert panning

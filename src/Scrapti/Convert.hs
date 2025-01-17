@@ -102,13 +102,13 @@ loadNeutral sr mayNames fp = do
   let (_, ext) = splitExtension fp
   ne <-
     if
-        | ext == ".wav" -> do
-            wav <- loadWav fp
-            rethrow (wavToNeutral wav mayNames)
-        | ext == ".aif" || ext == ".aifc" || ext == ".aiff" -> do
-            aiff <- loadAiff fp
-            rethrow (aiffToNeutral sr aiff mayNames)
-        | otherwise -> fail ("Could not load with unknown extension: " ++ fp)
+      | ext == ".wav" -> do
+          wav <- loadWav fp
+          rethrow (wavToNeutral wav mayNames)
+      | ext == ".aif" || ext == ".aifc" || ext == ".aiff" -> do
+          aiff <- loadAiff fp
+          rethrow (aiffToNeutral sr aiff mayNames)
+      | otherwise -> fail ("Could not load with unknown extension: " ++ fp)
   guardSr sr ne
   pure ne
 
@@ -165,7 +165,10 @@ neutralIfHasMarks f ne = do
     else Right ne
 
 neutralToSampleWav :: SampleCount -> Int -> Neutral -> Either ConvertErr Wav
-neutralToSampleWav width note ne = fmap (neutralToWav note) (neutralMono ne >>= neutralDepth >>= neutralIfHasMarks (neutralCrossFade width) >>= neutralIfHasMarks neutralCropLoop)
+neutralToSampleWav width note ne =
+  fmap
+    (neutralToWav note)
+    (neutralMono ne >>= neutralDepth >>= neutralIfHasMarks (neutralCrossFade width) >>= neutralIfHasMarks neutralCropLoop)
 
 readPtiWav :: Maybe LoopMarkNames -> FilePath -> IO (LiftedPrimArray Int16LE, Maybe LoopMarkPoints)
 readPtiWav mayNames fp = do

@@ -121,9 +121,9 @@ instance FromJSON SfzSample where
   parseJSON = \case
     String txt ->
       if
-          | T.null txt -> fail "Empty SfzSample"
-          | T.head txt == '*' -> pure (SfzSampleBuiltin (T.tail txt))
-          | otherwise -> pure (SfzSampleFile (T.unpack txt))
+        | T.null txt -> fail "Empty SfzSample"
+        | T.head txt == '*' -> pure (SfzSampleBuiltin (T.tail txt))
+        | otherwise -> pure (SfzSampleFile (T.unpack txt))
     _ -> fail "Non-string SfzSample"
 
 renderSfzSample :: SfzSample -> Text
@@ -252,10 +252,10 @@ readAutoM idx cat = do
     (Just _, Nothing) -> pure InstAutoTypeLfo
     (Just lfoDepth, Just envDepth) ->
       if
-          | lfoDepth == 0 && envDepth == 0 -> pure InstAutoTypeOff
-          | lfoDepth == 0 && envDepth /= 0 -> pure InstAutoTypeEnv
-          | lfoDepth /= 0 && envDepth == 0 -> pure InstAutoTypeLfo
-          | otherwise -> fail ("Forbidden lfo and env for category " ++ T.unpack cat)
+        | lfoDepth == 0 && envDepth == 0 -> pure InstAutoTypeOff
+        | lfoDepth == 0 && envDepth /= 0 -> pure InstAutoTypeEnv
+        | lfoDepth /= 0 && envDepth == 0 -> pure InstAutoTypeLfo
+        | otherwise -> fail ("Forbidden lfo and env for category " ++ T.unpack cat)
   mayEnv <- maybe (readMayEnvM (mkKey "env") mayEnvDepth) (fmap Just . readEnvM (mkKey "env")) mayEnvDepth
   mayLfo <- maybe (readMayLfoM (mkKey "lfo") mayLfoDepth) (fmap Just . readLfoM (mkKey "lfo")) mayLfoDepth
   pure $! InstAuto ty mayEnv mayLfo
@@ -300,9 +300,9 @@ readRegionM = do
   sampleStr <- requireValM sfzValText "sample"
   sample <-
     if
-        | T.null sampleStr -> fail "empty sample string"
-        | T.head sampleStr == '*' -> pure $! SfzSampleBuiltin (T.tail sampleStr)
-        | otherwise -> pure $! SfzSampleFile (T.unpack sampleStr)
+      | T.null sampleStr -> fail "empty sample string"
+      | T.head sampleStr == '*' -> pure $! SfzSampleBuiltin (T.tail sampleStr)
+      | otherwise -> pure $! SfzSampleFile (T.unpack sampleStr)
   keyRange <-
     InstKeyRange
       <$> requireValM sfzValInt "lokey"
@@ -335,7 +335,7 @@ sfzToInst = runSfzReader $ do
 newtype SfzWriter w a = SfzWriter {unSfzWriter :: WriterT w (Except String) a}
   deriving newtype (Functor, Applicative, Monad, MonadWriter w)
 
-instance Monoid w => MonadFail (SfzWriter w) where
+instance (Monoid w) => MonadFail (SfzWriter w) where
   fail = SfzWriter . throwError
 
 execSfzWriter :: SfzWriter w () -> Either String w

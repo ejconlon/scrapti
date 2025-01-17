@@ -460,7 +460,7 @@ data Block a = Block
 mkBlock :: a -> Block a
 mkBlock a = Block a a a a a a
 
-instance Default a => Default (Block a) where
+instance (Default a) => Default (Block a) where
   def = mkBlock def
 
 defAutoBlock :: Block Auto

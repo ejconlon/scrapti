@@ -63,7 +63,7 @@ import Data.Word (Word32)
 import GHC.TypeLits (Mod, Nat, type (+))
 import Scrapti.Dsp (DspErr)
 
-rethrow :: Exception e => Either e a -> IO a
+rethrow :: (Exception e) => Either e a -> IO a
 rethrow = either throwIO pure
 
 type LabelSize = 4 :: Nat
@@ -129,7 +129,7 @@ data SimpleMarker = SimpleMarker
   }
   deriving stock (Eq, Show)
 
-ordNubBy :: Ord b => (a -> b) -> Seq a -> Seq a
+ordNubBy :: (Ord b) => (a -> b) -> Seq a -> Seq a
 ordNubBy f = go Set.empty Seq.empty
  where
   go !accSet !accSeq = \case
@@ -177,7 +177,7 @@ type LoopMarkOffsets = LoopMarks Int
 defaultLoopMarkNames :: LoopMarkNames
 defaultLoopMarkNames = LoopMarks "Start" "LoopStart" "LoopEnd" "End"
 
-defineLoopMarks :: Integral a => LoopMarkNames -> LoopMarks a -> LoopMarkPoints
+defineLoopMarks :: (Integral a) => LoopMarkNames -> LoopMarks a -> LoopMarkPoints
 defineLoopMarks (LoopMarks nw nx ny nz) (LoopMarks pw px py pz) =
   LoopMarks
     (0, SimpleMarker nw (fromIntegral pw))

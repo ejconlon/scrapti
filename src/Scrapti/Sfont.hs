@@ -223,28 +223,28 @@ instance Binary Info where
     chunkSize <- getChunkSizeLE
     getExact chunkSize $
       if
-          | label == labelIfil -> do
-              unless (chunkSize == 4) (fail "Bad ifil chunk size")
-              w1 <- get
-              w2 <- get
-              pure $! InfoVersion w1 w2
-          | label == labelIver -> do
-              unless (chunkSize == 4) (fail "Bad iver chunk size")
-              w1 <- get
-              w2 <- get
-              pure $! InfoRomVersion w1 w2
-          | label == labelIsng -> fmap InfoTargetSoundEngine get
-          | label == labelInam -> fmap InfoBankName get
-          | label == labelIrom -> fmap InfoRomName get
-          | label == labelIcrd -> fmap InfoCreationDate get
-          | label == labelIeng -> fmap InfoAuthors get
-          | label == labelIprd -> fmap InfoIntendedProduct get
-          | label == labelIcop -> fmap InfoCopyrightMessage get
-          | label == labelIcmt -> fmap InfoComments get
-          | label == labelIsft -> fmap InfoUsedTools get
-          | otherwise -> do
-              bs <- getRemainingString
-              pure $! InfoReserved label bs
+        | label == labelIfil -> do
+            unless (chunkSize == 4) (fail "Bad ifil chunk size")
+            w1 <- get
+            w2 <- get
+            pure $! InfoVersion w1 w2
+        | label == labelIver -> do
+            unless (chunkSize == 4) (fail "Bad iver chunk size")
+            w1 <- get
+            w2 <- get
+            pure $! InfoRomVersion w1 w2
+        | label == labelIsng -> fmap InfoTargetSoundEngine get
+        | label == labelInam -> fmap InfoBankName get
+        | label == labelIrom -> fmap InfoRomName get
+        | label == labelIcrd -> fmap InfoCreationDate get
+        | label == labelIeng -> fmap InfoAuthors get
+        | label == labelIprd -> fmap InfoIntendedProduct get
+        | label == labelIcop -> fmap InfoCopyrightMessage get
+        | label == labelIcmt -> fmap InfoComments get
+        | label == labelIsft -> fmap InfoUsedTools get
+        | otherwise -> do
+            bs <- getRemainingString
+            pure $! InfoReserved label bs
   put info = do
     let !label = whichLabelInfo info
     put label
@@ -293,16 +293,16 @@ instance Binary Sdta where
     highBits <- getHighBits numSamples
     let !numExtra = chunkSize - highSize - chunkHeaderSize
     if
-        | numExtra > 0 -> do
-            getExpectLabel labelSm24
-            lowSize <- getChunkSizeLE
-            let !expectedSize = if even numSamples then numSamples else numSamples + 1
-            unless (fromIntegral lowSize == expectedSize) (fail "invalid low sample size")
-            lowBits <- getLowBits numSamples
-            unless (even numSamples) (getSkip 1)
-            pure $! Sdta highBits (Just lowBits)
-        | numExtra == 0 -> pure $! Sdta highBits Nothing
-        | otherwise -> fail "invalid sdata chunk/sample sizes"
+      | numExtra > 0 -> do
+          getExpectLabel labelSm24
+          lowSize <- getChunkSizeLE
+          let !expectedSize = if even numSamples then numSamples else numSamples + 1
+          unless (fromIntegral lowSize == expectedSize) (fail "invalid low sample size")
+          lowBits <- getLowBits numSamples
+          unless (even numSamples) (getSkip 1)
+          pure $! Sdta highBits (Just lowBits)
+      | numExtra == 0 -> pure $! Sdta highBits Nothing
+      | otherwise -> fail "invalid sdata chunk/sample sizes"
   put (Sdta highBits mayLowBits) = do
     put labelSmpl
     putChunkSizeLE (sizeofLiftedPrimArray highBits)
@@ -373,26 +373,26 @@ instance Binary PdtaBlock where
     chunkSize <- getChunkSizeLE
     getExact chunkSize $
       if
-          | label == labelPhdr ->
-              fmap PdtaBlockPhdr (getRemainingStaticSeq get)
-          | label == labelPbag ->
-              fmap (PdtaBlockBag PdtaCatPreset) (getRemainingStaticSeq get)
-          | label == labelPmod ->
-              fmap (PdtaBlockMod PdtaCatPreset) (getRemainingStaticSeq get)
-          | label == labelPgen ->
-              fmap (PdtaBlockGen PdtaCatPreset) (getRemainingStaticSeq get)
-          | label == labelInst ->
-              fmap PdtaBlockInst (getRemainingSeq get)
-          | label == labelIbag ->
-              fmap (PdtaBlockBag PdtaCatInst) (getRemainingStaticSeq get)
-          | label == labelImod ->
-              fmap (PdtaBlockMod PdtaCatInst) (getRemainingStaticSeq get)
-          | label == labelIgen ->
-              fmap (PdtaBlockGen PdtaCatInst) (getRemainingStaticSeq get)
-          | label == labelShdr ->
-              fmap PdtaBlockShdr (getRemainingStaticSeq get)
-          | otherwise ->
-              fail ("unrecognized pdta elem: " ++ show label)
+        | label == labelPhdr ->
+            fmap PdtaBlockPhdr (getRemainingStaticSeq get)
+        | label == labelPbag ->
+            fmap (PdtaBlockBag PdtaCatPreset) (getRemainingStaticSeq get)
+        | label == labelPmod ->
+            fmap (PdtaBlockMod PdtaCatPreset) (getRemainingStaticSeq get)
+        | label == labelPgen ->
+            fmap (PdtaBlockGen PdtaCatPreset) (getRemainingStaticSeq get)
+        | label == labelInst ->
+            fmap PdtaBlockInst (getRemainingSeq get)
+        | label == labelIbag ->
+            fmap (PdtaBlockBag PdtaCatInst) (getRemainingStaticSeq get)
+        | label == labelImod ->
+            fmap (PdtaBlockMod PdtaCatInst) (getRemainingStaticSeq get)
+        | label == labelIgen ->
+            fmap (PdtaBlockGen PdtaCatInst) (getRemainingStaticSeq get)
+        | label == labelShdr ->
+            fmap PdtaBlockShdr (getRemainingStaticSeq get)
+        | otherwise ->
+            fail ("unrecognized pdta elem: " ++ show label)
   put block = do
     let !label = whichLabelPdtaBlock block
     put label
@@ -665,7 +665,7 @@ data GenPair a = GenPair
   }
   deriving stock (Eq, Ord, Show)
 
-putGenPair :: Binary a => GenPair a -> Put
+putGenPair :: (Binary a) => GenPair a -> Put
 putGenPair (GenPair tag val) = put (genTagRep tag) *> put val
 
 data Gen
@@ -811,7 +811,7 @@ defGenVal = \case
   GenTagRootKey -> -1
   GenTagReserved _ -> 0
 
-genTagTyRep :: Typeable a => GenTag a -> TypeRep a
+genTagTyRep :: (Typeable a) => GenTag a -> TypeRep a
 genTagTyRep _ = typeRep
 
 genTagTest :: (Typeable a, Typeable b) => GenTag a -> GenTag b -> Maybe (a :~: b)
@@ -819,7 +819,7 @@ genTagTest t s = case testEquality (genTagTyRep t) (genTagTyRep s) of
   Nothing -> Nothing
   Just Refl -> if t == s then Just Refl else Nothing
 
-lookupGenVal :: Typeable a => GenTag a -> Seq Gen -> Maybe a
+lookupGenVal :: (Typeable a) => GenTag a -> Seq Gen -> Maybe a
 lookupGenVal t = go
  where
   go = \case

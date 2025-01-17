@@ -103,7 +103,7 @@ sfzValFloat = \case
   SfzValFloat r -> Just r
   _ -> Nothing
 
-textSfzVal :: Pretty a => a -> SfzVal
+textSfzVal :: (Pretty a) => a -> SfzVal
 textSfzVal = SfzValText . PT.renderStrict . P.layoutCompact . pretty
 
 sfzValSimilar :: SfzVal -> SfzVal -> Bool
@@ -182,7 +182,7 @@ parseSfzLineM line =
           addAttrM key val
         _ -> fail ("invalid sfz line: " ++ T.unpack line)
 
-readM :: Read a => (a -> b) -> Text -> SfzParser b
+readM :: (Read a) => (a -> b) -> Text -> SfzParser b
 readM f t =
   let s = T.unpack t
   in  case readEither s of
