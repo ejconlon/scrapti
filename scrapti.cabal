@@ -66,8 +66,9 @@ library
       FunctionalDependencies
       GADTs
       GeneralizedNewtypeDeriving
-      LambdaCase
+      ImportQualifiedPost
       KindSignatures
+      LambdaCase
       MultiParamTypeClasses
       MultiWayIf
       Rank2Types
@@ -124,8 +125,9 @@ executable scrapti-exe
       FunctionalDependencies
       GADTs
       GeneralizedNewtypeDeriving
-      LambdaCase
+      ImportQualifiedPost
       KindSignatures
+      LambdaCase
       MultiParamTypeClasses
       MultiWayIf
       Rank2Types
@@ -183,8 +185,9 @@ executable sf2merge-exe
       FunctionalDependencies
       GADTs
       GeneralizedNewtypeDeriving
-      LambdaCase
+      ImportQualifiedPost
       KindSignatures
+      LambdaCase
       MultiParamTypeClasses
       MultiWayIf
       Rank2Types
@@ -202,17 +205,20 @@ executable sf2merge-exe
     , aeson-via ==0.2.*
     , base >=4.12 && <5
     , bytestring ==0.12.*
-    , containers ==0.6.*
-    , dahdit ==0.7.*
+    , containers
+    , dahdit
     , data-default ==0.7.*
     , data-sword ==0.2.*
     , digest >=0.0.1 && <0.0.3
-    , directory ==1.3.*
-    , filepath ==1.4.*
+    , directory
+    , filepath
+    , generic-optics
     , ghc-typelits-knownnat ==0.7.*
     , microlens ==0.4.*
     , mtl >=2.2 && <2.4
+    , optics
     , optparse-applicative >=0.16 && <0.19
+    , pathwalk
     , prettyprinter ==1.7.*
     , primitive ==0.9.*
     , regex-tdfa ==1.3.*
@@ -243,8 +249,9 @@ test-suite scrapti-test
       FunctionalDependencies
       GADTs
       GeneralizedNewtypeDeriving
-      LambdaCase
+      ImportQualifiedPost
       KindSignatures
+      LambdaCase
       MultiParamTypeClasses
       MultiWayIf
       Rank2Types

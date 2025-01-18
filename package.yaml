@@ -53,8 +53,9 @@ default-extensions:
 - FunctionalDependencies
 - GADTs
 - GeneralizedNewtypeDeriving
-- LambdaCase
+- ImportQualifiedPost
 - KindSignatures
+- LambdaCase
 - MultiParamTypeClasses
 - MultiWayIf
 - Rank2Types
@@ -100,6 +101,13 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - scrapti
+    - directory
+    - filepath
+    - dahdit
+    - pathwalk
+    - containers
+    - generic-optics
+    - optics
 
 tests:
   scrapti-test:
