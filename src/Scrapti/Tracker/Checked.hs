@@ -15,7 +15,7 @@ import Control.Monad (unless)
 import Control.Monad.ST.Strict (runST)
 import Dahdit (Binary, StaticByteSized, ViaStaticGeneric (..), Word32LE (..), encode)
 import Data.ByteString (ByteString)
-import qualified Data.ByteString.Short as BSS
+import Data.ByteString.Short qualified as BSS
 import Data.Default (Default (..))
 import Data.Digest.CRC32 (crc32)
 import GHC.Generics (Generic)

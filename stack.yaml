@@ -1,4 +1,4 @@
-resolver: lts-23.6
+resolver: lts-23.7
 
 ghc-options:
   "$everything": -haddock
@@ -7,11 +7,9 @@ packages:
 - .
 
 extra-deps:
-- aeson-via-0.2.2
+- aeson-via-0.2.3
 - dahdit-0.7.0
 - data-sword-0.2.0.3
 - daytripper-1.0.0
 - prop-unit-1.0.1
 
-allow-newer: true
-allow-newer-deps: ['aeson-via']

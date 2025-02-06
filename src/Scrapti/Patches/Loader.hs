@@ -12,9 +12,9 @@ where
 import Data.Default (Default (..))
 import Data.Maybe (maybeToList)
 import Data.Sequence (Seq (..))
-import qualified Data.Sequence as Seq
+import Data.Sequence qualified as Seq
 import Data.Text (Text)
-import qualified Data.Text as T
+import Data.Text qualified as T
 import Scrapti.Common (LoopMarkNames, LoopMarks (..), SimpleMarker (..), defaultLoopMarkNames)
 import Scrapti.Convert (Neutral (..), loadNeutral)
 import Scrapti.Midi.Msg (Velocity (..))

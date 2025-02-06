@@ -1,20 +1,20 @@
 module Main (main) where
 
-import Scrapti.Sfont qualified as S
-import Scrapti.Riff qualified as R
-import System.Environment (getArgs)
-import System.Directory (getHomeDirectory, doesDirectoryExist)
-import System.FilePath ((</>), isExtensionOf)
-import Control.Monad (unless, foldM)
-import System.Directory.PathWalk (pathWalkAccumulate)
-import Data.Sequence (Seq (..))
-import Data.Sequence qualified as Seq
-import Dahdit qualified as D
-import Data.String (fromString)
-import Data.Foldable (for_)
-import Data.Traversable (for)
+import Control.Monad (foldM, unless)
 import Control.Monad.Reader (ReaderT (..))
 import Control.Monad.State.Strict (StateT (..), execStateT)
+import Dahdit qualified as D
+import Data.Foldable (for_)
+import Data.Sequence (Seq (..))
+import Data.Sequence qualified as Seq
+import Data.String (fromString)
+import Data.Traversable (for)
+import Scrapti.Riff qualified as R
+import Scrapti.Sfont qualified as S
+import System.Directory (doesDirectoryExist, getHomeDirectory)
+import System.Directory.PathWalk (pathWalkAccumulate)
+import System.Environment (getArgs)
+import System.FilePath (isExtensionOf, (</>))
 
 type FoldM a b = ReaderT a (StateT b IO)
 
@@ -25,10 +25,13 @@ mkTB16 :: String -> D.TermBytes16
 mkTB16 = D.TermBytes16 . fromString
 
 mkInfoChunk :: String -> S.InfoChunk
-mkInfoChunk name = S.InfoChunk $ R.KnownListChunk $ Seq.fromList
-  [ S.InfoVersion 2 1
-  , S.InfoBankName (mkTB16 name)
-  ]
+mkInfoChunk name =
+  S.InfoChunk $
+    R.KnownListChunk $
+      Seq.fromList
+        [ S.InfoVersion 2 1
+        , S.InfoBankName (mkTB16 name)
+        ]
 
 gatherFiles :: FilePath -> IO (Seq FilePath)
 gatherFiles root = pathWalkAccumulate root $ \dir _ files -> do
@@ -62,7 +65,7 @@ gatherSfonts path = do
 
 normPath :: FilePath -> IO FilePath
 normPath = \case
-  '~':rest -> fmap (</> rest) getHomeDirectory
+  '~' : rest -> fmap (</> rest) getHomeDirectory
   path -> pure path
 
 assertDirExists :: FilePath -> IO ()
@@ -84,7 +87,7 @@ mkInfo :: Seq S.Sfont -> IO Info
 mkInfo = runFoldM addInfo emptyInfo
 
 debugSfont :: FilePath -> S.Sfont -> IO ()
-debugSfont file sf =  do
+debugSfont file sf = do
   putStrLn "+ file"
   putStrLn file
   putStrLn "+ sizes"
@@ -111,7 +114,7 @@ debugSfont file sf =  do
         putStrLn "++ shdr"
 
 debugSfonts :: Seq (FilePath, S.Sfont) -> IO ()
-debugSfonts sfs =  do
+debugSfonts sfs = do
   for_ sfs $ \(file, sf) -> do
     putStrLn (replicate 40 '*')
     debugSfont file sf

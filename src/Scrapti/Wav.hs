@@ -56,13 +56,13 @@ import Dahdit
   , putSeq
   , putWord8
   )
-import qualified Data.ByteString.Short as BSS
+import Data.ByteString.Short qualified as BSS
 import Data.Default (Default (..))
 import Data.Foldable (toList)
 import Data.Maybe (fromMaybe)
 import Data.Primitive (sizeofByteArray)
 import Data.Sequence (Seq (..))
-import qualified Data.Sequence as Seq
+import Data.Sequence qualified as Seq
 import Data.String (IsString)
 import GHC.Generics (Generic)
 import GHC.TypeLits (Nat, type (*), type (+))

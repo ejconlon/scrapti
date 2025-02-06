@@ -17,9 +17,9 @@ import Data.Aeson.Casing (aesonPrefix, snakeCase)
 import Data.Aeson.Encode.Pretty (encodePrettyToTextBuilder)
 import Data.Sequence (Seq)
 import Data.Text (Text)
-import qualified Data.Text.Encoding as TE
-import qualified Data.Text.Lazy as TL
-import qualified Data.Text.Lazy.Builder as TLB
+import Data.Text.Encoding qualified as TE
+import Data.Text.Lazy qualified as TL
+import Data.Text.Lazy.Builder qualified as TLB
 import GHC.Generics (Generic (..))
 
 newtype SnakeRecord a = SnakeRecord {unSnakeRecord :: a}

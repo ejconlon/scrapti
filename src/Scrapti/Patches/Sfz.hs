@@ -28,15 +28,15 @@ import Data.Char (isAlpha, isDigit)
 import Data.Foldable (for_, toList)
 import Data.Functor.Classes (Eq1 (..))
 import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as Map
+import Data.Map.Strict qualified as Map
 import Data.Ratio (denominator, numerator)
 import Data.Sequence (Seq (..))
-import qualified Data.Sequence as Seq
+import Data.Sequence qualified as Seq
 import Data.Text (Text)
-import qualified Data.Text as T
+import Data.Text qualified as T
 import Prettyprinter (Pretty (..))
-import qualified Prettyprinter as P
-import qualified Prettyprinter.Render.Text as PT
+import Prettyprinter qualified as P
+import Prettyprinter.Render.Text qualified as PT
 import Text.Read (readEither)
 
 {-

@@ -10,9 +10,9 @@ import Control.Monad (unless, when)
 import Dahdit (encodeFile)
 import Data.Default (Default (..))
 import Data.Foldable (for_)
-import qualified Data.Sequence as Seq
-import qualified Data.Text as T
-import qualified Data.Text.IO as TIO
+import Data.Sequence qualified as Seq
+import Data.Text qualified as T
+import Data.Text.IO qualified as TIO
 import Data.Traversable (for)
 import Options.Applicative
   ( Parser

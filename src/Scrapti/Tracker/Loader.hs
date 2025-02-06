@@ -3,11 +3,11 @@ module Scrapti.Tracker.Loader where
 import Control.Exception (Exception, throwIO)
 import Control.Monad (unless, (>=>))
 import Dahdit (Binary (..), GetError, decode, encodeFile)
-import qualified Data.ByteString as BS
-import qualified Data.ByteString.Short as BSS
+import Data.ByteString qualified as BS
+import Data.ByteString.Short qualified as BSS
 import Data.Foldable (for_)
 import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as Map
+import Data.Map.Strict qualified as Map
 import Data.Traversable (for)
 import Scrapti.Tracker.Checked (failCheckedCode)
 import Scrapti.Tracker.Mt (Mt (..))

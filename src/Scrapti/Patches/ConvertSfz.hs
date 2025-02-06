@@ -17,12 +17,12 @@ import Control.Monad.Writer.Strict (MonadWriter (..), WriterT, execWriterT)
 import Data.Aeson (FromJSON (..), ToJSON (..), Value (..))
 import Data.Default (Default (..))
 import Data.Foldable (for_, traverse_)
-import qualified Data.Map.Strict as Map
+import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe, isNothing, maybeToList)
 import Data.Sequence (Seq (..))
-import qualified Data.Sequence as Seq
+import Data.Sequence qualified as Seq
 import Data.Text (Text)
-import qualified Data.Text as T
+import Data.Text qualified as T
 import Data.Traversable (for)
 import Scrapti.Patches.Inst
   ( InstAuto (..)

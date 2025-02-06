@@ -20,7 +20,7 @@ import Control.Exception (throwIO)
 import Control.Monad (unless, (>=>))
 import Dahdit (Int16LE, LiftedPrim, LiftedPrimArray (..), Seq (..), decodeFile)
 import Data.Maybe (isJust)
-import qualified Data.Sequence as Seq
+import Data.Sequence qualified as Seq
 import Scrapti.Aiff (Aiff, aiffGatherMarkers, aiffToPcmContainer)
 import Scrapti.Binary (QuietArray (..))
 import Scrapti.Common

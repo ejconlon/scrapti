@@ -9,13 +9,13 @@ where
 
 import Control.Monad (unless)
 import Dahdit (BoolByte (..), FloatLE (..), LiftedPrimArray (..), StaticBytes (..), Word16LE (..))
-import qualified Data.ByteString.Short as BSS
+import Data.ByteString.Short qualified as BSS
 import Data.Default (Default (..))
 import Data.Foldable (minimumBy)
 import Data.Ratio ((%))
 import Data.Sequence (Seq)
 import Data.Text (Text)
-import qualified Data.Text.Encoding as TE
+import Data.Text.Encoding qualified as TE
 import Data.Traversable (for)
 import Scrapti.Binary (QuietArray (..))
 import Scrapti.Dsp (PcmContainer (..), PcmMeta (pmNumSamples), applyModGeneric, crop, linearCrossFade)

@@ -54,11 +54,11 @@ import Dahdit
   , putByteString
   )
 import Data.ByteString.Short (ShortByteString)
-import qualified Data.ByteString.Short as BSS
+import Data.ByteString.Short qualified as BSS
 import Data.Proxy (Proxy (..))
 import Data.Sequence (Seq (..))
-import qualified Data.Sequence as Seq
-import qualified Data.Set as Set
+import Data.Sequence qualified as Seq
+import Data.Set qualified as Set
 import Data.Word (Word32)
 import GHC.TypeLits (Mod, Nat, type (+))
 import Scrapti.Dsp (DspErr)

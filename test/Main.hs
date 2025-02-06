@@ -27,8 +27,8 @@ import Dahdit
   , lengthLiftedPrimArray
   , liftedPrimArrayFromList
   )
-import qualified Data.ByteString.Lazy as BSL
-import qualified Data.ByteString.Short as BSS
+import Data.ByteString.Lazy qualified as BSL
+import Data.ByteString.Short qualified as BSS
 import Data.Coerce (coerce)
 import Data.Default (def)
 import Data.Foldable (for_, toList)
@@ -36,10 +36,10 @@ import Data.Int (Int8)
 import Data.Maybe (fromMaybe)
 import Data.Primitive.ByteArray (indexByteArray, sizeofByteArray)
 import Data.Proxy (Proxy (..))
-import qualified Data.Sequence as Seq
-import qualified Data.Text.IO as TIO
+import Data.Sequence qualified as Seq
+import Data.Text.IO qualified as TIO
 import Scrapti.Aiff (Aiff (..), AiffDataBody (..), lookupAiffDataChunk)
-import qualified Scrapti.Aiff as Aiff
+import Scrapti.Aiff qualified as Aiff
 import Scrapti.Binary (QuietArray (..), QuietLiftedArray (..))
 import Scrapti.Common
   ( LoopMarks (..)

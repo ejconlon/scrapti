@@ -5,12 +5,12 @@
 
 packages:
 - completed:
-    hackage: aeson-via-0.2.2@sha256:0e4d16af860305e551cfa13cd741fef3b317c1cdfdbd473e0cc0863036fa096c,1849
+    hackage: aeson-via-0.2.3@sha256:7c265c4ed52f06d4459b8dffce0e48a244c9612a6b8f8226b2eba6166a147612,1849
     pantry-tree:
-      sha256: b3b1bd33010ececb67959daa605e600bcc8c71ab7e721d30a143870309233ab7
+      sha256: 9aa1f458dc41f746f0d774b5f25e0ff1f370396ccdf15cbf2b1591a9eee73168
       size: 264
   original:
-    hackage: aeson-via-0.2.2
+    hackage: aeson-via-0.2.3
 - completed:
     hackage: dahdit-0.7.0@sha256:d827315a94b6c27a751f65a39fcc0c1c577be2a175fd562893954fb81780c1df,3683
     pantry-tree:
@@ -41,7 +41,7 @@ packages:
     hackage: prop-unit-1.0.1
 snapshots:
 - completed:
-    sha256: b3858b16720f396d01605a014104be44fd7f3ca2c9c7b0762506b87b78ce526d
+    sha256: 4ef79c30b9efcf07335cb3de532983a7ac4c5a4180bc17f6212a86b09ce2ff75
     size: 680777
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/23/6.yaml
-  original: lts-23.6
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/23/7.yaml
+  original: lts-23.7

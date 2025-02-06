@@ -4,7 +4,7 @@ module Scrapti.Midi.Notes where
 
 import Data.Char (isDigit)
 import Data.Text (Text)
-import qualified Data.Text as T
+import Data.Text qualified as T
 import Text.Read (readMaybe)
 
 data NoteName
