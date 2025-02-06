@@ -1,5 +1,5 @@
 stack_build := "stack build --fast"
-src_dirs := "src test exe sf2merge"
+src_dirs := "src test exe sfmerge"
 
 # No default tasks
 default:

@@ -1,4 +1,4 @@
-module Main (main) where
+module Scrapti.SfMerge where
 
 import Control.Monad (foldM, unless)
 import Control.Monad.Reader (ReaderT (..))

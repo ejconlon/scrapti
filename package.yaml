@@ -35,6 +35,7 @@ dependencies:
 - aeson-pretty >= 0.8 && < 0.9
 - optparse-applicative >= 0.16 && < 0.19
 - aeson-casing >= 0.2 && < 0.3
+- pathwalk >= 0.3 && < 0.4
 # Used as build plugin
 - ghc-typelits-knownnat >= 0.7 && < 0.8
 
@@ -92,22 +93,15 @@ executables:
     dependencies:
     - scrapti
 
-  sf2merge-exe:
+  sfmerge-exe:
     main:                Main.hs
-    source-dirs:         sf2merge
+    source-dirs:         sfmerge
     ghc-options:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
     - scrapti
-    - directory
-    - filepath
-    - dahdit
-    - pathwalk
-    - containers
-    - generic-optics
-    - optics
 
 tests:
   scrapti-test:

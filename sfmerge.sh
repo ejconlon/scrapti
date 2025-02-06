@@ -2,7 +2,7 @@
 
 set -eu
 
-NAME="sf2merge-exe"
+NAME="sfmerge-exe"
 DIST_DIR="$(stack path --dist-dir)"
 EXE="${DIST_DIR}/build/${NAME}/${NAME}"
 REBUILD="${REBUILD:-0}"
